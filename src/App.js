@@ -197,12 +197,17 @@ function Receipt({ sale, onClose }){
         <div style={{fontSize:12,color:"#555",marginBottom:4}}><b>Client:</b> {sale.client}</div>
         <div style={{fontSize:12,color:"#555",marginBottom:4}}><b>Stylist:</b> {sale.stylist}</div>
         <div style={{borderBottom:"1px solid #eee",margin:"10px 0"}}/>
-        {sale.items.map((it,i)=>(
-          <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:6}}>
-            <span>{it.name} {it.qty>1?`×${it.qty}`:""}</span>
-            <span style={{fontWeight:700}}>{fmt(it.price*(it.qty||1))}</span>
-          </div>
-        ))}
+        {(Array.isArray(sale.items)?sale.items:[]).map((it,i)=>{
+          if(!it||!it.name) return null;
+          const qty = it.qty||1;
+          const price = it.price||0;
+          return(
+            <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:6}}>
+              <span>{it.name} {qty>1?`×${qty}`:""}</span>
+              <span style={{fontWeight:700}}>{fmt(price*qty)}</span>
+            </div>
+          );
+        })}
         <div style={{borderBottom:"2px dashed #ddd",margin:"10px 0"}}/>
         <div style={{display:"flex",justifyContent:"space-between",fontWeight:900,fontSize:16,color:DARK}}>
           <span>TOTAL</span><span style={{color:GOLD_DIM}}>{fmt(sale.total)}</span>
