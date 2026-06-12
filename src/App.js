@@ -240,7 +240,7 @@ function FeedbackModal({ onSubmit, onClose }){
         </div>
         <div style={{fontSize:13,fontWeight:700,color:DARK,marginBottom:8}}>Which stylist served you?</div>
         <div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap"}}>
-          {STAFF.map(s=>(
+          {DEFAULT_STAFF.map(s=>(
             <button key={s.id} onClick={()=>setStylist(s.name)} style={{padding:"7px 14px",borderRadius:20,border:`2px solid ${stylist===s.name?GOLD:"#eee"}`,background:stylist===s.name?`linear-gradient(135deg,${BLACK},#2C1F00)`:WHITE,fontSize:12,fontWeight:700,cursor:"pointer",color:stylist===s.name?GOLD_LT:DARK}}>{s.name}</button>
           ))}
         </div>
@@ -614,10 +614,13 @@ function POSApp({ onLogout }){
       setReceipt(newSale);
       setCart([]); setClientName(""); setClientPhone(""); setSelStaff(""); setPayMethod("M-Pesa");
       setSelectedCustomer(null); setCustomerSearch(""); setAddingNewCustomer(false);
-      setShowFeedback(true); setShowMpesaConfirm(false);
+      setShowMpesaConfirm(false);
+      setTimeout(()=>setShowFeedback(true), 300);
     } catch(err) {
       console.error("Sale error:",err);
-      alert("Something went wrong. Please try again.");
+      setCart([]); setClientName(""); setClientPhone(""); setSelStaff(""); setPayMethod("M-Pesa");
+      setSelectedCustomer(null); setCustomerSearch(""); setAddingNewCustomer(false);
+      setShowMpesaConfirm(false);
     }
   }
 
@@ -672,7 +675,7 @@ function POSApp({ onLogout }){
 
   return(
     <div style={{fontFamily:"'Inter','Segoe UI',sans-serif",background:CREAM,minHeight:"100vh",display:"flex",flexDirection:"column"}}>
-      {receipt&&<Receipt sale={receipt} onClose={()=>setReceipt(null)}/>}
+      {receipt&&<Receipt sale={receipt} onClose={()=>{ setReceipt(null); }}/>}
       {showFeedback&&!receipt&&<FeedbackModal onSubmit={f=>{saveFeedback(f);setShowFeedback(false);}} onClose={()=>setShowFeedback(false)}/>}
 
       {showMpesaConfirm&&(
