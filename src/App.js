@@ -959,6 +959,73 @@ function POSApp({ onLogout }){
           </div>
         )}
 
+        {/* ── APPOINTMENTS PAGE ── */}
+        {page==="appointments"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <div style={{fontWeight:900,fontSize:18,color:DARK}}>Customer Bookings</div>
+              <button onClick={loadAppointments} style={{background:CREAM,color:GOLD_DIM,border:`1px solid ${GOLD_DIM}`,borderRadius:20,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>↻ Refresh</button>
+            </div>
+            {loadingAppts&&(
+              <div style={{textAlign:"center",padding:"40px 0",color:"#aaa"}}>
+                <div style={{fontSize:24,marginBottom:8}}>⏳</div>
+                <div style={{fontSize:13}}>Loading bookings...</div>
+              </div>
+            )}
+            {!loadingAppts&&appointments.length===0&&(
+              <div style={{textAlign:"center",padding:"40px 20px",color:"#aaa"}}>
+                <div style={{fontSize:36,marginBottom:8}}>📅</div>
+                <div style={{fontSize:14,marginBottom:16}}>No bookings yet. Share your booking link!</div>
+                <a href="/booking" target="_blank" rel="noreferrer"
+                  style={{display:"inline-block",background:`linear-gradient(135deg,${GOLD},${GOLD_LT})`,color:BLACK,borderRadius:20,padding:"10px 20px",fontSize:13,fontWeight:900,textDecoration:"none"}}>
+                  View Booking Page →
+                </a>
+              </div>
+            )}
+            {!loadingAppts&&appointments.map(a=>(
+              <div key={a.id} style={{background:WHITE,borderRadius:14,padding:16,marginBottom:10,border:`1.5px solid ${a.status==="pending"?GOLD_DIM+"88":a.status==="done"?"#BBF7D0":"#FEE2E2"}`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                  <div>
+                    <div style={{fontWeight:800,fontSize:15,color:DARK}}>{a.name}</div>
+                    <div style={{fontSize:12,color:"#888"}}>📞 {a.phone}</div>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+                    <div style={{padding:"4px 10px",borderRadius:20,fontSize:11,fontWeight:800,
+                      background:a.status==="pending"?"#FEF3C7":a.status==="done"?"#D1FAE5":"#FEE2E2",
+                      color:a.status==="pending"?"#92400E":a.status==="done"?"#065F46":"#991B1B"}}>
+                      {a.status==="pending"?"⏳ Pending":a.status==="done"?"✅ Done":"❌ Cancelled"}
+                    </div>
+                    <div style={{padding:"3px 8px",borderRadius:20,fontSize:10,fontWeight:800,
+                      background:a.payment_status==="paid_upfront"?"#D1FAE5":"#FEF3C7",
+                      color:a.payment_status==="paid_upfront"?"#065F46":"#92400E"}}>
+                      {a.payment_status==="paid_upfront"?"💚 Paid via M-Pesa":"🕐 Pay at Salon"}
+                    </div>
+                  </div>
+                </div>
+                <div style={{fontSize:13,color:DARK,marginBottom:4}}>💇 <b>{a.service}</b> {a.price?`· KES ${Number(a.price).toLocaleString()}`:""}</div>
+                <div style={{fontSize:12,color:"#888",marginBottom:4}}>👩‍💼 {a.stylist}</div>
+                <div style={{fontSize:12,color:"#888",marginBottom:10}}>📅 {a.date} at {a.time}</div>
+                {a.status==="pending"&&a.payment_status!=="paid_upfront"&&(
+                  <div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:8,padding:"8px 10px",marginBottom:10,fontSize:12,color:"#92400E"}}>
+                    💳 Collect M-Pesa on arrival · Till <b>5927571</b> {a.price?`· KES ${Number(a.price).toLocaleString()}`:""}
+                  </div>
+                )}
+                {a.status==="pending"&&(
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    <button onClick={()=>convertToSale(a)} style={{width:"100%",background:`linear-gradient(135deg,${GOLD},${GOLD_LT})`,color:BLACK,border:"none",borderRadius:8,padding:"10px 0",fontWeight:900,fontSize:13,cursor:"pointer"}}>
+                      🛒 Client Arrived — Convert to Sale
+                    </button>
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={()=>markDone(a.id)} style={{flex:1,background:"#D1FAE5",color:"#065F46",border:"none",borderRadius:8,padding:"8px 0",fontWeight:800,fontSize:12,cursor:"pointer"}}>✅ Mark Done</button>
+                      <button onClick={()=>markCancelled(a.id)} style={{flex:1,background:"#FEE2E2",color:"#991B1B",border:"none",borderRadius:8,padding:"8px 0",fontWeight:800,fontSize:12,cursor:"pointer"}}>❌ Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* ── CUSTOMERS PAGE ── */}
         {page==="customers"&&(
           <div>
