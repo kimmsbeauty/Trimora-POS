@@ -575,6 +575,12 @@ function POSApp({ onLogout, userRole="staff" }){
   const [loadingAppts,setLoadingAppts]=useState(false);
   const [showMpesaConfirm,setShowMpesaConfirm]=useState(false);
   const [time,setTime]=useState(nowTime());
+  const [toast,setToast]=useState(null); // {msg, type: "success"|"error"|"info"}
+
+  function showToast(msg, type="success"){
+    setToast({msg,type});
+    setTimeout(()=>setToast(null),3000);
+  }
 
   useEffect(()=>{
     async function loadAll(){
@@ -649,6 +655,7 @@ function POSApp({ onLogout, userRole="staff" }){
     setSelectedCustomer(newC);
     setAddingNewCustomer(false);
     setShowCustomerDrop(false);
+    showToast(`${clientName} added as new client!`);
   }
 
   async function updateCustomerAfterSale(total){
@@ -674,7 +681,7 @@ function POSApp({ onLogout, userRole="staff" }){
   }
   useEffect(()=>{ if(page==="appointments") loadAppointments(); },[page]);
 
-  async function markDone(id){ await db("PATCH","bookings",{status:"done"},`?id=eq.${id}`); setAppointments(p=>p.map(a=>a.id===id?{...a,status:"done"}:a)); }
+  async function markDone(id){ await db("PATCH","bookings",{status:"done"},`?id=eq.${id}`); setAppointments(p=>p.map(a=>a.id===id?{...a,status:"done"}:a)); showToast("Booking marked as done ✅"); }
   async function markCancelled(id){ await db("PATCH","bookings",{status:"cancelled"},`?id=eq.${id}`); setAppointments(p=>p.map(a=>a.id===id?{...a,status:"cancelled"}:a)); }
 
   async function convertToSale(a){
@@ -726,6 +733,7 @@ function POSApp({ onLogout, userRole="staff" }){
       setCart([]); setClientName(""); setClientPhone(""); setSelStaff(""); setPayMethod("M-Pesa");
       setSelectedCustomer(null); setCustomerSearch(""); setAddingNewCustomer(false);
       setShowMpesaConfirm(false);
+      showToast(`Sale of ${fmt(cartTotal)} saved! 🎉`);
       setTimeout(()=>setShowFeedback(true), 300);
     } catch(err) {
       console.error("Sale error:",err);
@@ -848,6 +856,23 @@ function POSApp({ onLogout, userRole="staff" }){
               <button onClick={()=>setShowMpesaConfirm(false)} style={{width:"100%",background:WHITE,color:"#888",border:`1.5px solid ${GOLD_DIM}`,borderRadius:12,padding:"12px 0",fontWeight:700,fontSize:13,cursor:"pointer"}}>← Go Back</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* TOAST NOTIFICATIONS */}
+      {toast&&(
+        <div style={{
+          position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",
+          zIndex:9999,borderRadius:12,padding:"12px 20px",
+          background:toast.type==="success"?GREEN:toast.type==="error"?RED:GOLD,
+          color:WHITE,fontWeight:800,fontSize:13,
+          boxShadow:"0 4px 20px rgba(0,0,0,0.3)",
+          animation:"slideDown 0.3s ease",
+          display:"flex",alignItems:"center",gap:8,
+          maxWidth:"90vw",textAlign:"center"
+        }}>
+          <span>{toast.type==="success"?"✅":toast.type==="error"?"❌":"ℹ️"}</span>
+          {toast.msg}
         </div>
       )}
 
