@@ -280,7 +280,11 @@ function Receipt({ sale, onClose }){
         {sale.payment==="M-Pesa"&&<div style={{marginTop:14}}><MpesaInstructions amount={sale.total} reference={sale.client} compact={true}/></div>}
         <div style={{borderBottom:"1px solid #eee",margin:"12px 0"}}/>
         <div style={{textAlign:"center",fontSize:12,color:"#aaa",marginBottom:16,fontStyle:"italic"}}>"Beauty That Speaks Confidence" 👑</div>
-        <GoldBtn onClick={onClose} style={{width:"100%"}}>Close</GoldBtn>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>window.print()} style={{flex:1,background:CREAM,border:`1.5px solid ${GOLD_DIM}`,borderRadius:10,padding:"11px 0",fontWeight:700,fontSize:13,cursor:"pointer",color:GOLD_DIM}}>🖨️ Print</button>
+          <GoldBtn onClick={onClose} style={{flex:2}}>Close</GoldBtn>
+        </div>
+        <style>{`@media print { body * { visibility: hidden; } .receipt-print, .receipt-print * { visibility: visible; } .receipt-print { position: fixed; top: 0; left: 0; width: 100%; } }`}</style>
       </div>
     </div>
   );
@@ -522,6 +526,19 @@ function BookingPage(){
 // ── MAIN POS ──────────────────────────────────────────────────────────────────
 function POSApp({ onLogout, userRole="staff" }){
   const isAdmin = userRole === "admin";
+  const [darkMode, setDarkMode] = useState(()=>localStorage.getItem("kimms_dark")==="true");
+
+  useEffect(()=>{
+    localStorage.setItem("kimms_dark", darkMode);
+    document.body.style.background = darkMode ? "#0A0A0A" : "#FDF8EE";
+  },[darkMode]);
+
+  // Dark mode color overrides
+  const BG    = darkMode ? "#0A0A0A" : CREAM;
+  const CARD  = darkMode ? "#1A1400" : WHITE;
+  const TEXT  = darkMode ? WHITE     : DARK;
+  const BORDER= darkMode ? GOLD_DIM+"55" : GOLD_DIM+"33";
+  const SUBTEXT = darkMode ? "rgba(255,255,255,0.5)" : "#888";
   const [page,setPage]=useState("pos");
   const [cart,setCart]=useState([]);
   const [clientName,setClientName]=useState("");
@@ -812,7 +829,7 @@ function POSApp({ onLogout, userRole="staff" }){
   );
 
   return(
-    <div style={{fontFamily:"'Inter','Segoe UI',sans-serif",background:CREAM,minHeight:"100vh",display:"flex",flexDirection:"column"}}>
+    <div style={{fontFamily:"'Inter','Segoe UI',sans-serif",background:BG,minHeight:"100vh",display:"flex",flexDirection:"column",transition:"background 0.3s"}}>
       {receipt&&<Receipt sale={receipt} onClose={()=>{ setReceipt(null); }}/>}
       {showFeedback&&!receipt&&<FeedbackModal onSubmit={f=>{saveFeedback(f);setShowFeedback(false);}} onClose={()=>setShowFeedback(false)}/>}
 
@@ -858,15 +875,18 @@ function POSApp({ onLogout, userRole="staff" }){
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <a href="/booking" target="_blank" rel="noreferrer"
-            style={{background:`linear-gradient(135deg,${GOLD},${GOLD_LT})`,color:BLACK,border:"none",borderRadius:20,padding:"7px 12px",fontSize:11,fontWeight:900,cursor:"pointer",textDecoration:"none"}}>
-            🔗 Booking
+            style={{background:`linear-gradient(135deg,${GOLD},${GOLD_LT})`,color:BLACK,border:"none",borderRadius:20,padding:"7px 10px",fontSize:11,fontWeight:900,cursor:"pointer",textDecoration:"none",flexShrink:0}}>
+            🔗
           </a>
-          <button onClick={onLogout} style={{background:"rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.6)",border:`1px solid ${GOLD_DIM}`,borderRadius:20,padding:"7px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Logout</button>
+          <button onClick={()=>setDarkMode(d=>!d)} style={{background:"rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.7)",border:`1px solid ${GOLD_DIM}`,borderRadius:"50%",width:32,height:32,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            {darkMode?"☀️":"🌙"}
+          </button>
+          <button onClick={onLogout} style={{background:"rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.6)",border:`1px solid ${GOLD_DIM}`,borderRadius:20,padding:"7px 10px",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>Out</button>
         </div>
       </div>
 
       {/* NAV */}
-      <div style={{background:BLACK,borderBottom:`1px solid ${GOLD_DIM}`,display:"flex",flexShrink:0}}>
+      <div style={{background:darkMode?"#0A0A00":BLACK,borderBottom:`1px solid ${GOLD_DIM}`,display:"flex",flexShrink:0}}>
         {NAV.map(n=>(
           <button key={n.id} onClick={()=>setPage(n.id)} style={{flex:1,border:"none",background:"none",padding:"8px 0",cursor:"pointer",borderBottom:`3px solid ${page===n.id?GOLD:"transparent"}`,color:page===n.id?GOLD_LT:"rgba(255,255,255,0.35)",transition:"all 0.15s",position:"relative"}}>
             <div style={{fontSize:15}}>{n.icon}</div>
@@ -876,7 +896,7 @@ function POSApp({ onLogout, userRole="staff" }){
         ))}
       </div>
 
-      <div style={{flex:1,overflowY:"auto",padding:16}}>
+      <div style={{flex:1,overflowY:"auto",padding:16,background:BG,transition:"background 0.3s"}}>
 
         {/* ── POS PAGE ── */}
         {page==="pos"&&(
