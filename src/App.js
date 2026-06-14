@@ -1266,122 +1266,219 @@ ${window.location.origin}/booking
             const d=new Date(); d.setDate(d.getDate()-i);
             const str=d.toLocaleDateString("en-KE");
             const daySales=sales.filter(s=>s.date===str);
-            return{day:d.toLocaleDateString("en-KE",{weekday:"short"}),date:str,revenue:daySales.reduce((a,x)=>a+x.total,0),count:daySales.length};
+            return{day:d.toLocaleDateString("en-KE",{weekday:"short"}),date:str,revenue:daySales.reduce((a,x)=>a+x.total,0),count:daySales.length,commission:daySales.reduce((a,x)=>a+x.commission,0)};
           }).reverse();
+
+          const last30=Array.from({length:30},(_,i)=>{
+            const d=new Date(); d.setDate(d.getDate()-i);
+            const str=d.toLocaleDateString("en-KE");
+            return sales.filter(s=>s.date===str).reduce((a,x)=>a+x.total,0);
+          }).reverse();
+
           const weekRevenue=last7.reduce((a,d)=>a+d.revenue,0);
+          const monthRevenue=last30.reduce((a,v)=>a+v,0);
           const maxDayRev=Math.max(...last7.map(d=>d.revenue),1);
+
+          // Top services
           const svcCount={};
           sales.forEach(s=>{ if(Array.isArray(s.items)) s.items.filter(i=>i.type==="service").forEach(i=>{ svcCount[i.name]=(svcCount[i.name]||0)+1; }); });
           const topServices=Object.entries(svcCount).sort((a,b)=>b[1]-a[1]).slice(0,5);
           const maxSvc=topServices.length>0?topServices[0][1]:1;
+
+          // Top products sold
+          const prdCount={};
+          sales.forEach(s=>{ if(Array.isArray(s.items)) s.items.filter(i=>i.type==="product").forEach(i=>{ prdCount[i.name]=(prdCount[i.name]||0)+(i.qty||1); }); });
+          const topProducts=Object.entries(prdCount).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+          // Peak hours
           const hourCount={};
           sales.forEach(s=>{ if(s.time){ const h=parseInt(s.time.split(":")[0]); hourCount[h]=(hourCount[h]||0)+1; } });
           const peakHours=Object.entries(hourCount).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([h,c])=>({label:`${h}:00`,count:c}));
-          const maxHour=peakHours.length>0?peakHours[0].count:1;
+
+          // Payment breakdown
           const mpesa=sales.filter(s=>s.payment==="M-Pesa").reduce((a,x)=>a+x.total,0);
           const cash=sales.filter(s=>s.payment==="Cash").reduce((a,x)=>a+x.total,0);
           const allPay=mpesa+cash||1;
+
+          // Staff performance
+          const sortedStaff=[...staffStats].sort((a,b)=>b.revenue-a.revenue);
+          const maxStaffRev=sortedStaff.length>0?sortedStaff[0].revenue||1:1;
+
+          // Customer insights
+          const newThisWeek=customers.filter(c=>{
+            if(!c.created_at) return false;
+            const days=(new Date()-new Date(c.created_at))/(1000*60*60*24);
+            return days<=7;
+          }).length;
+
           return(
           <div>
-            <div style={{background:`linear-gradient(135deg,${BLACK},#2C1F00)`,borderRadius:14,padding:"16px",marginBottom:16,border:`1px solid ${GOLD_DIM}`,textAlign:"center"}}>
-              <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:4}}>Today's Revenue</div>
+            {/* Header KPI */}
+            <div style={{background:`linear-gradient(135deg,${BLACK},#2C1F00)`,borderRadius:14,padding:"16px",marginBottom:12,border:`1px solid ${GOLD_DIM}`,textAlign:"center"}}>
+              <div style={{fontSize:10,color:"rgba(255,255,255,0.5)",letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:4}}>Today's Revenue</div>
               <div style={{fontSize:36,fontWeight:900,color:GOLD_LT}}>{fmt(todayRevenue)}</div>
-              <div style={{fontSize:12,color:"rgba(255,255,255,0.5)",marginTop:2}}>{todaySales.length} transactions</div>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:2}}>{todaySales.length} transactions · {todayStr()}</div>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+
+            {/* KPI Grid */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
               {[
-                {label:"Today Commission",value:fmt(todayCommission),icon:"👩‍💼",color:GOLD},
-                {label:"This Week",value:fmt(weekRevenue),icon:"📈",color:GREEN},
+                {label:"This Week",value:fmt(weekRevenue),icon:"📅",color:GOLD},
+                {label:"This Month",value:fmt(monthRevenue),icon:"📆",color:"#7C3AED"},
+                {label:"Commission Today",value:fmt(todayCommission),icon:"👩‍💼",color:GREEN},
+                {label:"New Clients (7d)",value:newThisWeek,icon:"👤",color:"#0EA5E9"},
+                {label:"Total Clients",value:customers.length,icon:"👥",color:GOLD_DIM},
                 {label:"Avg. Rating",value:avgRating+"★",icon:"⭐",color:AMBER},
-                {label:"Total Clients",value:customers.length,icon:"👤",color:"#1E40AF"},
               ].map((s,i)=>(
-                <div key={i} style={{background:WHITE,borderRadius:12,padding:"14px",borderLeft:`4px solid ${s.color}`,boxShadow:`0 1px 8px rgba(201,168,76,0.06)`}}>
-                  <div style={{fontSize:20}}>{s.icon}</div>
-                  <div style={{fontSize:10,color:"#888",fontWeight:700,marginTop:4,textTransform:"uppercase",letterSpacing:"0.05em"}}>{s.label}</div>
-                  <div style={{fontSize:18,fontWeight:900,color:DARK,marginTop:2}}>{s.value}</div>
+                <div key={i} style={{background:CARD,borderRadius:12,padding:"12px 14px",borderLeft:`4px solid ${s.color}`,boxShadow:`0 1px 8px rgba(201,168,76,0.06)`}}>
+                  <div style={{fontSize:18}}>{s.icon}</div>
+                  <div style={{fontSize:10,color:SUBTEXT,fontWeight:700,marginTop:4,textTransform:"uppercase",letterSpacing:"0.05em"}}>{s.label}</div>
+                  <div style={{fontSize:17,fontWeight:900,color:TEXT,marginTop:2}}>{s.value}</div>
                 </div>
               ))}
             </div>
-            <div style={{background:WHITE,borderRadius:14,padding:16,marginBottom:14,border:`1px solid ${GOLD_DIM}33`}}>
-              <div style={{fontWeight:800,fontSize:14,color:DARK,marginBottom:4}}>Revenue — Last 7 Days</div>
-              <div style={{fontSize:11,color:"#888",marginBottom:14}}>Total: {fmt(weekRevenue)}</div>
+
+            {/* 7-Day Revenue Bar Chart */}
+            <div style={{background:CARD,borderRadius:14,padding:16,marginBottom:12,border:`1px solid ${BORDER}`}}>
+              <div style={{fontWeight:800,fontSize:14,color:TEXT,marginBottom:2}}>Revenue — Last 7 Days</div>
+              <div style={{fontSize:11,color:SUBTEXT,marginBottom:14}}>Total: {fmt(weekRevenue)} · Avg/day: {fmt(Math.round(weekRevenue/7))}</div>
               {sales.length===0?(
-                <div style={{textAlign:"center",padding:"20px 0",color:"#aaa",fontSize:13}}>Complete sales to see your chart</div>
+                <div style={{textAlign:"center",padding:"20px 0",color:SUBTEXT,fontSize:13}}>Complete sales to see your chart</div>
               ):(
-                <div style={{display:"flex",alignItems:"flex-end",gap:6,height:100}}>
-                  {last7.map((d,i)=>(
-                    <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-                      <div style={{fontSize:9,color:GOLD_DIM,fontWeight:700}}>{d.revenue>0?`${Math.round(d.revenue/1000)}k`:""}</div>
-                      <div style={{width:"100%",borderRadius:"4px 4px 0 0",background:d.date===todayStr()?`linear-gradient(180deg,${GOLD_LT},${GOLD})`:`linear-gradient(180deg,${GOLD_DIM}88,${GOLD_DIM}44)`,height:`${Math.max(4,(d.revenue/maxDayRev)*80)}px`}}/>
-                      <div style={{fontSize:9,color:"#888",fontWeight:600}}>{d.day}</div>
-                    </div>
-                  ))}
+                <div>
+                  <div style={{display:"flex",alignItems:"flex-end",gap:4,height:100,marginBottom:6}}>
+                    {last7.map((d,i)=>(
+                      <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                        <div style={{fontSize:8,color:GOLD_DIM,fontWeight:700,minHeight:12}}>{d.revenue>0?`${Math.round(d.revenue/1000)}k`:""}</div>
+                        <div style={{
+                          width:"100%",borderRadius:"4px 4px 0 0",
+                          background:d.date===todayStr()?`linear-gradient(180deg,${GOLD_LT},${GOLD})`:`linear-gradient(180deg,${GOLD_DIM}66,${GOLD_DIM}33)`,
+                          height:`${Math.max(4,(d.revenue/maxDayRev)*76)}px`,
+                          transition:"height 0.5s ease",
+                          position:"relative"
+                        }}>
+                          {d.date===todayStr()&&<div style={{position:"absolute",top:-16,left:"50%",transform:"translateX(-50%)",fontSize:8,color:GOLD_LT,fontWeight:800,whiteSpace:"nowrap"}}>TODAY</div>}
+                        </div>
+                        <div style={{fontSize:9,color:SUBTEXT,fontWeight:600}}>{d.day}</div>
+                        <div style={{fontSize:8,color:SUBTEXT}}>{d.count}tx</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
-            <div style={{background:WHITE,borderRadius:14,padding:16,marginBottom:14,border:`1px solid ${GOLD_DIM}33`}}>
-              <div style={{fontWeight:800,fontSize:14,color:DARK,marginBottom:12}}>Top Services</div>
-              {topServices.length===0?(<div style={{textAlign:"center",padding:"16px 0",color:"#aaa",fontSize:13}}>No services recorded yet</div>):(
-                topServices.map(([name,count],i)=>(
-                  <div key={i} style={{marginBottom:10}}>
-                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                      <span style={{fontSize:12,fontWeight:600,color:DARK}}>{name}</span>
-                      <span style={{fontSize:12,fontWeight:800,color:GOLD_DIM}}>{count}x</span>
+
+            {/* Staff Performance Chart */}
+            <div style={{background:CARD,borderRadius:14,padding:16,marginBottom:12,border:`1px solid ${BORDER}`}}>
+              <div style={{fontWeight:800,fontSize:14,color:TEXT,marginBottom:12}}>Staff Performance</div>
+              {sortedStaff.map((s,i)=>(
+                <div key={s.id} style={{marginBottom:12}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:4,alignItems:"center"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{width:22,height:22,borderRadius:"50%",background:i===0?`linear-gradient(135deg,${GOLD},${GOLD_LT})`:CREAM,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:i===0?BLACK:GOLD_DIM,flexShrink:0}}>{i+1}</div>
+                      <span style={{fontSize:13,fontWeight:700,color:TEXT}}>{s.name}</span>
+                      <span style={{fontSize:10,color:SUBTEXT}}>{s.salesCount} sales</span>
                     </div>
-                    <div style={{background:"#F5F0E8",borderRadius:20,height:6,overflow:"hidden"}}>
-                      <div style={{width:`${(count/maxSvc)*100}%`,height:"100%",borderRadius:20,background:`linear-gradient(90deg,${GOLD},${GOLD_LT})`}}/>
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontSize:12,fontWeight:800,color:GOLD_DIM}}>{fmt(s.revenue)}</div>
+                      <div style={{fontSize:10,color:SUBTEXT}}>comm: {fmt(s.commission)}</div>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-            <div style={{background:WHITE,borderRadius:14,padding:16,marginBottom:14,border:`1px solid ${GOLD_DIM}33`}}>
-              <div style={{fontWeight:800,fontSize:14,color:DARK,marginBottom:12}}>Peak Hours</div>
-              {peakHours.length===0?(<div style={{textAlign:"center",padding:"16px 0",color:"#aaa",fontSize:13}}>No data yet</div>):(
-                <div style={{display:"flex",gap:8}}>
-                  {peakHours.map((h,i)=>(
-                    <div key={i} style={{flex:1,background:i===0?`linear-gradient(135deg,${BLACK},#2C1F00)`:CREAM,borderRadius:10,padding:"10px 8px",textAlign:"center",border:`1px solid ${GOLD_DIM}44`}}>
-                      <div style={{fontSize:16,fontWeight:900,color:i===0?GOLD_LT:GOLD_DIM}}>{h.label}</div>
-                      <div style={{fontSize:10,color:i===0?"rgba(255,255,255,0.6)":"#888",marginTop:2}}>{h.count} sale{h.count!==1?"s":""}</div>
-                      {i===0&&<div style={{fontSize:9,color:GOLD,marginTop:2,fontWeight:700}}>PEAK</div>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div style={{background:WHITE,borderRadius:14,padding:16,marginBottom:14,border:`1px solid ${GOLD_DIM}33`}}>
-              <div style={{fontWeight:800,fontSize:14,color:DARK,marginBottom:12}}>Payment Methods</div>
-              {[{label:"M-Pesa",value:mpesa,pct:Math.round(mpesa/allPay*100),color:GREEN},{label:"Cash",value:cash,pct:Math.round(cash/allPay*100),color:GOLD_DIM}].map((p,i)=>(
-                <div key={i} style={{marginBottom:12}}>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                    <span style={{fontSize:12,fontWeight:700,color:DARK}}>{p.label}</span>
-                    <span style={{fontSize:12,fontWeight:800,color:DARK}}>{fmt(p.value)} ({p.pct}%)</span>
-                  </div>
-                  <div style={{background:"#F5F0E8",borderRadius:20,height:8,overflow:"hidden"}}>
-                    <div style={{width:`${p.pct}%`,height:"100%",borderRadius:20,background:p.color}}/>
+                  <div style={{background:darkMode?"#2C1F00":"#F5F0E8",borderRadius:20,height:8,overflow:"hidden"}}>
+                    <div style={{width:`${(s.revenue/maxStaffRev)*100}%`,height:"100%",borderRadius:20,background:i===0?`linear-gradient(90deg,${GOLD},${GOLD_LT})`:`${GOLD_DIM}88`,transition:"width 0.5s"}}/>
                   </div>
                 </div>
               ))}
             </div>
-            <div style={{background:WHITE,borderRadius:14,padding:16,marginBottom:14,border:`1px solid ${GOLD_DIM}33`}}>
-              <div style={{fontWeight:800,fontSize:14,color:DARK,marginBottom:12}}>Staff Leaderboard</div>
-              {[...staffStats].sort((a,b)=>b.revenue-a.revenue).map((s,i)=>(
-                <div key={s.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:`1px solid ${GOLD_DIM}22`}}>
-                  <div style={{width:24,height:24,borderRadius:"50%",background:i===0?`linear-gradient(135deg,${GOLD},${GOLD_LT})`:CREAM,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:12,color:i===0?BLACK:GOLD_DIM,border:`1px solid ${GOLD_DIM}44`,flexShrink:0}}>{i+1}</div>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:13,fontWeight:700,color:DARK}}>{s.name}</div>
-                    <div style={{fontSize:11,color:"#888"}}>{s.salesCount} services · Commission: {fmt(s.commission)}</div>
-                  </div>
-                  <div style={{fontWeight:900,color:GOLD_DIM,fontSize:13}}>{fmt(s.revenue)}</div>
-                </div>
-              ))}
-            </div>
-            {lowStock.length>0&&(
-              <div style={{background:"#FFF5F5",borderRadius:12,padding:14,border:"1.5px solid #FEE2E2"}}>
-                <div style={{fontWeight:800,fontSize:13,color:RED,marginBottom:8}}>Low Stock Alert</div>
-                {lowStock.map(p=>(<div key={p.id} style={{fontSize:12,color:DARK,marginBottom:4}}>{p.name} — only <b>{p.stock}</b> left</div>))}
+
+            {/* Top Services + Top Products side by side */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+              <div style={{background:CARD,borderRadius:14,padding:14,border:`1px solid ${BORDER}`}}>
+                <div style={{fontWeight:800,fontSize:13,color:TEXT,marginBottom:10}}>Top Services</div>
+                {topServices.length===0?<div style={{fontSize:12,color:SUBTEXT,textAlign:"center",padding:"10px 0"}}>No data yet</div>:
+                  topServices.map(([name,count],i)=>(
+                    <div key={i} style={{marginBottom:8}}>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                        <span style={{fontSize:11,color:TEXT,fontWeight:600,lineHeight:1.3}}>{name}</span>
+                        <span style={{fontSize:11,fontWeight:800,color:GOLD_DIM,flexShrink:0,marginLeft:4}}>{count}x</span>
+                      </div>
+                      <div style={{background:darkMode?"#2C1F00":"#F5F0E8",borderRadius:20,height:5}}>
+                        <div style={{width:`${(count/maxSvc)*100}%`,height:"100%",borderRadius:20,background:`linear-gradient(90deg,${GOLD},${GOLD_LT})`}}/>
+                      </div>
+                    </div>
+                  ))
+                }
               </div>
-            )}
+              <div style={{background:CARD,borderRadius:14,padding:14,border:`1px solid ${BORDER}`}}>
+                <div style={{fontWeight:800,fontSize:13,color:TEXT,marginBottom:10}}>Top Products</div>
+                {topProducts.length===0?<div style={{fontSize:12,color:SUBTEXT,textAlign:"center",padding:"10px 0"}}>No data yet</div>:
+                  topProducts.map(([name,count],i)=>(
+                    <div key={i} style={{marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span style={{fontSize:11,color:TEXT,fontWeight:600}}>{name}</span>
+                      <span style={{fontSize:11,fontWeight:800,color:GREEN}}>{count} sold</span>
+                    </div>
+                  ))
+                }
+                {lowStock.length>0&&(
+                  <div style={{marginTop:10,borderTop:`1px solid ${BORDER}`,paddingTop:8}}>
+                    <div style={{fontSize:10,color:RED,fontWeight:800,marginBottom:4}}>⚠️ Low Stock</div>
+                    {lowStock.slice(0,3).map(p=>(<div key={p.id} style={{fontSize:10,color:SUBTEXT,marginBottom:2}}>{p.name}: {p.stock} left</div>))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Peak Hours + Payment Methods */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+              <div style={{background:CARD,borderRadius:14,padding:14,border:`1px solid ${BORDER}`}}>
+                <div style={{fontWeight:800,fontSize:13,color:TEXT,marginBottom:10}}>Peak Hours</div>
+                {peakHours.length===0?<div style={{fontSize:12,color:SUBTEXT,textAlign:"center",padding:"10px 0"}}>No data</div>:
+                  peakHours.map((h,i)=>(
+                    <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,padding:"6px 8px",borderRadius:8,background:i===0?`linear-gradient(135deg,${BLACK},#2C1F00)`:"transparent",border:i===0?`1px solid ${GOLD_DIM}`:"none"}}>
+                      <span style={{fontSize:12,fontWeight:700,color:i===0?GOLD_LT:TEXT}}>{h.label}</span>
+                      <div style={{display:"flex",alignItems:"center",gap:4}}>
+                        <span style={{fontSize:11,color:i===0?GOLD:"#888"}}>{h.count} sales</span>
+                        {i===0&&<span style={{fontSize:9,color:GOLD,fontWeight:800}}>PEAK</span>}
+                      </div>
+                    </div>
+                  ))
+                }
+              </div>
+              <div style={{background:CARD,borderRadius:14,padding:14,border:`1px solid ${BORDER}`}}>
+                <div style={{fontWeight:800,fontSize:13,color:TEXT,marginBottom:10}}>Payments</div>
+                {[{label:"M-Pesa",value:mpesa,pct:Math.round(mpesa/allPay*100),color:GREEN},{label:"Cash",value:cash,pct:Math.round(cash/allPay*100),color:GOLD_DIM}].map((p,i)=>(
+                  <div key={i} style={{marginBottom:10}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                      <span style={{fontSize:11,fontWeight:700,color:TEXT}}>{p.label}</span>
+                      <span style={{fontSize:11,fontWeight:800,color:p.color}}>{p.pct}%</span>
+                    </div>
+                    <div style={{background:darkMode?"#2C1F00":"#F5F0E8",borderRadius:20,height:8}}>
+                      <div style={{width:`${p.pct}%`,height:"100%",borderRadius:20,background:p.color}}/>
+                    </div>
+                    <div style={{fontSize:10,color:SUBTEXT,marginTop:2}}>{fmt(p.value)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Customer Intelligence */}
+            <div style={{background:CARD,borderRadius:14,padding:16,marginBottom:12,border:`1px solid ${BORDER}`}}>
+              <div style={{fontWeight:800,fontSize:14,color:TEXT,marginBottom:12}}>Customer Intelligence</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8}}>
+                {[
+                  {label:"Active",value:customers.filter(c=>{if(!c.last_visit)return false;return(new Date()-new Date(c.last_visit))/(1000*60*60*24)<=14;}).length,color:GREEN},
+                  {label:"Warm",value:customers.filter(c=>{if(!c.last_visit)return false;const d=(new Date()-new Date(c.last_visit))/(1000*60*60*24);return d>14&&d<=27;}).length,color:AMBER},
+                  {label:"Due",value:customers.filter(c=>{if(!c.last_visit)return false;const d=(new Date()-new Date(c.last_visit))/(1000*60*60*24);return d>=28&&d<=44;}).length,color:"#EA580C"},
+                  {label:"At Risk",value:atRiskCustomers.filter(c=>{const d=(new Date()-new Date(c.last_visit))/(1000*60*60*24);return d>44;}).length,color:RED},
+                ].map((s,i)=>(
+                  <div key={i} style={{textAlign:"center",padding:"10px 6px",borderRadius:10,background:darkMode?"#1A1400":CREAM,border:`1.5px solid ${s.color}44`}}>
+                    <div style={{fontSize:20,fontWeight:900,color:s.color}}>{s.value}</div>
+                    <div style={{fontSize:10,color:SUBTEXT,fontWeight:700,marginTop:2}}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
           </div>
           );
         })()}
