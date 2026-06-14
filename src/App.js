@@ -242,6 +242,7 @@ function LoginPage({ onLogin }){
         <div style={{marginTop:24,borderTop:`1px solid rgba(201,168,76,0.2)`,paddingTop:16}}>
           <div style={{fontSize:12,color:"rgba(255,255,255,0.4)",marginBottom:8}}>Are you a customer?</div>
           <a href="/booking" style={{fontSize:13,color:GOLD_LT,fontWeight:700,textDecoration:"none"}}>Book an appointment →</a>
+          <div style={{marginTop:16,fontSize:10,color:"rgba(255,255,255,0.2)"}}>Staff access: /pos</div>
         </div>
       </div>
     </div>
@@ -1756,12 +1757,25 @@ function StaffRoute(){
   return <POSApp onLogout={()=>{setLoggedIn(false);setUserRole("staff");}} userRole={userRole}/>;
 }
 
+function RedirectToBooking(){
+  useEffect(()=>{ window.location.href="/booking"; },[]);
+  return(
+    <div style={{minHeight:"100vh",background:`linear-gradient(160deg,#0A0A0A 0%,#1A1400 100%)`,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
+      <div style={{fontFamily:"Georgia,serif",fontSize:28,fontWeight:900,color:"#F0CC6E",fontStyle:"italic"}}>Kimm's</div>
+      <div style={{fontSize:12,color:"rgba(255,255,255,0.5)",letterSpacing:"0.15em",textTransform:"uppercase"}}>Beauty Parlour</div>
+      <div style={{fontSize:12,color:"rgba(255,255,255,0.3)",marginTop:8}}>Redirecting...</div>
+    </div>
+  );
+}
+
 export default function App(){
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<RedirectToBooking/>}/>
         <Route path="/booking" element={<BookingPage/>}/>
-        <Route path="/*" element={<StaffRoute/>}/>
+        <Route path="/pos" element={<StaffRoute/>}/>
+        <Route path="*" element={<RedirectToBooking/>}/>
       </Routes>
     </BrowserRouter>
   );
