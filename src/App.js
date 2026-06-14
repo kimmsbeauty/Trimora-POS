@@ -660,12 +660,16 @@ function POSApp({ onLogout, userRole="staff" }){
 
   async function updateCustomerAfterSale(total){
     if(!selectedCustomer?.id) return;
-    const newVisits = (selectedCustomer.visit_count||0) + 1;
-    const newSpend  = (selectedCustomer.total_spend||0) + total;
-    await db("PATCH","customers",{
-      visit_count:newVisits, total_spend:newSpend, last_visit:todayStr()
-    },`?id=eq.${selectedCustomer.id}`);
-    setCustomers(p=>p.map(c=>c.id===selectedCustomer.id?{...c,visit_count:newVisits,total_spend:newSpend,last_visit:todayStr()}:c));
+    try {
+      const newVisits = (selectedCustomer.visit_count||0) + 1;
+      const newSpend  = (selectedCustomer.total_spend||0) + total;
+      await db("PATCH","customers",{
+        visit_count:newVisits, total_spend:newSpend, last_visit:todayStr()
+      },`?id=eq.${selectedCustomer.id}`);
+      setCustomers(p=>p.map(c=>c.id===selectedCustomer.id?{...c,visit_count:newVisits,total_spend:newSpend,last_visit:todayStr()}:c));
+    } catch(e) {
+      console.error("Update customer error:",e);
+    }
   }
 
   async function loadAppointments(){
@@ -673,40 +677,45 @@ function POSApp({ onLogout, userRole="staff" }){
     try {
       const data = await db("GET","bookings",null,"?order=created_at.desc&limit=50");
       if(data && Array.isArray(data)) setAppointments(data);
+      else setAppointments([]);
     } catch(e) {
       console.error("Bookings load error:",e);
+      showToast("Could not load bookings — check connection","error");
+      setAppointments([]);
     } finally {
       setLoadingAppts(false);
     }
   }
   useEffect(()=>{ if(page==="appointments") loadAppointments(); },[page]);
 
-  async function markDone(id){ await db("PATCH","bookings",{status:"done"},`?id=eq.${id}`); setAppointments(p=>p.map(a=>a.id===id?{...a,status:"done"}:a)); showToast("Booking marked as done ✅"); }
-  async function markCancelled(id){ await db("PATCH","bookings",{status:"cancelled"},`?id=eq.${id}`); setAppointments(p=>p.map(a=>a.id===id?{...a,status:"cancelled"}:a)); }
+  async function markDone(id){ try{ await db("PATCH","bookings",{status:"done"},`?id=eq.${id}`); setAppointments(p=>p.map(a=>a.id===id?{...a,status:"done"}:a)); showToast("Booking marked as done ✅"); }catch(e){showToast("Update failed — try again","error");} }
+  async function markCancelled(id){ try{ await db("PATCH","bookings",{status:"cancelled"},`?id=eq.${id}`); setAppointments(p=>p.map(a=>a.id===id?{...a,status:"cancelled"}:a)); showToast("Booking cancelled","info"); }catch(e){showToast("Update failed — try again","error");} }
 
   async function convertToSale(a){
-    // Mark booking as done
-    await db("PATCH","bookings",{status:"done"},`?id=eq.${a.id}`);
-    setAppointments(p=>p.map(b=>b.id===a.id?{...b,status:"done"}:b));
-    // Find or create customer
-    const existing = await db("GET","customers",null,`?phone=eq.${a.phone}&limit=1`);
-    let customer = existing?.[0];
-    if(!customer){
-      const saved = await db("POST","customers",{name:a.name,phone:a.phone,visit_count:0,total_spend:0,last_visit:todayStr()});
-      customer = saved?.[0];
+    try {
+      await db("PATCH","bookings",{status:"done"},`?id=eq.${a.id}`);
+      setAppointments(p=>p.map(b=>b.id===a.id?{...b,status:"done"}:b));
+      const existing = await db("GET","customers",null,`?phone=eq.${a.phone}&limit=1`);
+      let customer = existing?.[0];
+      if(!customer){
+        const saved = await db("POST","customers",{name:a.name,phone:a.phone,visit_count:0,total_spend:0,last_visit:todayStr()});
+        customer = saved?.[0];
+      }
+      if(customer) setCustomers(p=>p.find(c=>c.id===customer.id)?p:[customer,...p]);
+      const svc = servicesList.find(s=>s.name===a.service);
+      const cartItem = svc ? [{...svc,type:"service",qty:1}] : [];
+      setSelectedCustomer(customer||{name:a.name,phone:a.phone});
+      setClientName(a.name);
+      setClientPhone(a.phone||"");
+      setCustomerSearch(a.name);
+      setCart(cartItem);
+      setSelStaff(staffList.find(s=>s.name===a.stylist)?.name||"");
+      setPage("pos");
+      showToast(`${a.name} moved to POS — ready to checkout!`);
+    } catch(e) {
+      console.error("Convert to sale error:",e);
+      showToast("Something went wrong — try again","error");
     }
-    if(customer) setCustomers(p=>p.find(c=>c.id===customer.id)?p:[customer,...p]);
-    // Find service from SERVICES list
-    const svc = servicesList.find(s=>s.name===a.service);
-    const cartItem = svc ? [{...svc,type:"service",qty:1}] : [];
-    // Pre-fill POS
-    setSelectedCustomer(customer||{name:a.name,phone:a.phone});
-    setClientName(a.name);
-    setClientPhone(a.phone||"");
-    setCustomerSearch(a.name);
-    setCart(cartItem);
-    setSelStaff(staffList.find(s=>s.name===a.stylist)?.name||"");
-    setPage("pos");
   }
 
   const cartTotal = cart.reduce((s,i)=>s+i.price*(i.qty||1),0);
@@ -751,8 +760,13 @@ function POSApp({ onLogout, userRole="staff" }){
   }
 
   async function saveFeedback(f){
-    const saved = await db("POST","feedback",f);
-    setFeedbacks(p=>[saved?.[0]||{...f,id:Date.now()},...p]);
+    try {
+      const saved = await db("POST","feedback",f);
+      setFeedbacks(p=>[saved?.[0]||{...f,id:Date.now()},...p]);
+      showToast("Thank you for your feedback! ⭐");
+    } catch(e) {
+      console.error("Feedback save error:",e);
+    }
   }
 
   async function adjustStock(id,delta,reason="ADJUSTMENT"){
