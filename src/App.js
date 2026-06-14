@@ -62,7 +62,8 @@ async function db(method, table, data = null, filters = "") {
 const MPESA_TILL = "5927571";
 const MPESA_NAME = "Kimm's Beauty Parlour";
 const MPESA_GREEN = "#4CAF50";
-const STAFF_PIN = "1234";
+const STAFF_PIN  = "1234";   // Staff — POS only
+const ADMIN_PIN  = "9999";   // Admin — full access
 
 // Services loaded from Supabase — see POSApp state
 const DEFAULT_SERVICES = [
@@ -200,16 +201,41 @@ function MpesaInstructions({ amount, reference, compact=false }){
 
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
 function LoginPage({ onLogin }){
-  const [pin,setPin]=useState(""); const [error,setError]=useState(false);
-  function handleLogin(){ if(pin===STAFF_PIN){onLogin();}else{setError(true);setPin("");setTimeout(()=>setError(false),2000);} }
+  const [pin,setPin]=useState("");
+  const [role,setRole]=useState("staff"); // "staff" | "admin"
+  const [error,setError]=useState(false);
+
+  function handleLogin(){
+    const correct = role==="admin" ? ADMIN_PIN : STAFF_PIN;
+    if(pin===correct){ onLogin(role); }
+    else { setError(true); setPin(""); setTimeout(()=>setError(false),2000); }
+  }
+
   return (
     <div style={{minHeight:"100vh",background:`linear-gradient(160deg,${BLACK} 0%,#1A1400 60%,#2C1F00 100%)`,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
       <div style={{position:"absolute",width:280,height:280,borderRadius:"50%",border:`2px solid ${GOLD}`,opacity:0.1,pointerEvents:"none"}}/>
       <div style={{background:"rgba(255,255,255,0.04)",border:`1.5px solid ${GOLD_DIM}`,borderRadius:24,padding:36,maxWidth:340,width:"100%",textAlign:"center",boxShadow:`0 8px 40px rgba(0,0,0,0.6)`}}>
         <KimmsLogo size="lg" dark={false}/>
         <div style={{borderTop:`1px solid ${GOLD_DIM}`,margin:"24px 0 20px",opacity:0.4}}/>
-        <div style={{fontSize:12,color:"rgba(255,255,255,0.5)",marginBottom:16,letterSpacing:"0.1em",textTransform:"uppercase"}}>Staff Login</div>
-        <input type="password" placeholder="Enter PIN" value={pin} onChange={e=>setPin(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()} maxLength={6}
+
+        {/* Role selector */}
+        <div style={{display:"flex",background:"rgba(255,255,255,0.06)",borderRadius:10,padding:3,marginBottom:20,border:`1px solid ${GOLD_DIM}`}}>
+          {["staff","admin"].map(r=>(
+            <button key={r} onClick={()=>{setRole(r);setPin("");setError(false);}} style={{
+              flex:1,border:"none",borderRadius:8,padding:"9px 0",fontSize:13,fontWeight:700,
+              background:role===r?`linear-gradient(135deg,${GOLD},${GOLD_LT})`:"transparent",
+              color:role===r?BLACK:"rgba(255,255,255,0.4)",cursor:"pointer",transition:"all 0.2s",
+              textTransform:"capitalize"
+            }}>{r==="admin"?"👑 Admin":"✂ Staff"}</button>
+          ))}
+        </div>
+
+        <div style={{fontSize:12,color:"rgba(255,255,255,0.5)",marginBottom:12,letterSpacing:"0.1em",textTransform:"uppercase"}}>
+          {role==="admin"?"Owner PIN":"Staff PIN"}
+        </div>
+        <input type="password" placeholder="Enter PIN" value={pin}
+          onChange={e=>setPin(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&handleLogin()} maxLength={6}
           style={{width:"100%",borderRadius:10,border:`1.5px solid ${error?RED:GOLD_DIM}`,background:"rgba(255,255,255,0.06)",padding:"13px 14px",fontSize:24,textAlign:"center",letterSpacing:"0.4em",boxSizing:"border-box",fontFamily:"inherit",outline:"none",color:WHITE,marginBottom:8}}/>
         {error&&<div style={{color:RED,fontSize:12,marginBottom:8}}>Incorrect PIN. Try again.</div>}
         <GoldBtn onClick={handleLogin} style={{width:"100%",marginTop:8}}>Login →</GoldBtn>
@@ -494,7 +520,8 @@ function BookingPage(){
 }
 
 // ── MAIN POS ──────────────────────────────────────────────────────────────────
-function POSApp({ onLogout }){
+function POSApp({ onLogout, userRole="staff" }){
+  const isAdmin = userRole === "admin";
   const [page,setPage]=useState("pos");
   const [cart,setCart]=useState([]);
   const [clientName,setClientName]=useState("");
@@ -703,13 +730,27 @@ function POSApp({ onLogout }){
     setFeedbacks(p=>[saved?.[0]||{...f,id:Date.now()},...p]);
   }
 
-  async function adjustStock(id,delta){
+  async function adjustStock(id,delta,reason="ADJUSTMENT"){
+    if(!isAdmin && delta>0){ alert("Only admin can add stock."); return; }
     const prod=products.find(p=>p.id===id);
     if(!prod) return;
     const ns=Math.max(0,prod.stock+delta);
     setProducts(p=>p.map(pr=>pr.id===id?{...pr,stock:ns}:pr));
-    try { await db("PATCH","stock",{stock:ns},`?id=eq.${id}`); }
-    catch(e){ console.error("Stock update failed:",e); }
+    try {
+      await db("PATCH","stock",{stock:ns},`?id=eq.${id}`);
+      // Log stock movement
+      await db("POST","stock_log",{
+        product_id:id,
+        product_name:prod.name,
+        action_type:delta>0?"IN":"OUT",
+        quantity:Math.abs(delta),
+        balance_after:ns,
+        reason,
+        user_role:userRole,
+        date:todayStr(),
+        time:nowTime()
+      });
+    } catch(e){ console.error("Stock update failed:",e); }
   }
 
   const todaySales=sales.filter(s=>s.date===todayStr());
@@ -720,17 +761,30 @@ function POSApp({ onLogout }){
   const avgRating=feedbacks.length?(feedbacks.reduce((s,f)=>s+f.rating,0)/feedbacks.length).toFixed(1):"—";
   const pendingCount=appointments.filter(a=>a.status==="pending").length;
   const frequentCustomers=customers.filter(c=>c.visit_count>=4);
-  const atRiskCustomers=customers.filter(c=>{ if(!c.last_visit) return false; const days=(new Date()-new Date(c.last_visit))/(1000*60*60*24); return days>28; });
 
-  const NAV=[
-    {id:"pos",          label:"POS",       icon:"🛒"},
-    {id:"appointments", label:"Bookings",  icon:"📅",badge:pendingCount},
-    {id:"customers",    label:"Clients",   icon:"👤"},
-    {id:"dashboard",    label:"Overview",  icon:"📊"},
-    {id:"staff",        label:"Staff",     icon:"👥"},
-    {id:"services",     label:"Services",  icon:"✂"},
-    {id:"inventory",    label:"Stock",     icon:"📦"},
+  function getCustomerStatus(c){
+    if(!c.last_visit) return {label:"New",color:"#6366F1",bg:"#EEF2FF",days:0};
+    const days=Math.floor((new Date()-new Date(c.last_visit))/(1000*60*60*24));
+    if(days<=14)  return {label:"Active",  color:GREEN,    bg:"#D1FAE5", days};
+    if(days<=27)  return {label:"Warm",    color:"#D97706", bg:"#FEF3C7", days};
+    if(days<=44)  return {label:"Due",     color:"#EA580C", bg:"#FFEDD5", days};
+    return             {label:"At Risk",  color:RED,      bg:"#FEE2E2", days};
+  }
+
+  const atRiskCustomers=customers.filter(c=>{ if(!c.last_visit) return false; const days=Math.floor((new Date()-new Date(c.last_visit))/(1000*60*60*24)); return days>=28; });
+  const dueCustomers=customers.filter(c=>{ if(!c.last_visit) return false; const days=Math.floor((new Date()-new Date(c.last_visit))/(1000*60*60*24)); return days>=28&&days<=44; });
+  const vipCustomers=customers.filter(c=>c.visit_count>=8||(c.total_spend&&c.total_spend>=20000));
+
+  const ALL_NAV=[
+    {id:"pos",          label:"POS",       icon:"🛒",  adminOnly:false},
+    {id:"appointments", label:"Bookings",  icon:"📅",  adminOnly:false, badge:pendingCount},
+    {id:"customers",    label:"Clients",   icon:"👤",  adminOnly:true},
+    {id:"dashboard",    label:"Overview",  icon:"📊",  adminOnly:true},
+    {id:"staff",        label:"Staff",     icon:"👥",  adminOnly:true},
+    {id:"services",     label:"Services",  icon:"✂",   adminOnly:true},
+    {id:"inventory",    label:"Stock",     icon:"📦",  adminOnly:true},
   ];
+  const NAV = isAdmin ? ALL_NAV : ALL_NAV.filter(n=>!n.adminOnly);
 
   const inputStyle={borderRadius:10,border:`1.5px solid ${GOLD_DIM}`,padding:"10px 12px",fontSize:13,fontFamily:"inherit",outline:"none",background:WHITE};
 
@@ -794,7 +848,14 @@ function POSApp({ onLogout }){
 
       {/* TOP BAR */}
       <div style={{background:`linear-gradient(135deg,${BLACK} 0%,#1A1400 60%,#2C1F00 100%)`,borderBottom:`2px solid ${GOLD}`,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,boxShadow:`0 2px 16px rgba(201,168,76,0.18)`}}>
-        <KimmsLogo size="sm" dark={false}/>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <KimmsLogo size="sm" dark={false}/>
+          <div style={{padding:"3px 10px",borderRadius:20,fontSize:10,fontWeight:800,
+            background:isAdmin?`linear-gradient(135deg,${GOLD},${GOLD_LT})`:"rgba(255,255,255,0.1)",
+            color:isAdmin?BLACK:"rgba(255,255,255,0.6)",letterSpacing:"0.05em"}}>
+            {isAdmin?"👑 ADMIN":"✂ STAFF"}
+          </div>
+        </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <a href="/booking" target="_blank" rel="noreferrer"
             style={{background:`linear-gradient(135deg,${GOLD},${GOLD_LT})`,color:BLACK,border:"none",borderRadius:20,padding:"7px 12px",fontSize:11,fontWeight:900,cursor:"pointer",textDecoration:"none"}}>
@@ -1534,8 +1595,9 @@ ${window.location.origin}/booking
 
 function StaffRoute(){
   const [loggedIn,setLoggedIn]=useState(false);
-  if(!loggedIn) return <LoginPage onLogin={()=>setLoggedIn(true)}/>;
-  return <POSApp onLogout={()=>setLoggedIn(false)}/>;
+  const [userRole,setUserRole]=useState("staff");
+  if(!loggedIn) return <LoginPage onLogin={(role)=>{setUserRole(role);setLoggedIn(true);}}/>;
+  return <POSApp onLogout={()=>{setLoggedIn(false);setUserRole("staff");}} userRole={userRole}/>;
 }
 
 export default function App(){
