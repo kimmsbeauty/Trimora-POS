@@ -4,7 +4,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 const SUPABASE_URL = "https://ukoccobbjeomjwjcvrma.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVrb2Njb2JiamVvbWp3amN2cm1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMjg4MzAsImV4cCI6MjA5NjcwNDgzMH0.a-nDh04ujZQ8w9lwu9rkHuge9xGRbLRfV7vD3zRCAqg";
 
-// ── OFFLINE QUEUE ──────────────────────────────────────────────────────────
 const offlineQueue = [];
 let isSyncing = false;
 
@@ -62,10 +61,9 @@ async function db(method, table, data = null, filters = "") {
 const MPESA_TILL = "5927571";
 const MPESA_NAME = "Kimm's Beauty Parlour";
 const MPESA_GREEN = "#4CAF50";
-const STAFF_PIN  = "1234";   // Staff — POS only
-const ADMIN_PIN  = "9999";   // Admin — full access
+const STAFF_PIN  = "1234";
+const ADMIN_PIN  = "9999";
 
-// Services loaded from Supabase — see POSApp state
 const DEFAULT_SERVICES = [
   { id:"SRV001", cat:"Hair",   name:"Hair wash & blow dry",  price:1000 },
   { id:"SRV002", cat:"Hair",   name:"Hair cutting",           price:800  },
@@ -91,10 +89,9 @@ const DEFAULT_SERVICES = [
   { id:"SRV022", cat:"Barber", name:"Beard grooming",         price:300  },
 ];
 
-// Staff loaded dynamically from Supabase — see POSApp state
 const DEFAULT_STAFF = [
-  { id:"STF001", name:"Lucy",   role:"Stylist",   commission_pct:40, active:true },
-  { id:"STF002", name:"Kelvin", role:"Barber",    commission_pct:40, active:true },
+  { id:"STF001", name:"Lucy",   role:"Stylist",         commission_pct:40, active:true },
+  { id:"STF002", name:"Kelvin", role:"Barber",          commission_pct:40, active:true },
   { id:"STF003", name:"Alex",   role:"Nail Technician", commission_pct:40, active:true },
 ];
 
@@ -117,7 +114,6 @@ function todayStr(){ return new Date().toLocaleDateString("en-KE"); }
 function nowTime(){ return new Date().toLocaleTimeString("en-KE",{hour:"2-digit",minute:"2-digit"}); }
 function today(){ return new Date().toLocaleDateString("en-KE",{weekday:"long",year:"numeric",month:"long",day:"numeric"}); }
 
-// ── BRAND LOGO ────────────────────────────────────────────────────────────────
 function KimmsLogo({ size="md", dark=false }){
   const s = { sm:{crown:18,name:15,tag:9,sub:8}, md:{crown:26,name:22,tag:12,sub:10}, lg:{crown:38,name:32,tag:16,sub:12} }[size]||{crown:26,name:22,tag:12,sub:10};
   const goldColor = dark ? GOLD_DIM : GOLD_LT;
@@ -199,10 +195,9 @@ function MpesaInstructions({ amount, reference, compact=false }){
   );
 }
 
-// ── LOGIN ─────────────────────────────────────────────────────────────────────
 function LoginPage({ onLogin }){
   const [pin,setPin]=useState("");
-  const [role,setRole]=useState("staff"); // "staff" | "admin"
+  const [role,setRole]=useState("staff");
   const [error,setError]=useState(false);
 
   function handleLogin(){
@@ -217,8 +212,6 @@ function LoginPage({ onLogin }){
       <div style={{background:"rgba(255,255,255,0.04)",border:`1.5px solid ${GOLD_DIM}`,borderRadius:24,padding:36,maxWidth:340,width:"100%",textAlign:"center",boxShadow:`0 8px 40px rgba(0,0,0,0.6)`}}>
         <KimmsLogo size="lg" dark={false}/>
         <div style={{borderTop:`1px solid ${GOLD_DIM}`,margin:"24px 0 20px",opacity:0.4}}/>
-
-        {/* Role selector */}
         <div style={{display:"flex",background:"rgba(255,255,255,0.06)",borderRadius:10,padding:3,marginBottom:20,border:`1px solid ${GOLD_DIM}`}}>
           {["staff","admin"].map(r=>(
             <button key={r} onClick={()=>{setRole(r);setPin("");setError(false);}} style={{
@@ -229,7 +222,6 @@ function LoginPage({ onLogin }){
             }}>{r==="admin"?"👑 Admin":"✂ Staff"}</button>
           ))}
         </div>
-
         <div style={{fontSize:12,color:"rgba(255,255,255,0.5)",marginBottom:12,letterSpacing:"0.1em",textTransform:"uppercase"}}>
           {role==="admin"?"Owner PIN":"Staff PIN"}
         </div>
@@ -249,7 +241,6 @@ function LoginPage({ onLogin }){
   );
 }
 
-// ── RECEIPT ───────────────────────────────────────────────────────────────────
 function Receipt({ sale, onClose }){
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -285,45 +276,11 @@ function Receipt({ sale, onClose }){
           <button onClick={()=>window.print()} style={{flex:1,background:CREAM,border:`1.5px solid ${GOLD_DIM}`,borderRadius:10,padding:"11px 0",fontWeight:700,fontSize:13,cursor:"pointer",color:GOLD_DIM}}>🖨️ Print</button>
           <GoldBtn onClick={onClose} style={{flex:2}}>Close</GoldBtn>
         </div>
-        <style>{`@media print { body * { visibility: hidden; } .receipt-print, .receipt-print * { visibility: visible; } .receipt-print { position: fixed; top: 0; left: 0; width: 100%; } }`}</style>
       </div>
     </div>
   );
 }
 
-// ── FEEDBACK ──────────────────────────────────────────────────────────────────
-function FeedbackModal({ onSubmit, onClose }){
-  const [rating,setRating]=useState(0); const [note,setNote]=useState(""); const [stylist,setStylist]=useState("");
-  return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{background:WHITE,borderRadius:20,padding:28,width:340,border:`1.5px solid ${GOLD_DIM}`}}>
-        <div style={{background:`linear-gradient(135deg,${BLACK},#2C1F00)`,borderRadius:12,padding:"16px",textAlign:"center",marginBottom:20,border:`1px solid ${GOLD_DIM}`}}>
-          <div style={{fontSize:20,color:GOLD_LT,fontWeight:900,fontFamily:"Georgia,serif",fontStyle:"italic"}}>How was your visit?</div>
-          <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:4,letterSpacing:"0.06em"}}>YOUR FEEDBACK MEANS THE WORLD TO US 👑</div>
-        </div>
-        <div style={{fontSize:13,fontWeight:700,color:DARK,marginBottom:8}}>Rate your experience</div>
-        <div style={{display:"flex",gap:8,marginBottom:18}}>
-          {[1,2,3,4,5].map(s=>(
-            <button key={s} onClick={()=>setRating(s)} style={{width:44,height:44,borderRadius:10,border:`2px solid ${rating>=s?GOLD:"#eee"}`,background:rating>=s?`linear-gradient(135deg,${BLACK},#2C1F00)`:"#fafafa",fontSize:20,cursor:"pointer"}}>⭐</button>
-          ))}
-        </div>
-        <div style={{fontSize:13,fontWeight:700,color:DARK,marginBottom:8}}>Which stylist served you?</div>
-        <div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap"}}>
-          {DEFAULT_STAFF.map(s=>(
-            <button key={s.id} onClick={()=>setStylist(s.name)} style={{padding:"7px 14px",borderRadius:20,border:`2px solid ${stylist===s.name?GOLD:"#eee"}`,background:stylist===s.name?`linear-gradient(135deg,${BLACK},#2C1F00)`:WHITE,fontSize:12,fontWeight:700,cursor:"pointer",color:stylist===s.name?GOLD_LT:DARK}}>{s.name}</button>
-          ))}
-        </div>
-        <div style={{fontSize:13,fontWeight:700,color:DARK,marginBottom:8}}>Any comments? (optional)</div>
-        <textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Tell us about your experience..."
-          style={{width:"100%",borderRadius:10,border:`1.5px solid ${GOLD_DIM}`,padding:"10px 12px",fontSize:13,resize:"none",height:72,boxSizing:"border-box",fontFamily:"inherit",outline:"none"}}/>
-        <GoldBtn onClick={()=>{ if(rating===0)return alert("Please select a star rating"); onSubmit({rating,stylist,note,date:today(),time:nowTime()}); }} style={{width:"100%",marginTop:14}}>Submit Feedback 👑</GoldBtn>
-        <button onClick={onClose} style={{width:"100%",background:"none",border:"none",color:"#aaa",fontSize:12,cursor:"pointer",marginTop:8}}>Skip</button>
-      </div>
-    </div>
-  );
-}
-
-// ── MPESA PAYMENT MODAL ───────────────────────────────────────────────────────
 function MpesaPaymentModal({ booking, onPaid, onPayLater }){
   const [confirmed,setConfirmed]=useState(false);
   if(confirmed) return (
@@ -355,12 +312,199 @@ function MpesaPaymentModal({ booking, onPaid, onPayLater }){
   );
 }
 
-// ── BOOKING PAGE ──────────────────────────────────────────────────────────────
+function CustomerFeedbackPage(){
+  const [step, setStep] = useState("loading");
+  const [booking, setBooking] = useState(null);
+  const [rating, setRating] = useState(0);
+  const [note, setNote] = useState("");
+  const [stylistName, setStylistName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(()=>{
+    const params = new URLSearchParams(window.location.search);
+    const bookingId = params.get("id");
+    const clientName = params.get("name");
+    const service = params.get("service");
+    const stylist = params.get("stylist");
+
+    if(bookingId && clientName && service){
+      setBooking({ id: bookingId, name: decodeURIComponent(clientName), service: decodeURIComponent(service), stylist: decodeURIComponent(stylist||"") });
+      setStylistName(decodeURIComponent(stylist||""));
+      setStep("form");
+    } else {
+      setStep("invalid");
+    }
+  },[]);
+
+  async function submitFeedback(){
+    if(rating === 0){ setError("Please select a star rating before submitting."); return; }
+    setSubmitting(true);
+    setError("");
+    try {
+      await db("POST","feedback",{
+        rating,
+        stylist: stylistName,
+        note,
+        client_name: booking.name,
+        service: booking.service,
+        booking_id: booking.id,
+        date: todayStr(),
+        time: nowTime(),
+        source: "customer_link"
+      });
+      setDone(true);
+    } catch(e){
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if(step === "loading") return (
+    <div style={{minHeight:"100vh",background:`linear-gradient(160deg,${BLACK} 0%,#1A1400 100%)`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <KimmsLogo size="md" dark={false}/>
+    </div>
+  );
+
+  if(step === "invalid") return (
+    <div style={{minHeight:"100vh",background:`linear-gradient(160deg,${BLACK} 0%,#1A1400 100%)`,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div style={{background:"rgba(255,255,255,0.05)",border:`1.5px solid ${GOLD_DIM}`,borderRadius:20,padding:32,maxWidth:360,width:"100%",textAlign:"center"}}>
+        <KimmsLogo size="md" dark={false}/>
+        <div style={{marginTop:24,fontSize:14,color:"rgba(255,255,255,0.6)",lineHeight:1.8}}>This feedback link is not valid or has expired.</div>
+        <a href="/booking" style={{display:"block",marginTop:20,color:GOLD_LT,fontSize:13,fontWeight:700,textDecoration:"none"}}>Book an appointment →</a>
+      </div>
+    </div>
+  );
+
+  if(done) return (
+    <div style={{minHeight:"100vh",background:`linear-gradient(160deg,${BLACK} 0%,#1A1400 100%)`,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div style={{background:"rgba(255,255,255,0.05)",border:`1.5px solid ${GOLD_DIM}`,borderRadius:24,padding:36,maxWidth:380,width:"100%",textAlign:"center"}}>
+        <div style={{fontSize:56,marginBottom:16}}>
+          {rating >= 4 ? "🌟" : rating === 3 ? "😊" : "🙏"}
+        </div>
+        <div style={{fontFamily:"Georgia,serif",fontSize:24,fontWeight:900,color:GOLD_LT,fontStyle:"italic",marginBottom:8}}>
+          Thank you, {booking.name}!
+        </div>
+        <div style={{fontSize:13,color:"rgba(255,255,255,0.65)",lineHeight:1.8,marginBottom:24}}>
+          Your feedback has been received.<br/>
+          We truly value your opinion and will use it to keep improving our service for you. 💕
+        </div>
+        <div style={{background:"rgba(201,168,76,0.08)",border:`1px solid ${GOLD_DIM}`,borderRadius:14,padding:"14px 16px",marginBottom:24}}>
+          <div style={{display:"flex",gap:4,justifyContent:"center",marginBottom:8}}>
+            {[1,2,3,4,5].map(s=>(
+              <span key={s} style={{fontSize:22,opacity:rating>=s?1:0.2}}>⭐</span>
+            ))}
+          </div>
+          <div style={{fontSize:12,color:"rgba(255,255,255,0.5)"}}>{booking.service}{stylistName?` with ${stylistName}`:""}</div>
+        </div>
+        <a href="/booking" style={{display:"block",background:`linear-gradient(135deg,${GOLD},${GOLD_LT})`,color:BLACK,borderRadius:12,padding:"13px 0",fontWeight:900,fontSize:14,textDecoration:"none"}}>
+          Book your next appointment 👑
+        </a>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{minHeight:"100vh",background:`linear-gradient(160deg,${BLACK} 0%,#1A1400 100%)`,paddingBottom:48}}>
+      <div style={{background:`linear-gradient(135deg,${BLACK},#2C1F00)`,borderBottom:`2px solid ${GOLD}`,padding:"22px 20px 18px",textAlign:"center"}}>
+        <KimmsLogo size="md" dark={false}/>
+        <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:8,letterSpacing:"0.1em",textTransform:"uppercase"}}>Share your experience</div>
+      </div>
+
+      <div style={{maxWidth:420,margin:"0 auto",padding:"24px 16px 0"}}>
+        <div style={{background:"rgba(255,255,255,0.04)",border:`1px solid ${GOLD_DIM}44`,borderRadius:16,padding:"16px 18px",marginBottom:24}}>
+          <div style={{fontSize:12,color:"rgba(255,255,255,0.45)",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Your visit</div>
+          <div style={{fontSize:15,fontWeight:800,color:WHITE}}>{booking.service}</div>
+          {stylistName && <div style={{fontSize:12,color:"rgba(255,255,255,0.5)",marginTop:3}}>with {stylistName}</div>}
+        </div>
+
+        <div style={{fontFamily:"Georgia,serif",fontSize:22,fontWeight:900,color:GOLD_LT,fontStyle:"italic",marginBottom:6,textAlign:"center"}}>
+          How was your visit?
+        </div>
+        <div style={{fontSize:13,color:"rgba(255,255,255,0.45)",textAlign:"center",marginBottom:28,lineHeight:1.6}}>
+          Your honest feedback helps us serve you better.<br/>Only the salon owner sees this — completely private.
+        </div>
+
+        <div style={{marginBottom:28}}>
+          <div style={{fontSize:12,fontWeight:800,color:GOLD_DIM,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:14,textAlign:"center"}}>Tap to rate</div>
+          <div style={{display:"flex",gap:10,justifyContent:"center"}}>
+            {[1,2,3,4,5].map(s=>(
+              <button key={s} onClick={()=>setRating(s)} style={{
+                width:52, height:52, borderRadius:14,
+                border:`2px solid ${rating>=s?GOLD:"rgba(255,255,255,0.1)"}`,
+                background:rating>=s?`linear-gradient(135deg,${BLACK},#2C1F00)`:"rgba(255,255,255,0.04)",
+                fontSize:26, cursor:"pointer",
+                transform: rating>=s ? "scale(1.05)" : "scale(1)",
+                transition:"all 0.15s"
+              }}>⭐</button>
+            ))}
+          </div>
+          {rating > 0 && (
+            <div style={{textAlign:"center",marginTop:10,fontSize:13,fontWeight:700,color:rating>=4?GOLD_LT:rating===3?AMBER:RED}}>
+              {rating===5?"Absolutely loved it! 🌟":rating===4?"Really enjoyed it 😊":rating===3?"It was okay 👍":rating===2?"Could be better 😐":"Needs improvement 😔"}
+            </div>
+          )}
+        </div>
+
+        <div style={{marginBottom:24}}>
+          <div style={{fontSize:12,fontWeight:800,color:GOLD_DIM,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>Which stylist served you?</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {DEFAULT_STAFF.map(s=>(
+              <button key={s.id} onClick={()=>setStylistName(s.name)} style={{
+                padding:"9px 18px", borderRadius:24,
+                border:`2px solid ${stylistName===s.name?GOLD:"rgba(255,255,255,0.12)"}`,
+                background:stylistName===s.name?`linear-gradient(135deg,${BLACK},#2C1F00)`:"rgba(255,255,255,0.04)",
+                fontSize:13, fontWeight:700, cursor:"pointer",
+                color:stylistName===s.name?GOLD_LT:"rgba(255,255,255,0.6)"
+              }}>{s.name}</button>
+            ))}
+            <button onClick={()=>setStylistName("Not sure")} style={{
+              padding:"9px 18px", borderRadius:24,
+              border:`2px solid ${stylistName==="Not sure"?GOLD:"rgba(255,255,255,0.12)"}`,
+              background:stylistName==="Not sure"?`linear-gradient(135deg,${BLACK},#2C1F00)`:"rgba(255,255,255,0.04)",
+              fontSize:13, fontWeight:700, cursor:"pointer",
+              color:stylistName==="Not sure"?GOLD_LT:"rgba(255,255,255,0.6)"
+            }}>Not sure</button>
+          </div>
+        </div>
+
+        <div style={{marginBottom:28}}>
+          <div style={{fontSize:12,fontWeight:800,color:GOLD_DIM,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>Any comments? <span style={{fontSize:11,fontWeight:600,textTransform:"none",letterSpacing:0,color:"rgba(255,255,255,0.3)"}}>optional</span></div>
+          <textarea
+            value={note}
+            onChange={e=>setNote(e.target.value)}
+            placeholder="Tell us about your experience — what you loved, or anything we can improve..."
+            style={{width:"100%",borderRadius:12,border:`1.5px solid ${GOLD_DIM}55`,background:"rgba(255,255,255,0.05)",padding:"12px 14px",fontSize:13,resize:"none",height:90,boxSizing:"border-box",fontFamily:"inherit",outline:"none",color:WHITE,lineHeight:1.6}}
+          />
+        </div>
+
+        {error && (
+          <div style={{background:"rgba(239,68,68,0.12)",border:"1.5px solid #EF4444",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#FCA5A5",marginBottom:16}}>
+            {error}
+          </div>
+        )}
+
+        <GoldBtn onClick={submitFeedback} disabled={submitting} style={{width:"100%",fontSize:15,padding:"14px 0"}}>
+          {submitting ? "Submitting..." : "Submit Feedback 👑"}
+        </GoldBtn>
+
+        <div style={{textAlign:"center",marginTop:14,fontSize:11,color:"rgba(255,255,255,0.25)",lineHeight:1.7}}>
+          Your feedback is private and goes directly to the salon owner.<br/>Staff cannot see your review.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BookingPage(){
   const [step,setStep]=useState(1);
   const [sel,setSel]=useState({service:null,stylist:null,date:"",time:"",name:"",phone:""});
-  const [done,setDone]=useState(false); const [saving,setSaving]=useState(false);
-  const [showMpesa,setShowMpesa]=useState(false); const [savedBooking,setSavedBooking]=useState(null);
+  const [done,setDone]=useState(false);
+  const [saving,setSaving]=useState(false);
+  const [showMpesa,setShowMpesa]=useState(false);
+  const [savedBooking,setSavedBooking]=useState(null);
   const [paymentStatus,setPaymentStatus]=useState(null);
   const [bookingServices,setBookingServices]=useState(DEFAULT_SERVICES);
   const [bookingStaff,setBookingStaff]=useState(DEFAULT_STAFF);
@@ -380,9 +524,7 @@ function BookingPage(){
   async function confirm(){
     if(!sel.name||!sel.phone) return alert("Please enter your name and phone number");
     setSaving(true);
-    // Save booking
     const result = await db("POST","bookings",{name:sel.name,phone:sel.phone,service:sel.service?.name,price:sel.service?.price,stylist:sel.stylist||"Any available",date:sel.date,time:sel.time,status:"pending",payment_status:"pending"});
-    // Auto-save customer record
     const existing = await db("GET","customers",null,`?phone=eq.${sel.phone}&limit=1`);
     if(existing && existing.length===0){
       await db("POST","customers",{name:sel.name,phone:sel.phone,visit_count:0,total_spend:0,last_visit:sel.date});
@@ -391,12 +533,28 @@ function BookingPage(){
     setSavedBooking({id:result?.[0]?.id,name:sel.name,phone:sel.phone,service:sel.service?.name,price:sel.service?.price,stylist:sel.stylist||"Any available",date:sel.date,time:sel.time});
     setShowMpesa(true);
   }
-  async function handlePaid(){ if(savedBooking?.id) await db("PATCH","bookings",{payment_status:"paid_upfront"},`?id=eq.${savedBooking.id}`); setPaymentStatus("paid");setShowMpesa(false);setDone(true); }
-  async function handlePayLater(){ if(savedBooking?.id) await db("PATCH","bookings",{payment_status:"pay_later"},`?id=eq.${savedBooking.id}`); setPaymentStatus("pay_later");setShowMpesa(false);setDone(true); }
+
+  async function handlePaid(){
+    if(savedBooking?.id) await db("PATCH","bookings",{payment_status:"paid_upfront"},`?id=eq.${savedBooking.id}`);
+    setPaymentStatus("paid");
+    setShowMpesa(false);
+    setDone(true);
+  }
+
+  async function handlePayLater(){
+    if(savedBooking?.id) await db("PATCH","bookings",{payment_status:"pay_later"},`?id=eq.${savedBooking.id}`);
+    setPaymentStatus("pay_later");
+    setShowMpesa(false);
+    setDone(true);
+  }
 
   if(showMpesa&&savedBooking) return <MpesaPaymentModal booking={savedBooking} onPaid={handlePaid} onPayLater={handlePayLater}/>;
 
   if(done){
+    const feedbackLink = savedBooking?.id
+      ? `${window.location.origin}/feedback?id=${savedBooking.id}&name=${encodeURIComponent(sel.name)}&service=${encodeURIComponent(sel.service?.name||"")}&stylist=${encodeURIComponent(sel.stylist||"Any available")}`
+      : null;
+
     const waMessage = encodeURIComponent(`✂ Kimm's Beauty Parlour\n\nHi ${sel.name}! Your booking is confirmed 💕\n\nService: ${sel.service?.name}\nStylist: ${sel.stylist||"Any available"}\nDate: ${sel.date}\nTime: ${sel.time}\nPrice: KES ${sel.service?.price?.toLocaleString()}\nPayment: ${paymentStatus==="paid"?"✅ Paid via M-Pesa":"Pay at salon"}\n\nWe look forward to seeing you!\nFor enquiries: 0113828280`);
     return (
       <div style={{minHeight:"100vh",background:`linear-gradient(160deg,${BLACK} 0%,#1A1400 100%)`,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
@@ -419,6 +577,17 @@ function BookingPage(){
           )}
           <a href={`https://wa.me/254113828280?text=${waMessage}`} target="_blank" rel="noreferrer"
             style={{display:"block",background:"#25D366",color:WHITE,borderRadius:12,padding:"13px 0",fontWeight:800,fontSize:15,textDecoration:"none",marginBottom:10}}>📲 Confirm via WhatsApp</a>
+
+          {feedbackLink && (
+            <div style={{background:"rgba(201,168,76,0.08)",border:`1px solid ${GOLD_DIM}66`,borderRadius:14,padding:"16px",marginBottom:10}}>
+              <div style={{fontSize:13,fontWeight:800,color:GOLD_LT,marginBottom:6}}>⭐ Just been served?</div>
+              <div style={{fontSize:12,color:"rgba(255,255,255,0.55)",marginBottom:12,lineHeight:1.6}}>If your appointment has already taken place, we'd love to hear about your experience!</div>
+              <a href={feedbackLink} style={{display:"block",background:`linear-gradient(135deg,${GOLD},${GOLD_LT})`,color:BLACK,borderRadius:10,padding:"11px 0",fontWeight:900,fontSize:13,textDecoration:"none"}}>
+                Leave Feedback 👑
+              </a>
+            </div>
+          )}
+
           <button onClick={()=>{setSel({service:null,stylist:null,date:"",time:"",name:"",phone:""});setStep(1);setDone(false);setPaymentStatus(null);setSavedBooking(null);}}
             style={{background:"transparent",border:`1px solid ${GOLD_DIM}`,borderRadius:10,padding:"10px 24px",fontWeight:700,fontSize:13,cursor:"pointer",color:"rgba(255,255,255,0.5)"}}>
             Book another
@@ -458,18 +627,17 @@ function BookingPage(){
                 ))}
               </div>
             ))}
-          {/* WhatsApp Help Button */}
-          <div style={{marginTop:24,padding:"14px 16px",background:"rgba(255,255,255,0.05)",borderRadius:14,border:"1px solid rgba(255,255,255,0.1)",textAlign:"center"}}>
-            <div style={{fontSize:13,color:"rgba(255,255,255,0.6)",marginBottom:4}}>Can't find what you're looking for?</div>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginBottom:12}}>Our team is happy to help you book the right service</div>
-            <a href={"https://wa.me/254113828280?text=Help%20me%20book%20at%20Kimms%20Beauty%20Parlour"}
-              target="_blank" rel="noreferrer"
-              style={{display:"inline-flex",alignItems:"center",gap:8,background:"#25D366",color:WHITE,borderRadius:24,padding:"10px 20px",fontWeight:800,fontSize:14,textDecoration:"none",boxShadow:"0 2px 12px rgba(37,211,102,0.3)"}}>
-              <span style={{fontSize:18}}>💬</span>
-              Chat on WhatsApp
-            </a>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.3)",marginTop:8}}>We'll respond within minutes</div>
-          </div>
+            <div style={{marginTop:24,padding:"14px 16px",background:"rgba(255,255,255,0.05)",borderRadius:14,border:"1px solid rgba(255,255,255,0.1)",textAlign:"center"}}>
+              <div style={{fontSize:13,color:"rgba(255,255,255,0.6)",marginBottom:4}}>Can't find what you're looking for?</div>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginBottom:12}}>Our team is happy to help you book the right service</div>
+              <a href={"https://wa.me/254113828280?text=Help%20me%20book%20at%20Kimms%20Beauty%20Parlour"}
+                target="_blank" rel="noreferrer"
+                style={{display:"inline-flex",alignItems:"center",gap:8,background:"#25D366",color:WHITE,borderRadius:24,padding:"10px 20px",fontWeight:800,fontSize:14,textDecoration:"none",boxShadow:"0 2px 12px rgba(37,211,102,0.3)"}}>
+                <span style={{fontSize:18}}>💬</span>
+                Chat on WhatsApp
+              </a>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.3)",marginTop:8}}>We'll respond within minutes</div>
+            </div>
           </div>
         )}
         {step===2&&(
@@ -524,7 +692,6 @@ function BookingPage(){
   );
 }
 
-// ── MAIN POS ──────────────────────────────────────────────────────────────────
 function POSApp({ onLogout, userRole="staff" }){
   const isAdmin = userRole === "admin";
   const [darkMode, setDarkMode] = useState(()=>localStorage.getItem("kimms_dark")==="true");
@@ -534,12 +701,12 @@ function POSApp({ onLogout, userRole="staff" }){
     document.body.style.background = darkMode ? "#0A0A0A" : "#FDF8EE";
   },[darkMode]);
 
-  // Dark mode color overrides
   const BG    = darkMode ? "#0A0A0A" : CREAM;
   const CARD  = darkMode ? "#1A1400" : WHITE;
   const TEXT  = darkMode ? WHITE     : DARK;
   const BORDER= darkMode ? GOLD_DIM+"55" : GOLD_DIM+"33";
   const SUBTEXT = darkMode ? "rgba(255,255,255,0.5)" : "#888";
+
   const [page,setPage]=useState("pos");
   const [cart,setCart]=useState([]);
   const [clientName,setClientName]=useState("");
@@ -572,11 +739,13 @@ function POSApp({ onLogout, userRole="staff" }){
   const [newProduct,setNewProduct]=useState({name:"",cat:"Hair",price:"",stock:""});
 
   const [receipt,setReceipt]=useState(null);
-  const [showFeedback,setShowFeedback]=useState(false);
   const [loadingAppts,setLoadingAppts]=useState(false);
   const [showMpesaConfirm,setShowMpesaConfirm]=useState(false);
   const [time,setTime]=useState(nowTime());
-  const [toast,setToast]=useState(null); // {msg, type: "success"|"error"|"info"}
+  const [toast,setToast]=useState(null);
+  const [isOnline,setIsOnline]=useState(navigator.onLine);
+  const [syncPending,setSyncPending]=useState(false);
+  const [loadError,setLoadError]=useState(false);
 
   function showToast(msg, type="success"){
     setToast({msg,type});
@@ -589,7 +758,7 @@ function POSApp({ onLogout, userRole="staff" }){
         const [s,p,f,c,st,sv] = await Promise.all([
           db("GET","sales",null,"?order=created_at.desc&limit=100"),
           db("GET","stock",null,"?limit=50"),
-          db("GET","feedback",null,"?order=created_at.desc&limit=50"),
+          db("GET","feedback",null,"?order=created_at.desc&limit=100"),
           db("GET","customers",null,"?order=created_at.desc&limit=200"),
           db("GET","staff",null,"?active=eq.true&order=created_at.asc"),
           db("GET","services",null,"?active=eq.true&order=cat.asc,name.asc"),
@@ -612,7 +781,6 @@ function POSApp({ onLogout, userRole="staff" }){
     return()=>clearInterval(t);
   },[]);
 
-  // ── Customer search ──
   async function searchCustomers(q){
     setCustomerSearch(q);
     if(q.length < 2){ setCustomerResults([]); setShowCustomerDrop(false); return; }
@@ -687,10 +855,24 @@ function POSApp({ onLogout, userRole="staff" }){
       setLoadingAppts(false);
     }
   }
+
   useEffect(()=>{ if(page==="appointments") loadAppointments(); },[page]);
 
-  async function markDone(id){ try{ await db("PATCH","bookings",{status:"done"},`?id=eq.${id}`); setAppointments(p=>p.map(a=>a.id===id?{...a,status:"done"}:a)); showToast("Booking marked as done ✅"); }catch(e){showToast("Update failed — try again","error");} }
-  async function markCancelled(id){ try{ await db("PATCH","bookings",{status:"cancelled"},`?id=eq.${id}`); setAppointments(p=>p.map(a=>a.id===id?{...a,status:"cancelled"}:a)); showToast("Booking cancelled","info"); }catch(e){showToast("Update failed — try again","error");} }
+  async function markDone(id){
+    try{
+      await db("PATCH","bookings",{status:"done"},`?id=eq.${id}`);
+      setAppointments(p=>p.map(a=>a.id===id?{...a,status:"done"}:a));
+      showToast("Booking marked as done ✅");
+    }catch(e){showToast("Update failed — try again","error");}
+  }
+
+  async function markCancelled(id){
+    try{
+      await db("PATCH","bookings",{status:"cancelled"},`?id=eq.${id}`);
+      setAppointments(p=>p.map(a=>a.id===id?{...a,status:"cancelled"}:a));
+      showToast("Booking cancelled","info");
+    }catch(e){showToast("Update failed — try again","error");}
+  }
 
   async function convertToSale(a){
     try {
@@ -744,7 +926,6 @@ function POSApp({ onLogout, userRole="staff" }){
       setSelectedCustomer(null); setCustomerSearch(""); setAddingNewCustomer(false);
       setShowMpesaConfirm(false);
       showToast(`Sale of ${fmt(cartTotal)} saved! 🎉`);
-      setTimeout(()=>setShowFeedback(true), 300);
     } catch(err) {
       console.error("Sale error:",err);
       setCart([]); setClientName(""); setClientPhone(""); setSelStaff(""); setPayMethod("M-Pesa");
@@ -760,16 +941,6 @@ function POSApp({ onLogout, userRole="staff" }){
     if(payMethod==="M-Pesa"){ setShowMpesaConfirm(true); } else { completeSale(); }
   }
 
-  async function saveFeedback(f){
-    try {
-      const saved = await db("POST","feedback",f);
-      setFeedbacks(p=>[saved?.[0]||{...f,id:Date.now()},...p]);
-      showToast("Thank you for your feedback! ⭐");
-    } catch(e) {
-      console.error("Feedback save error:",e);
-    }
-  }
-
   async function adjustStock(id,delta,reason="ADJUSTMENT"){
     if(!isAdmin && delta>0){ alert("Only admin can add stock."); return; }
     const prod=products.find(p=>p.id===id);
@@ -778,7 +949,6 @@ function POSApp({ onLogout, userRole="staff" }){
     setProducts(p=>p.map(pr=>pr.id===id?{...pr,stock:ns}:pr));
     try {
       await db("PATCH","stock",{stock:ns},`?id=eq.${id}`);
-      // Log stock movement
       await db("POST","stock_log",{
         product_id:id,
         product_name:prod.name,
@@ -812,8 +982,15 @@ function POSApp({ onLogout, userRole="staff" }){
   }
 
   const atRiskCustomers=customers.filter(c=>{ if(!c.last_visit) return false; const days=Math.floor((new Date()-new Date(c.last_visit))/(1000*60*60*24)); return days>=28; });
-  const dueCustomers=customers.filter(c=>{ if(!c.last_visit) return false; const days=Math.floor((new Date()-new Date(c.last_visit))/(1000*60*60*24)); return days>=28&&days<=44; });
   const vipCustomers=customers.filter(c=>c.visit_count>=8||(c.total_spend&&c.total_spend>=20000));
+
+  useEffect(()=>{
+    const goOnline=()=>{ setIsOnline(true); setSyncPending(offlineQueue.length>0); syncOfflineQueue().then(()=>setSyncPending(false)); };
+    const goOffline=()=>setIsOnline(false);
+    window.addEventListener("online",goOnline);
+    window.addEventListener("offline",goOffline);
+    return()=>{ window.removeEventListener("online",goOnline); window.removeEventListener("offline",goOffline); };
+  },[]);
 
   const ALL_NAV=[
     {id:"pos",          label:"POS",       icon:"🛒",  adminOnly:false},
@@ -828,19 +1005,6 @@ function POSApp({ onLogout, userRole="staff" }){
 
   const inputStyle={borderRadius:10,border:`1.5px solid ${GOLD_DIM}`,padding:"10px 12px",fontSize:13,fontFamily:"inherit",outline:"none",background:WHITE};
 
-  // Online/offline state
-  const [isOnline,setIsOnline]=useState(navigator.onLine);
-  const [syncPending,setSyncPending]=useState(false);
-  const [loadError,setLoadError]=useState(false);
-
-  useEffect(()=>{
-    const goOnline=()=>{ setIsOnline(true); setSyncPending(offlineQueue.length>0); syncOfflineQueue().then(()=>setSyncPending(false)); };
-    const goOffline=()=>setIsOnline(false);
-    window.addEventListener("online",goOnline);
-    window.addEventListener("offline",goOffline);
-    return()=>{ window.removeEventListener("online",goOnline); window.removeEventListener("offline",goOffline); };
-  },[]);
-
   if(loading) return(
     <div style={{minHeight:"100vh",background:`linear-gradient(160deg,${BLACK} 0%,#1A1400 100%)`,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
       <KimmsLogo size="lg" dark={false}/>
@@ -853,8 +1017,7 @@ function POSApp({ onLogout, userRole="staff" }){
 
   return(
     <div style={{fontFamily:"'Inter','Segoe UI',sans-serif",background:BG,minHeight:"100vh",display:"flex",flexDirection:"column",transition:"background 0.3s"}}>
-      {receipt&&<Receipt sale={receipt} onClose={()=>{ setReceipt(null); }}/>}
-      {showFeedback&&!receipt&&<FeedbackModal onSubmit={f=>{saveFeedback(f);setShowFeedback(false);}} onClose={()=>setShowFeedback(false)}/>}
+      {receipt&&<Receipt sale={receipt} onClose={()=>setReceipt(null)}/>}
 
       {showMpesaConfirm&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:1500,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
@@ -874,7 +1037,6 @@ function POSApp({ onLogout, userRole="staff" }){
         </div>
       )}
 
-      {/* TOAST NOTIFICATIONS */}
       {toast&&(
         <div style={{
           position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",
@@ -882,7 +1044,6 @@ function POSApp({ onLogout, userRole="staff" }){
           background:toast.type==="success"?GREEN:toast.type==="error"?RED:GOLD,
           color:WHITE,fontWeight:800,fontSize:13,
           boxShadow:"0 4px 20px rgba(0,0,0,0.3)",
-          animation:"slideDown 0.3s ease",
           display:"flex",alignItems:"center",gap:8,
           maxWidth:"90vw",textAlign:"center"
         }}>
@@ -891,7 +1052,6 @@ function POSApp({ onLogout, userRole="staff" }){
         </div>
       )}
 
-      {/* OFFLINE BANNER */}
       {!isOnline&&(
         <div style={{background:RED,color:WHITE,textAlign:"center",padding:"6px 16px",fontSize:12,fontWeight:700,flexShrink:0}}>
           📵 Offline — Sales will sync when connected
@@ -903,7 +1063,6 @@ function POSApp({ onLogout, userRole="staff" }){
         </div>
       )}
 
-      {/* TOP BAR */}
       <div style={{background:`linear-gradient(135deg,${BLACK} 0%,#1A1400 60%,#2C1F00 100%)`,borderBottom:`2px solid ${GOLD}`,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,boxShadow:`0 2px 16px rgba(201,168,76,0.18)`}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <KimmsLogo size="sm" dark={false}/>
@@ -925,7 +1084,6 @@ function POSApp({ onLogout, userRole="staff" }){
         </div>
       </div>
 
-      {/* NAV */}
       <div style={{background:darkMode?"#0A0A00":BLACK,borderBottom:`1px solid ${GOLD_DIM}`,display:"flex",flexShrink:0}}>
         {NAV.map(n=>(
           <button key={n.id} onClick={()=>setPage(n.id)} style={{flex:1,border:"none",background:"none",padding:"8px 0",cursor:"pointer",borderBottom:`3px solid ${page===n.id?GOLD:"transparent"}`,color:page===n.id?GOLD_LT:"rgba(255,255,255,0.35)",transition:"all 0.15s",position:"relative"}}>
@@ -938,10 +1096,8 @@ function POSApp({ onLogout, userRole="staff" }){
 
       <div style={{flex:1,overflowY:"auto",padding:16,background:BG,transition:"background 0.3s"}}>
 
-        {/* ── POS PAGE ── */}
         {page==="pos"&&(
           <div>
-            {/* Customer Search */}
             <div style={{marginBottom:12,position:"relative"}}>
               <div style={{fontSize:11,fontWeight:800,color:GOLD_DIM,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Client</div>
               {selectedCustomer ? (
@@ -1003,7 +1159,6 @@ function POSApp({ onLogout, userRole="staff" }){
               )}
             </div>
 
-            {/* Stylist selector */}
             <div style={{marginBottom:12}}>
               <div style={{fontSize:11,fontWeight:800,color:GOLD_DIM,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Stylist</div>
               <select value={selStaff} onChange={e=>setSelStaff(e.target.value)} style={{...inputStyle,width:"100%",color:selStaff?DARK:"#aaa"}}>
@@ -1012,7 +1167,6 @@ function POSApp({ onLogout, userRole="staff" }){
               </select>
             </div>
 
-            {/* Type toggle */}
             <div style={{display:"flex",background:BLACK,borderRadius:10,padding:3,marginBottom:12,border:`1px solid ${GOLD_DIM}`}}>
               {["services","products"].map(t=>(
                 <button key={t} onClick={()=>{setCatFilter("All");setTypeFilter(t);}} style={{flex:1,border:"none",borderRadius:8,padding:"8px 0",fontSize:13,fontWeight:700,background:typeFilter===t?`linear-gradient(135deg,${GOLD},${GOLD_LT})`:"transparent",color:typeFilter===t?BLACK:"rgba(255,255,255,0.4)",cursor:"pointer",transition:"all 0.2s"}}>
@@ -1021,14 +1175,12 @@ function POSApp({ onLogout, userRole="staff" }){
               ))}
             </div>
 
-            {/* Category filter */}
             <div style={{display:"flex",gap:6,marginBottom:12,overflowX:"auto",paddingBottom:4}}>
               {(typeFilter==="services"?CATS:["All","Hair","Nails","Beauty"]).map(c=>(
                 <button key={c} onClick={()=>setCatFilter(c)} style={{padding:"5px 12px",borderRadius:20,border:`1.5px solid ${catFilter===c?GOLD:GOLD_DIM+"66"}`,background:catFilter===c?`linear-gradient(135deg,${GOLD},${GOLD_LT})`:WHITE,color:catFilter===c?BLACK:GOLD_DIM,fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>{c}</button>
               ))}
             </div>
 
-            {/* Items grid */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
               {(typeFilter==="services"?servicesList.filter(s=>catFilter==="All"||s.cat===catFilter):products.filter(p=>catFilter==="All"||p.cat===catFilter)).map(item=>(
                 <div key={item.id} onClick={()=>addToCart(item,typeFilter==="services"?"service":"product")}
@@ -1042,7 +1194,6 @@ function POSApp({ onLogout, userRole="staff" }){
               ))}
             </div>
 
-            {/* Cart */}
             {cart.length>0&&(
               <div style={{background:WHITE,borderRadius:14,padding:16,boxShadow:`0 2px 16px rgba(201,168,76,0.12)`,border:`1px solid ${GOLD_DIM}55`}}>
                 <div style={{fontWeight:800,fontSize:14,color:DARK,marginBottom:10}}>🛒 Cart</div>
@@ -1080,7 +1231,6 @@ function POSApp({ onLogout, userRole="staff" }){
           </div>
         )}
 
-        {/* ── APPOINTMENTS PAGE ── */}
         {page==="appointments"&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
@@ -1131,6 +1281,21 @@ function POSApp({ onLogout, userRole="staff" }){
                     💳 Collect M-Pesa on arrival · Till <b>5927571</b> {a.price?`· KES ${Number(a.price).toLocaleString()}`:""}
                   </div>
                 )}
+                {a.status==="done"&&a.id&&(
+                  <div style={{background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:8,padding:"8px 10px",marginBottom:8,fontSize:12}}>
+                    <span style={{color:"#166534",fontWeight:700}}>⭐ Share feedback link with client:</span>
+                    <div style={{display:"flex",gap:8,marginTop:6,alignItems:"center"}}>
+                      <span style={{fontSize:10,color:"#888",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {window.location.origin}/feedback?id={a.id}&name={encodeURIComponent(a.name)}&service={encodeURIComponent(a.service||"")}&stylist={encodeURIComponent(a.stylist||"")}
+                      </span>
+                      <a href={`https://wa.me/254${(a.phone||"").replace(/^0/,"").replace(/\D/g,"")}?text=${encodeURIComponent(`Hi ${a.name}! 💕 Thank you for visiting Kimm's Beauty Parlour. We'd love to hear about your experience!\n\nShare your feedback here:\n${window.location.origin}/feedback?id=${a.id}&name=${encodeURIComponent(a.name)}&service=${encodeURIComponent(a.service||"")}&stylist=${encodeURIComponent(a.stylist||"")}\n\n— Kimm's Beauty Parlour 👑`)}`}
+                        target="_blank" rel="noreferrer"
+                        style={{background:"#25D366",color:WHITE,borderRadius:20,padding:"5px 10px",fontSize:10,fontWeight:800,textDecoration:"none",whiteSpace:"nowrap",flexShrink:0}}>
+                        📲 Send
+                      </a>
+                    </div>
+                  </div>
+                )}
                 {a.status==="pending"&&(
                   <div style={{display:"flex",flexDirection:"column",gap:8}}>
                     <button onClick={()=>convertToSale(a)} style={{width:"100%",background:`linear-gradient(135deg,${GOLD},${GOLD_LT})`,color:BLACK,border:"none",borderRadius:8,padding:"10px 0",fontWeight:900,fontSize:13,cursor:"pointer"}}>
@@ -1147,13 +1312,11 @@ function POSApp({ onLogout, userRole="staff" }){
           </div>
         )}
 
-        {/* ── CUSTOMERS PAGE ── */}
         {page==="customers"&&(
           <div>
             <div style={{fontWeight:900,fontSize:18,color:DARK,marginBottom:4}}>Clients</div>
             <div style={{fontSize:12,color:"#888",marginBottom:16}}>{customers.length} total · {frequentCustomers.length} regulars · {atRiskCustomers.length} not seen in 28+ days</div>
 
-            {/* At-risk clients with WhatsApp button */}
             {atRiskCustomers.length>0&&(
               <div style={{background:"#FFF5F5",borderRadius:12,padding:14,marginBottom:14,border:"1.5px solid #FEE2E2"}}>
                 <div style={{fontWeight:800,fontSize:13,color:RED,marginBottom:10}}>⚠️ Not seen in 28+ days — Send reminder</div>
@@ -1164,19 +1327,7 @@ function POSApp({ onLogout, userRole="staff" }){
                       <div style={{fontSize:11,color:"#888"}}>{c.phone} · Last visit: {c.last_visit||"unknown"}</div>
                     </div>
                     {c.phone&&(
-                      <a href={`https://wa.me/254${c.phone.replace(/^0/,"").replace(/\D/g,"")}?text=${encodeURIComponent(`Hi ${c.name}! 👋
-
-We miss you at Kimm's Beauty Parlour! 💕
-
-It's been a while since your last visit. We'd love to see you again.
-
-✂️ Book your appointment:
-${window.location.origin}/booking
-
-Or call us: 0113828280
-
-— Kimm's Beauty Parlour
-"Beauty That Speaks Confidence" 👑`)}`}
+                      <a href={`https://wa.me/254${c.phone.replace(/^0/,"").replace(/\D/g,"")}?text=${encodeURIComponent(`Hi ${c.name}! 👋\n\nWe miss you at Kimm's Beauty Parlour! 💕\n\nIt's been a while since your last visit. We'd love to see you again.\n\n✂️ Book your appointment:\n${window.location.origin}/booking\n\nOr call us: 0113828280\n\n— Kimm's Beauty Parlour\n"Beauty That Speaks Confidence" 👑`)}`}
                         target="_blank" rel="noreferrer"
                         style={{background:"#25D366",color:WHITE,borderRadius:20,padding:"7px 12px",fontSize:11,fontWeight:800,textDecoration:"none",whiteSpace:"nowrap",flexShrink:0}}>
                         📲 WhatsApp
@@ -1188,7 +1339,6 @@ Or call us: 0113828280
               </div>
             )}
 
-            {/* Frequent clients */}
             {frequentCustomers.length>0&&(
               <div style={{background:"#FFFBEB",borderRadius:12,padding:14,marginBottom:14,border:`1.5px solid ${GOLD_DIM}66`}}>
                 <div style={{fontWeight:800,fontSize:13,color:GOLD_DIM,marginBottom:10}}>⭐ Regular Clients ({frequentCustomers.length})</div>
@@ -1199,16 +1349,7 @@ Or call us: 0113828280
                       <div style={{fontSize:11,color:"#888"}}>{c.visit_count} visits · {fmt(c.total_spend)} total</div>
                     </div>
                     {c.phone&&(
-                      <a href={`https://wa.me/254${c.phone.replace(/^0/,"").replace(/\D/g,"")}?text=${encodeURIComponent(`Hi ${c.name}! 👑
-
-Thank you for being a loyal client at Kimm's Beauty Parlour! 💕
-
-As one of our valued regulars, we appreciate your continued support.
-
-Book your next appointment:
-${window.location.origin}/booking
-
-— Kimm's Beauty Parlour`)}`}
+                      <a href={`https://wa.me/254${c.phone.replace(/^0/,"").replace(/\D/g,"")}?text=${encodeURIComponent(`Hi ${c.name}! 👑\n\nThank you for being a loyal client at Kimm's Beauty Parlour! 💕\n\nAs one of our valued regulars, we appreciate your continued support.\n\nBook your next appointment:\n${window.location.origin}/booking\n\n— Kimm's Beauty Parlour`)}`}
                         target="_blank" rel="noreferrer"
                         style={{background:"#25D366",color:WHITE,borderRadius:20,padding:"7px 12px",fontSize:11,fontWeight:800,textDecoration:"none",whiteSpace:"nowrap",flexShrink:0}}>
                         📲 WhatsApp
@@ -1219,7 +1360,6 @@ ${window.location.origin}/booking
               </div>
             )}
 
-            {/* Send bulk reminder */}
             {atRiskCustomers.filter(c=>c.phone).length>0&&(
               <div style={{background:WHITE,borderRadius:12,padding:14,marginBottom:14,border:`1px solid ${GOLD_DIM}44`}}>
                 <div style={{fontWeight:800,fontSize:13,color:DARK,marginBottom:4}}>📢 Bulk WhatsApp Reminder</div>
@@ -1238,7 +1378,6 @@ ${window.location.origin}/booking
               </div>
             )}
 
-            {/* All clients */}
             <div style={{fontWeight:800,fontSize:14,color:DARK,marginBottom:10}}>All Clients</div>
             {customers.length===0&&(
               <div style={{textAlign:"center",padding:"40px 20px",color:"#aaa"}}>
@@ -1275,7 +1414,6 @@ ${window.location.origin}/booking
           </div>
         )}
 
-        {/* ── DASHBOARD ── */}
         {page==="dashboard"&&(()=>{
           const last7=Array.from({length:7},(_,i)=>{
             const d=new Date(); d.setDate(d.getDate()-i);
@@ -1294,48 +1432,50 @@ ${window.location.origin}/booking
           const monthRevenue=last30.reduce((a,v)=>a+v,0);
           const maxDayRev=Math.max(...last7.map(d=>d.revenue),1);
 
-          // Top services
           const svcCount={};
           sales.forEach(s=>{ if(Array.isArray(s.items)) s.items.filter(i=>i.type==="service").forEach(i=>{ svcCount[i.name]=(svcCount[i.name]||0)+1; }); });
           const topServices=Object.entries(svcCount).sort((a,b)=>b[1]-a[1]).slice(0,5);
           const maxSvc=topServices.length>0?topServices[0][1]:1;
 
-          // Top products sold
           const prdCount={};
           sales.forEach(s=>{ if(Array.isArray(s.items)) s.items.filter(i=>i.type==="product").forEach(i=>{ prdCount[i.name]=(prdCount[i.name]||0)+(i.qty||1); }); });
           const topProducts=Object.entries(prdCount).sort((a,b)=>b[1]-a[1]).slice(0,3);
 
-          // Peak hours
           const hourCount={};
           sales.forEach(s=>{ if(s.time){ const h=parseInt(s.time.split(":")[0]); hourCount[h]=(hourCount[h]||0)+1; } });
           const peakHours=Object.entries(hourCount).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([h,c])=>({label:`${h}:00`,count:c}));
 
-          // Payment breakdown
           const mpesa=sales.filter(s=>s.payment==="M-Pesa").reduce((a,x)=>a+x.total,0);
           const cash=sales.filter(s=>s.payment==="Cash").reduce((a,x)=>a+x.total,0);
           const allPay=mpesa+cash||1;
 
-          // Staff performance
           const sortedStaff=[...staffStats].sort((a,b)=>b.revenue-a.revenue);
           const maxStaffRev=sortedStaff.length>0?sortedStaff[0].revenue||1:1;
 
-          // Customer insights
           const newThisWeek=customers.filter(c=>{
             if(!c.created_at) return false;
             const days=(new Date()-new Date(c.created_at))/(1000*60*60*24);
             return days<=7;
           }).length;
 
+          const recentFeedbacks = [...feedbacks].slice(0,10);
+          const staffRatings = {};
+          feedbacks.forEach(f=>{
+            if(f.stylist && f.stylist !== "Not sure"){
+              if(!staffRatings[f.stylist]) staffRatings[f.stylist] = {total:0,count:0};
+              staffRatings[f.stylist].total += f.rating;
+              staffRatings[f.stylist].count += 1;
+            }
+          });
+
           return(
           <div>
-            {/* Header KPI */}
             <div style={{background:`linear-gradient(135deg,${BLACK},#2C1F00)`,borderRadius:14,padding:"16px",marginBottom:12,border:`1px solid ${GOLD_DIM}`,textAlign:"center"}}>
               <div style={{fontSize:10,color:"rgba(255,255,255,0.5)",letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:4}}>Today's Revenue</div>
               <div style={{fontSize:36,fontWeight:900,color:GOLD_LT}}>{fmt(todayRevenue)}</div>
               <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:2}}>{todaySales.length} transactions · {todayStr()}</div>
             </div>
 
-            {/* KPI Grid */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
               {[
                 {label:"This Week",value:fmt(weekRevenue),icon:"📅",color:GOLD},
@@ -1353,37 +1493,33 @@ ${window.location.origin}/booking
               ))}
             </div>
 
-            {/* 7-Day Revenue Bar Chart */}
             <div style={{background:CARD,borderRadius:14,padding:16,marginBottom:12,border:`1px solid ${BORDER}`}}>
               <div style={{fontWeight:800,fontSize:14,color:TEXT,marginBottom:2}}>Revenue — Last 7 Days</div>
               <div style={{fontSize:11,color:SUBTEXT,marginBottom:14}}>Total: {fmt(weekRevenue)} · Avg/day: {fmt(Math.round(weekRevenue/7))}</div>
               {sales.length===0?(
                 <div style={{textAlign:"center",padding:"20px 0",color:SUBTEXT,fontSize:13}}>Complete sales to see your chart</div>
               ):(
-                <div>
-                  <div style={{display:"flex",alignItems:"flex-end",gap:4,height:100,marginBottom:6}}>
-                    {last7.map((d,i)=>(
-                      <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
-                        <div style={{fontSize:8,color:GOLD_DIM,fontWeight:700,minHeight:12}}>{d.revenue>0?`${Math.round(d.revenue/1000)}k`:""}</div>
-                        <div style={{
-                          width:"100%",borderRadius:"4px 4px 0 0",
-                          background:d.date===todayStr()?`linear-gradient(180deg,${GOLD_LT},${GOLD})`:`linear-gradient(180deg,${GOLD_DIM}66,${GOLD_DIM}33)`,
-                          height:`${Math.max(4,(d.revenue/maxDayRev)*76)}px`,
-                          transition:"height 0.5s ease",
-                          position:"relative"
-                        }}>
-                          {d.date===todayStr()&&<div style={{position:"absolute",top:-16,left:"50%",transform:"translateX(-50%)",fontSize:8,color:GOLD_LT,fontWeight:800,whiteSpace:"nowrap"}}>TODAY</div>}
-                        </div>
-                        <div style={{fontSize:9,color:SUBTEXT,fontWeight:600}}>{d.day}</div>
-                        <div style={{fontSize:8,color:SUBTEXT}}>{d.count}tx</div>
+                <div style={{display:"flex",alignItems:"flex-end",gap:4,height:100,marginBottom:6}}>
+                  {last7.map((d,i)=>(
+                    <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                      <div style={{fontSize:8,color:GOLD_DIM,fontWeight:700,minHeight:12}}>{d.revenue>0?`${Math.round(d.revenue/1000)}k`:""}</div>
+                      <div style={{
+                        width:"100%",borderRadius:"4px 4px 0 0",
+                        background:d.date===todayStr()?`linear-gradient(180deg,${GOLD_LT},${GOLD})`:`linear-gradient(180deg,${GOLD_DIM}66,${GOLD_DIM}33)`,
+                        height:`${Math.max(4,(d.revenue/maxDayRev)*76)}px`,
+                        transition:"height 0.5s ease",
+                        position:"relative"
+                      }}>
+                        {d.date===todayStr()&&<div style={{position:"absolute",top:-16,left:"50%",transform:"translateX(-50%)",fontSize:8,color:GOLD_LT,fontWeight:800,whiteSpace:"nowrap"}}>TODAY</div>}
                       </div>
-                    ))}
-                  </div>
+                      <div style={{fontSize:9,color:SUBTEXT,fontWeight:600}}>{d.day}</div>
+                      <div style={{fontSize:8,color:SUBTEXT}}>{d.count}tx</div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
 
-            {/* Staff Performance Chart */}
             <div style={{background:CARD,borderRadius:14,padding:16,marginBottom:12,border:`1px solid ${BORDER}`}}>
               <div style={{fontWeight:800,fontSize:14,color:TEXT,marginBottom:12}}>Staff Performance</div>
               {sortedStaff.map((s,i)=>(
@@ -1393,6 +1529,9 @@ ${window.location.origin}/booking
                       <div style={{width:22,height:22,borderRadius:"50%",background:i===0?`linear-gradient(135deg,${GOLD},${GOLD_LT})`:CREAM,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:i===0?BLACK:GOLD_DIM,flexShrink:0}}>{i+1}</div>
                       <span style={{fontSize:13,fontWeight:700,color:TEXT}}>{s.name}</span>
                       <span style={{fontSize:10,color:SUBTEXT}}>{s.salesCount} sales</span>
+                      {staffRatings[s.name]&&(
+                        <span style={{fontSize:10,color:AMBER,fontWeight:700}}>⭐ {(staffRatings[s.name].total/staffRatings[s.name].count).toFixed(1)}</span>
+                      )}
                     </div>
                     <div style={{textAlign:"right"}}>
                       <div style={{fontSize:12,fontWeight:800,color:GOLD_DIM}}>{fmt(s.revenue)}</div>
@@ -1406,7 +1545,6 @@ ${window.location.origin}/booking
               ))}
             </div>
 
-            {/* Top Services + Top Products side by side */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
               <div style={{background:CARD,borderRadius:14,padding:14,border:`1px solid ${BORDER}`}}>
                 <div style={{fontWeight:800,fontSize:13,color:TEXT,marginBottom:10}}>Top Services</div>
@@ -1443,7 +1581,6 @@ ${window.location.origin}/booking
               </div>
             </div>
 
-            {/* Peak Hours + Payment Methods */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
               <div style={{background:CARD,borderRadius:14,padding:14,border:`1px solid ${BORDER}`}}>
                 <div style={{fontWeight:800,fontSize:13,color:TEXT,marginBottom:10}}>Peak Hours</div>
@@ -1476,7 +1613,6 @@ ${window.location.origin}/booking
               </div>
             </div>
 
-            {/* Customer Intelligence */}
             <div style={{background:CARD,borderRadius:14,padding:16,marginBottom:12,border:`1px solid ${BORDER}`}}>
               <div style={{fontWeight:800,fontSize:14,color:TEXT,marginBottom:12}}>Customer Intelligence</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8}}>
@@ -1494,10 +1630,71 @@ ${window.location.origin}/booking
               </div>
             </div>
 
+            <div style={{background:CARD,borderRadius:14,padding:16,marginBottom:12,border:`1px solid ${BORDER}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <div style={{fontWeight:800,fontSize:14,color:TEXT}}>⭐ Customer Feedback</div>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <div style={{background:darkMode?"#2C1F00":CREAM,borderRadius:20,padding:"4px 12px",fontSize:13,fontWeight:900,color:AMBER}}>
+                    {avgRating}★
+                  </div>
+                  <div style={{fontSize:11,color:SUBTEXT}}>{feedbacks.length} review{feedbacks.length!==1?"s":""}</div>
+                </div>
+              </div>
+
+              {Object.keys(staffRatings).length>0&&(
+                <div style={{marginBottom:14}}>
+                  <div style={{fontSize:11,color:SUBTEXT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Ratings by Stylist</div>
+                  {Object.entries(staffRatings).map(([name,data],i)=>(
+                    <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,padding:"8px 10px",background:darkMode?"#1A1400":CREAM,borderRadius:8,border:`1px solid ${GOLD_DIM}22`}}>
+                      <span style={{fontSize:12,fontWeight:700,color:TEXT}}>{name}</span>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:11,color:SUBTEXT}}>{data.count} review{data.count!==1?"s":""}</span>
+                        <span style={{fontSize:13,fontWeight:900,color:AMBER}}>⭐ {(data.total/data.count).toFixed(1)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {recentFeedbacks.length===0?(
+                <div style={{textAlign:"center",padding:"24px 0",color:SUBTEXT}}>
+                  <div style={{fontSize:28,marginBottom:8}}>💬</div>
+                  <div style={{fontSize:13,marginBottom:4}}>No feedback received yet</div>
+                  <div style={{fontSize:11}}>Customers submit reviews via their private feedback link after each appointment</div>
+                </div>
+              ):(
+                <div>
+                  <div style={{fontSize:11,color:SUBTEXT,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Recent Reviews</div>
+                  {recentFeedbacks.map((f,i)=>(
+                    <div key={i} style={{borderBottom:`1px solid ${BORDER}`,paddingBottom:12,marginBottom:12}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
+                        <div>
+                          <div style={{display:"flex",gap:2,marginBottom:3}}>
+                            {[1,2,3,4,5].map(s=>(
+                              <span key={s} style={{fontSize:13,opacity:f.rating>=s?1:0.2}}>⭐</span>
+                            ))}
+                          </div>
+                          <div style={{fontSize:11,color:SUBTEXT}}>
+                            {f.client_name||"Anonymous"}{f.stylist&&f.stylist!=="Not sure"?` · with ${f.stylist}`:""}{f.service?` · ${f.service}`:""}
+                          </div>
+                        </div>
+                        <div style={{fontSize:10,color:SUBTEXT,whiteSpace:"nowrap",marginLeft:8}}>{f.date||""}</div>
+                      </div>
+                      {f.note&&(
+                        <div style={{fontSize:12,color:TEXT,fontStyle:"italic",marginTop:4,lineHeight:1.6,background:darkMode?"#1A1400":CREAM,borderRadius:8,padding:"6px 10px",borderLeft:`3px solid ${GOLD_DIM}`}}>
+                          "{f.note}"
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
           </div>
           );
         })()}
-        {/* ── STAFF ── */}
+
         {page==="staff"&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
@@ -1505,7 +1702,6 @@ ${window.location.origin}/booking
               <GoldBtn onClick={()=>{setShowAddStaff(true);setNewStaff({name:"",role:"Stylist",commission_pct:40});}} style={{padding:"8px 16px",fontSize:12}}>+ Add Staff</GoldBtn>
             </div>
 
-            {/* Add staff form */}
             {showAddStaff&&(
               <div style={{background:WHITE,borderRadius:14,padding:16,marginBottom:16,border:`1.5px solid ${GOLD}`,boxShadow:`0 2px 16px rgba(201,168,76,0.15)`}}>
                 <div style={{fontWeight:800,fontSize:14,color:DARK,marginBottom:12}}>New Staff Member</div>
@@ -1538,7 +1734,6 @@ ${window.location.origin}/booking
               </div>
             )}
 
-            {/* Staff list */}
             {staffStats.map((s,idx)=>(
               <div key={s.id} style={{background:WHITE,borderRadius:14,padding:16,marginBottom:12,border:`1px solid ${GOLD_DIM}44`}}>
                 {editingStaff?.id===s.id?(
@@ -1594,7 +1789,7 @@ ${window.location.origin}/booking
             ))}
           </div>
         )}
-        {/* ── SERVICES ── */}
+
         {page==="services"&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
@@ -1602,7 +1797,6 @@ ${window.location.origin}/booking
               <GoldBtn onClick={()=>{setShowAddService(true);setNewService({name:"",cat:"Hair",price:""});}} style={{padding:"8px 16px",fontSize:12}}>+ Add Service</GoldBtn>
             </div>
 
-            {/* Add service form */}
             {showAddService&&(
               <div style={{background:WHITE,borderRadius:14,padding:16,marginBottom:16,border:`1.5px solid ${GOLD}`,boxShadow:`0 2px 16px rgba(201,168,76,0.15)`}}>
                 <div style={{fontWeight:800,fontSize:14,color:DARK,marginBottom:12}}>New Service</div>
@@ -1628,7 +1822,6 @@ ${window.location.origin}/booking
               </div>
             )}
 
-            {/* Services grouped by category */}
             {CATS.filter(c=>c!=="All").map(cat=>{
               const catServices = servicesList.filter(s=>s.cat===cat);
               if(catServices.length===0) return null;
@@ -1681,7 +1874,7 @@ ${window.location.origin}/booking
             })}
           </div>
         )}
-        {/* ── INVENTORY ── */}
+
         {page==="inventory"&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
@@ -1690,7 +1883,6 @@ ${window.location.origin}/booking
             </div>
             <div style={{fontSize:12,color:"#888",marginBottom:14}}>Tap + or − to adjust stock after purchases or deliveries</div>
 
-            {/* Add product form */}
             {showAddProduct&&(
               <div style={{background:WHITE,borderRadius:14,padding:16,marginBottom:16,border:`1.5px solid ${GOLD}`,boxShadow:`0 2px 16px rgba(201,168,76,0.15)`}}>
                 <div style={{fontWeight:800,fontSize:14,color:DARK,marginBottom:12}}>New Product</div>
@@ -1721,7 +1913,6 @@ ${window.location.origin}/booking
               </div>
             )}
 
-            {/* Products list */}
             {products.map(p=>(
               <div key={p.id} style={{background:WHITE,borderRadius:12,padding:"12px 14px",marginBottom:8,border:`1.5px solid ${p.stock<=5?"#FEE2E2":GOLD_DIM+"44"}`}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -1774,6 +1965,7 @@ export default function App(){
       <Routes>
         <Route path="/" element={<RedirectToBooking/>}/>
         <Route path="/booking" element={<BookingPage/>}/>
+        <Route path="/feedback" element={<CustomerFeedbackPage/>}/>
         <Route path="/pos" element={<StaffRoute/>}/>
         <Route path="*" element={<RedirectToBooking/>}/>
       </Routes>
