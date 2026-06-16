@@ -270,6 +270,21 @@ function Receipt({ sale, onClose }){
         </div>
         <div style={{fontSize:12,color:"#888",marginTop:4}}><b>Payment:</b> {sale.payment}</div>
         {sale.payment==="M-Pesa"&&<div style={{marginTop:14}}><MpesaInstructions amount={sale.total} reference={sale.client} compact={true}/></div>}
+        {sale.feedbackLink&&(
+          <div style={{marginTop:14,background:"#FFFBEB",border:`1.5px solid ${GOLD_DIM}66`,borderRadius:12,padding:"12px 14px"}}>
+            <div style={{fontSize:12,fontWeight:800,color:GOLD_DIM,marginBottom:4}}>⭐ Ask for feedback</div>
+            <div style={{fontSize:11,color:"#888",marginBottom:10,lineHeight:1.5}}>Share this private link with {sale.client} so they can rate their visit. Only the owner sees their response.</div>
+            {sale.clientPhone?(
+              <a href={`https://wa.me/254${sale.clientPhone.replace(/^0/,"").replace(/\D/g,"")}?text=${encodeURIComponent(`Hi ${sale.client}! 💕 Thank you for visiting Kimm's Beauty Parlour today. We'd love to hear about your experience!\n\nShare your feedback here:\n${sale.feedbackLink}\n\n— Kimm's Beauty Parlour 👑`)}`}
+                target="_blank" rel="noreferrer"
+                style={{display:"block",background:"#25D366",color:WHITE,borderRadius:10,padding:"10px 0",fontWeight:800,fontSize:13,textDecoration:"none",textAlign:"center"}}>
+                📲 Send Feedback Link via WhatsApp
+              </a>
+            ):(
+              <div style={{fontSize:11,color:"#aaa",fontStyle:"italic"}}>Add a phone number to this client to send the link via WhatsApp.</div>
+            )}
+          </div>
+        )}
         <div style={{borderBottom:"1px solid #eee",margin:"12px 0"}}/>
         <div style={{textAlign:"center",fontSize:12,color:"#aaa",marginBottom:16,fontStyle:"italic"}}>"Beauty That Speaks Confidence" 👑</div>
         <div style={{display:"flex",gap:8}}>
@@ -551,10 +566,6 @@ function BookingPage(){
   if(showMpesa&&savedBooking) return <MpesaPaymentModal booking={savedBooking} onPaid={handlePaid} onPayLater={handlePayLater}/>;
 
   if(done){
-    const feedbackLink = savedBooking?.id
-      ? `${window.location.origin}/feedback?id=${savedBooking.id}&name=${encodeURIComponent(sel.name)}&service=${encodeURIComponent(sel.service?.name||"")}&stylist=${encodeURIComponent(sel.stylist||"Any available")}`
-      : null;
-
     const waMessage = encodeURIComponent(`✂ Kimm's Beauty Parlour\n\nHi ${sel.name}! Your booking is confirmed 💕\n\nService: ${sel.service?.name}\nStylist: ${sel.stylist||"Any available"}\nDate: ${sel.date}\nTime: ${sel.time}\nPrice: KES ${sel.service?.price?.toLocaleString()}\nPayment: ${paymentStatus==="paid"?"✅ Paid via M-Pesa":"Pay at salon"}\n\nWe look forward to seeing you!\nFor enquiries: 0113828280`);
     return (
       <div style={{minHeight:"100vh",background:`linear-gradient(160deg,${BLACK} 0%,#1A1400 100%)`,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
@@ -577,16 +588,6 @@ function BookingPage(){
           )}
           <a href={`https://wa.me/254113828280?text=${waMessage}`} target="_blank" rel="noreferrer"
             style={{display:"block",background:"#25D366",color:WHITE,borderRadius:12,padding:"13px 0",fontWeight:800,fontSize:15,textDecoration:"none",marginBottom:10}}>📲 Confirm via WhatsApp</a>
-
-          {feedbackLink && (
-            <div style={{background:"rgba(201,168,76,0.08)",border:`1px solid ${GOLD_DIM}66`,borderRadius:14,padding:"16px",marginBottom:10}}>
-              <div style={{fontSize:13,fontWeight:800,color:GOLD_LT,marginBottom:6}}>⭐ Just been served?</div>
-              <div style={{fontSize:12,color:"rgba(255,255,255,0.55)",marginBottom:12,lineHeight:1.6}}>If your appointment has already taken place, we'd love to hear about your experience!</div>
-              <a href={feedbackLink} style={{display:"block",background:`linear-gradient(135deg,${GOLD},${GOLD_LT})`,color:BLACK,borderRadius:10,padding:"11px 0",fontWeight:900,fontSize:13,textDecoration:"none"}}>
-                Leave Feedback 👑
-              </a>
-            </div>
-          )}
 
           <button onClick={()=>{setSel({service:null,stylist:null,date:"",time:"",name:"",phone:""});setStep(1);setDone(false);setPaymentStatus(null);setSavedBooking(null);}}
             style={{background:"transparent",border:`1px solid ${GOLD_DIM}`,borderRadius:10,padding:"10px 24px",fontWeight:700,fontSize:13,cursor:"pointer",color:"rgba(255,255,255,0.5)"}}>
@@ -921,7 +922,9 @@ function POSApp({ onLogout, userRole="staff" }){
         if(prod){ const ns=Math.max(0,prod.stock-ci.qty); await db("PATCH","stock",{stock:ns},`?id=eq.${ci.id}`); setProducts(p=>p.map(pr=>pr.id===ci.id?{...pr,stock:ns}:pr)); }
       }
       await updateCustomerAfterSale(cartTotal);
-      setReceipt(newSale);
+      const serviceNames = cart.filter(i=>i.type==="service").map(i=>i.name).join(", ");
+      const feedbackLink = `${window.location.origin}/feedback?id=${newSale.id}&name=${encodeURIComponent(clientName)}&service=${encodeURIComponent(serviceNames||"your visit")}&stylist=${encodeURIComponent(selStaff)}`;
+      setReceipt({...newSale, feedbackLink, clientPhone});
       setCart([]); setClientName(""); setClientPhone(""); setSelStaff(""); setPayMethod("M-Pesa");
       setSelectedCustomer(null); setCustomerSearch(""); setAddingNewCustomer(false);
       setShowMpesaConfirm(false);
@@ -1279,21 +1282,6 @@ function POSApp({ onLogout, userRole="staff" }){
                 {a.status==="pending"&&a.payment_status!=="paid_upfront"&&(
                   <div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:8,padding:"8px 10px",marginBottom:10,fontSize:12,color:"#92400E"}}>
                     💳 Collect M-Pesa on arrival · Till <b>5927571</b> {a.price?`· KES ${Number(a.price).toLocaleString()}`:""}
-                  </div>
-                )}
-                {a.status==="done"&&a.id&&(
-                  <div style={{background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:8,padding:"8px 10px",marginBottom:8,fontSize:12}}>
-                    <span style={{color:"#166534",fontWeight:700}}>⭐ Share feedback link with client:</span>
-                    <div style={{display:"flex",gap:8,marginTop:6,alignItems:"center"}}>
-                      <span style={{fontSize:10,color:"#888",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                        {window.location.origin}/feedback?id={a.id}&name={encodeURIComponent(a.name)}&service={encodeURIComponent(a.service||"")}&stylist={encodeURIComponent(a.stylist||"")}
-                      </span>
-                      <a href={`https://wa.me/254${(a.phone||"").replace(/^0/,"").replace(/\D/g,"")}?text=${encodeURIComponent(`Hi ${a.name}! 💕 Thank you for visiting Kimm's Beauty Parlour. We'd love to hear about your experience!\n\nShare your feedback here:\n${window.location.origin}/feedback?id=${a.id}&name=${encodeURIComponent(a.name)}&service=${encodeURIComponent(a.service||"")}&stylist=${encodeURIComponent(a.stylist||"")}\n\n— Kimm's Beauty Parlour 👑`)}`}
-                        target="_blank" rel="noreferrer"
-                        style={{background:"#25D366",color:WHITE,borderRadius:20,padding:"5px 10px",fontSize:10,fontWeight:800,textDecoration:"none",whiteSpace:"nowrap",flexShrink:0}}>
-                        📲 Send
-                      </a>
-                    </div>
                   </div>
                 )}
                 {a.status==="pending"&&(
@@ -1660,7 +1648,7 @@ function POSApp({ onLogout, userRole="staff" }){
                 <div style={{textAlign:"center",padding:"24px 0",color:SUBTEXT}}>
                   <div style={{fontSize:28,marginBottom:8}}>💬</div>
                   <div style={{fontSize:13,marginBottom:4}}>No feedback received yet</div>
-                  <div style={{fontSize:11}}>Customers submit reviews via their private feedback link after each appointment</div>
+                  <div style={{fontSize:11}}>Customers submit reviews via their private feedback link after a sale is completed</div>
                 </div>
               ):(
                 <div>
