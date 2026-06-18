@@ -3,6 +3,8 @@
 export const SUPABASE_URL = "https://ukoccobbjeomjwjcvrma.supabase.co";
 export const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVrb2Njb2JiamVvbWp3amN2cm1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMjg4MzAsImV4cCI6MjA5NjcwNDgzMH0.a-nDh04ujZQ8w9lwu9rkHuge9xGRbLRfV7vD3zRCAqg";
 
+export const KIMMS_SALON_ID = "c96d71d0-e496-4fd6-ae1c-70c89431fd3d";
+
 export const MPESA_TILL  = "5927571";
 export const MPESA_NAME  = "Kimm's Beauty Parlour";
 export const MPESA_GREEN = "#4CAF50";
