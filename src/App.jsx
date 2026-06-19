@@ -1,5 +1,4 @@
 // src/App.jsx
-
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { useState, useEffect } from "react";
 import BookingPage from "./pages/BookingPage";
@@ -7,6 +6,8 @@ import POSApp from "./pages/POSApp";
 import KimmsLogo from "./components/KimmsLogo";
 import LoginPage from "./pages/LoginPage";
 import RatingPage from "./pages/RatingPage";
+import DeviceLoginPage from "./pages/DeviceLoginPage";
+import { getDeviceLoginStatus } from "./lib/deviceAuth";
 
 function RedirectToBooking() {
   useEffect(function() { window.location.href = "/booking"; }, []);
@@ -16,6 +17,42 @@ function RedirectToBooking() {
       <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", marginTop: 8 }}>Redirecting...</div>
     </div>
   );
+}
+
+// Sits in front of the PIN screen. Makes sure this device has signed in
+// with the salon's Supabase Auth account before any staff/admin work
+// happens. Re-checks quietly every few minutes in case the 30-day
+// window lapses while the app is left open during a shift.
+function DeviceGate({ children }) {
+  var statusState = useState("checking"); // "checking" | "ok" | "needs-login"
+  var status      = statusState[0]; var setStatus = statusState[1];
+
+  var reauthState = useState(false);
+  var reauth      = reauthState[0]; var setReauth = reauthState[1];
+
+  function check() {
+    var loginStatus = getDeviceLoginStatus();
+    if (loginStatus === "active") {
+      setStatus("ok");
+    } else {
+      setReauth(loginStatus === "expired");
+      setStatus("needs-login");
+    }
+  }
+
+  useEffect(function() {
+    check();
+    var interval = setInterval(check, 5 * 60 * 1000);
+    return function() { clearInterval(interval); };
+  }, []);
+
+  if (status === "checking") return null;
+
+  if (status === "needs-login") {
+    return <DeviceLoginPage reauth={reauth} onSuccess={function(){ setStatus("ok"); }} />;
+  }
+
+  return children;
 }
 
 function StaffRoute() {
@@ -33,7 +70,7 @@ export default function App() {
       <Routes>
         <Route path="/"            element={<RedirectToBooking />} />
         <Route path="/booking"     element={<BookingPage />} />
-        <Route path="/pos"         element={<StaffRoute />} />
+        <Route path="/pos"         element={<DeviceGate><StaffRoute /></DeviceGate>} />
         <Route path="/rate/:token" element={<RatingPage />} />
         <Route path="*"            element={<RedirectToBooking />} />
       </Routes>
