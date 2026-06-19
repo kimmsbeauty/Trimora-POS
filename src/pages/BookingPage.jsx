@@ -27,7 +27,7 @@ export default function BookingPage() {
     async function loadBookingData() {
       const [sv, st] = await Promise.all([
         db("GET", "services", null, "?active=eq.true&order=cat.asc,name.asc"),
-        db("GET", "staff",    null, "?active=eq.true&order=created_at.asc"),
+        db("GET", "public_staff_directory", null, "?active=eq.true&order=created_at.asc"),
       ]);
       if (sv && sv.length > 0) setBookingServices(sv);
       if (st && st.length > 0) setBookingStaff(st);
