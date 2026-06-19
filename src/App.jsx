@@ -7,6 +7,7 @@ import KimmsLogo from "./components/KimmsLogo";
 import LoginPage from "./pages/LoginPage";
 import RatingPage from "./pages/RatingPage";
 import DeviceLoginPage from "./pages/DeviceLoginPage";
+import TestSlugPage from "./pages/TestSlugPage"; // TEMPORARY — Step 6 only, delete with the route below
 import { getDeviceLoginStatus } from "./lib/deviceAuth";
 
 function RedirectToBooking() {
@@ -72,6 +73,7 @@ export default function App() {
         <Route path="/booking"     element={<BookingPage />} />
         <Route path="/pos"         element={<DeviceGate><StaffRoute /></DeviceGate>} />
         <Route path="/rate/:token" element={<RatingPage />} />
+        <Route path="/test-slug"   element={<TestSlugPage />} /> {/* TEMPORARY — Step 6 only, delete once confirmed */}
         <Route path="*"            element={<RedirectToBooking />} />
       </Routes>
     </BrowserRouter>
