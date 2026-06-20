@@ -12,7 +12,7 @@ import { SUPABASE_URL, SUPABASE_KEY } from "./constants";
 
 var STORAGE_KEY = "trimora_device_auth";
 var THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-var REFRESH_SKEW_MS = 60 * 1000; // refresh slightly before actual expiry
+var REFRESH_SKEW_MS = 60 * 1000;
 
 function readAuth() {
   try {
@@ -27,17 +27,13 @@ function readAuth() {
 function writeAuth(auth) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
-  } catch (e) {
-    // ignore (e.g. private browsing storage restrictions)
-  }
+  } catch (e) {}
 }
 
 export function clearDeviceAuth() {
   try {
     localStorage.removeItem(STORAGE_KEY);
-  } catch (e) {
-    // ignore
-  }
+  } catch (e) {}
 }
 
 function isLoginExpired(auth) {
@@ -45,9 +41,6 @@ function isLoginExpired(auth) {
   return Date.now() - auth.login_at > THIRTY_DAYS_MS;
 }
 
-// "none"    -> never signed in on this device
-// "expired" -> signed in before, but 30 days have passed
-// "active"  -> signed in and still within the 30-day window
 export function getDeviceLoginStatus() {
   var auth = readAuth();
   if (!auth) return "none";
@@ -55,34 +48,33 @@ export function getDeviceLoginStatus() {
   return "active";
 }
 
-// Called only from the device login screen, with the email/password
-// for this salon's Supabase Auth user.
+// Persists a Supabase Auth session to this device. Used by signInDevice()
+// below, and also by the onboarding flow (OnboardingPage.jsx) right after
+// a brand-new salon owner signs up — same storage, same shape, one place
+// that knows how to write it.
+export function persistSession(data) {
+  writeAuth({
+    access_token: data.access_token,
+    refresh_token: data.refresh_token,
+    expires_at: Date.now() + (data.expires_in || 3600) * 1000,
+    login_at: Date.now(),
+  });
+}
+
 export async function signInDevice(email, password) {
   try {
     var res = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=password", {
       method: "POST",
-      headers: {
-        "apikey": SUPABASE_KEY,
-        "Content-Type": "application/json",
-      },
+      headers: { "apikey": SUPABASE_KEY, "Content-Type": "application/json" },
       body: JSON.stringify({ email: email, password: password }),
     });
 
-    if (!res.ok) {
-      return { ok: false, error: "Incorrect email or password." };
-    }
+    if (!res.ok) return { ok: false, error: "Incorrect email or password." };
 
     var data = await res.json();
-    if (!data.access_token) {
-      return { ok: false, error: "Login failed. Please try again." };
-    }
+    if (!data.access_token) return { ok: false, error: "Login failed. Please try again." };
 
-    writeAuth({
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-      expires_at: Date.now() + (data.expires_in || 3600) * 1000,
-      login_at: Date.now(), // resets the 30-day clock
-    });
+    persistSession(data);
 
     return { ok: true };
   } catch (e) {
@@ -90,17 +82,11 @@ export async function signInDevice(email, password) {
   }
 }
 
-// Silently exchanges the stored refresh_token for a fresh access_token.
-// Does NOT touch login_at — only a real email/password login resets
-// the 30-day clock, exactly as agreed.
 async function refreshAccessToken(auth) {
   try {
     var res = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=refresh_token", {
       method: "POST",
-      headers: {
-        "apikey": SUPABASE_KEY,
-        "Content-Type": "application/json",
-      },
+      headers: { "apikey": SUPABASE_KEY, "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: auth.refresh_token }),
     });
 
@@ -118,13 +104,10 @@ async function refreshAccessToken(auth) {
     writeAuth(updated);
     return updated;
   } catch (e) {
-    return null; // offline, most likely — try again next time, don't force a logout
+    return null;
   }
 }
 
-// Used by db.js on every request. Returns a usable access_token, or
-// null if this device has no active login (e.g. the customer-facing
-// booking/rating pages, which never sign in at all — that's normal).
 export async function getValidAccessToken() {
   var auth = readAuth();
   if (!auth) return null;
