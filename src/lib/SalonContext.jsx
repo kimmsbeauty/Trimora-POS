@@ -3,14 +3,13 @@
 // Resolves the :slug in the URL to an actual salon, and makes that
 // salon available to whatever's rendered inside it via React Context.
 //
-// This is plumbing only for now (Step 7) — nothing consumes the
-// resolved salon yet. Step 8 is what actually wires it into real
-// data-fetching. Until then, the pages rendered inside this wrapper
-// behave exactly as they did before.
+// Step 8: also sets the shared currentSalonId (see currentSalon.js)
+// whenever it resolves, so db.js can scope every request to it.
 
 import { createContext, useContext, useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { db } from "./db";
+import { setCurrentSalonId } from "./currentSalon";
 
 var SalonContext = createContext(null);
 
@@ -18,19 +17,11 @@ export function useSalon() {
   return useContext(SalonContext);
 }
 
-// mode="public"        -> resolves via the public_salon_directory view
-//                          (works with no login at all — booking/rating pages)
-// mode="authenticated"  -> resolves via the salons table itself. RLS
-//                          already scopes this to the signed-in device's
-//                          own row, so a slug that doesn't match the
-//                          device's own salon returns nothing — by
-//                          design, not as a special case we have to
-//                          code separately.
 export function SalonGate({ mode, children }) {
   var params = useParams();
   var slug = params.slug;
 
-  var statusState = useState("checking"); // "checking" | "ok" | "not-found"
+  var statusState = useState("checking");
   var status = statusState[0]; var setStatus = statusState[1];
 
   var salonState = useState(null);
@@ -47,9 +38,11 @@ export function SalonGate({ mode, children }) {
 
       if (rows && rows.length > 0) {
         setSalon(rows[0]);
+        setCurrentSalonId(rows[0].id);
         setStatus("ok");
       } else {
         setSalon(null);
+        setCurrentSalonId(null);
         setStatus("not-found");
       }
     }
