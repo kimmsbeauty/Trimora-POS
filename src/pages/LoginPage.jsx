@@ -4,17 +4,19 @@ import { useState, useEffect } from "react";
 import KimmsLogo from "../components/KimmsLogo";
 import GoldBtn from "../components/GoldBtn";
 import { SUPABASE_URL, SUPABASE_KEY, GOLD, GOLD_LT, GOLD_DIM, BLACK, WHITE, RED, AMBER } from "../lib/constants.js";
+import { getValidAccessToken } from "../lib/deviceAuth";
 
 var MAX_ATTEMPTS  = 3;
 var LOCKOUT_SECS  = 30;
 
 async function verifyPin(role, pin) {
   try {
+    var deviceToken = await getValidAccessToken();
     var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/verify_staff_pin", {
       method: "POST",
       headers: {
         "apikey":        SUPABASE_KEY,
-        "Authorization": "Bearer " + SUPABASE_KEY,
+        "Authorization": "Bearer " + (deviceToken || SUPABASE_KEY),
         "Content-Type":  "application/json",
       },
       body: JSON.stringify({ p_role: role, p_pin: pin }),
