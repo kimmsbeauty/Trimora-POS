@@ -3,18 +3,15 @@
 import { SUPABASE_URL, SUPABASE_KEY, KIMMS_SALON_ID } from "./constants";
 import { getValidAccessToken } from "./deviceAuth";
 
-// Tables that require salon_id on every write
 const TENANT_TABLES = new Set([
   "bookings", "customers", "expenses", "feedback",
   "sales", "services", "staff", "stock", "salon_pins",
 ]);
 
-// ── Offline queue ──────────────────────────────────────────────────────────
 export const offlineQueue = [];
 let isSyncing = false;
 
 async function dbDirect(method, table, data = null, filters = "") {
-  // Inject salon_id into all POST/PATCH payloads for tenant-scoped tables
   let body = data;
   if (data && (method === "POST" || method === "PATCH") && TENANT_TABLES.has(table)) {
     body = Array.isArray(data)
@@ -22,10 +19,6 @@ async function dbDirect(method, table, data = null, filters = "") {
       : { salon_id: KIMMS_SALON_ID, ...data };
   }
 
-  // If this device has signed in (staff/admin POS), use its real token so
-  // Supabase can see auth.uid(). If not (e.g. the customer-facing booking
-  // and rating pages, which never sign in), fall back to the anon key —
-  // exactly as before.
   const deviceToken = await getValidAccessToken();
 
   const url = `${SUPABASE_URL}/rest/v1/${table}${filters}`;
@@ -66,6 +59,10 @@ export async function syncOfflineQueue() {
     }
   }
   isSyncing = false;
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("online", syncOfflineQueue);
 }
 
 export async function db(method, table, data = null, filters = "") {
