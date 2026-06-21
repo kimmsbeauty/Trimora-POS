@@ -5,11 +5,30 @@
 //
 // Step 8: also sets the shared currentSalonId (see currentSalon.js)
 // whenever it resolves, so db.js can scope every request to it.
+//
+// Branding step (Phase 2): for mode="authenticated", also fetches the
+// matching salon_settings row (primary_color/secondary_color/logo_url)
+// and merges it into the resolved salon object, so consumers never need
+// to know it came from a second table. mode="public" already gets these
+// fields for free, since public_salon_directory was widened to include
+// them directly — no change needed for that path.
+//
+// fetchPublicSalonBranding() below is a separate, deliberately decoupled
+// helper for DeviceLoginPage. It needs salon branding for cosmetic
+// purposes BEFORE the device is authenticated, so it can never go
+// through the mode="authenticated" path above — that query is real
+// access control, gated on the device's own auth, and will correctly
+// return nothing for a device that hasn't signed in yet. Instead it
+// reads the same safe, anon-readable public_salon_directory view
+// BookingPage already relies on. On the legacy unprefixed /pos route
+// (no slug param at all), it falls back to KIMMS_SALON_ID directly,
+// matching the same fallback convention already used in db.js.
 
 import { createContext, useContext, useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { db } from "./db";
 import { setCurrentSalonId } from "./currentSalon";
+import { KIMMS_SALON_ID } from "./constants";
 
 var SalonContext = createContext(null);
 
@@ -37,8 +56,23 @@ export function SalonGate({ mode, children }) {
       if (cancelled) return;
 
       if (rows && rows.length > 0) {
-        setSalon(rows[0]);
-        setCurrentSalonId(rows[0].id);
+        var resolvedSalon = rows[0];
+
+        if (mode === "authenticated") {
+          var settingsRows = await db("GET", "salon_settings", null, "?salon_id=eq." + encodeURIComponent(resolvedSalon.id) + "&limit=1");
+          if (cancelled) return;
+
+          if (settingsRows && settingsRows.length > 0) {
+            resolvedSalon = Object.assign({}, resolvedSalon, {
+              primary_color: settingsRows[0].primary_color,
+              secondary_color: settingsRows[0].secondary_color,
+              logo_url: settingsRows[0].logo_url,
+            });
+          }
+        }
+
+        setSalon(resolvedSalon);
+        setCurrentSalonId(resolvedSalon.id);
         setStatus("ok");
       } else {
         setSalon(null);
@@ -75,4 +109,19 @@ export function SalonGate({ mode, children }) {
       {children}
     </SalonContext.Provider>
   );
+}
+
+// Independent, decoupled lookup for DeviceLoginPage. Never goes through
+// the authenticated path above — must work for a device that hasn't
+// signed in yet. Reads the same safe, anon-readable view BookingPage
+// already uses. Returns null if not found, so the caller can render a
+// sensible fallback rather than nothing at all.
+export async function fetchPublicSalonBranding(slug) {
+  var filters = slug
+    ? "?slug=eq." + encodeURIComponent(slug) + "&limit=1"
+    : "?id=eq." + KIMMS_SALON_ID + "&limit=1";
+
+  var rows = await db("GET", "public_salon_directory", null, filters);
+  if (rows && rows.length > 0) return rows[0];
+  return null;
 }
