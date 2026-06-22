@@ -88,7 +88,18 @@ export function SalonGate({ mode, children }) {
       setStatus("not-found");
     }
 
-    return function() { cancelled = true; };
+    return function() {
+      cancelled = true;
+      // Defensive: if this gate is torn down (slug/mode changed, or the
+      // component unmounts entirely), don't let a stale salon id outlive
+      // it. Nothing in the app currently navigates between a slug route
+      // and the legacy unprefixed routes without a full page reload
+      // (checked: no useNavigate/<Link>/history.push anywhere, only
+      // window.location.href and plain <a href>, which already reset
+      // all module state) — but this costs nothing and removes the risk
+      // permanently rather than relying on that staying true forever.
+      setCurrentSalonId(null);
+    };
   }, [slug, mode]);
 
   if (status === "checking") return null;
