@@ -4,10 +4,16 @@ import { useState, useEffect, useRef } from "react";
 import QRCode from "qrcode";
 import { GOLD, GOLD_LT, GOLD_DIM, BLACK, WHITE, CREAM, DARK, GREEN } from "../lib/constants.js";
 
-export default function ShareBookingPanel({ salonName }) {
-  salonName = salonName || "Kimm's Beauty Parlour";
-
-  var bookingUrl = window.location.origin + "/booking";
+export default function ShareBookingPanel({ salon }) {
+  // Was previously a single hardcoded `window.location.origin + "/booking"`,
+  // completely independent of whatever salonName text was passed in. That
+  // meant any non-Kimms salon's printed QR code / WhatsApp share link would
+  // scan through to Kimms' own booking page, not theirs — a real functional
+  // bug, not just wrong text. Now takes the whole salon object and derives
+  // both the display name and the correct slug-aware URL from it.
+  var salonName = (salon && salon.name) || "your salon";
+  var bookingPath = (salon && salon.slug) ? "/" + salon.slug + "/booking" : "/booking";
+  var bookingUrl = window.location.origin + bookingPath;
 
   var qrSvgState = useState(""); var qrSvg = qrSvgState[0]; var setQrSvg = qrSvgState[1];
   var copiedState = useState(false); var copied = copiedState[0]; var setCopied = copiedState[1];
@@ -100,7 +106,7 @@ export default function ShareBookingPanel({ salonName }) {
           🖨️ Print QR for Reception Desk
         </button>
         <a
-          href="/booking" target="_blank" rel="noreferrer"
+          href={bookingPath} target="_blank" rel="noreferrer"
           style={{ display: "block", width: "100%", background: "none", border: "1.5px solid " + GOLD_DIM + "66", borderRadius: 10, padding: "11px 0", fontWeight: 700, fontSize: 13, color: GOLD_DIM, textDecoration: "none", textAlign: "center", boxSizing: "border-box" }}
         >
           👁️ Preview Booking Page
