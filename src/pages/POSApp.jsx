@@ -1,7 +1,7 @@
 // src/pages/POSApp.jsx
 
 import { useState, useEffect } from "react";
-import KimmsLogo from "../components/KimmsLogo";
+import SalonBrandmark from "../components/SalonBrandmark";
 import GoldBtn from "../components/GoldBtn";
 import MpesaInstructions from "../components/MpesaInstructions";
 import Receipt from "../components/Receipt";
@@ -14,6 +14,8 @@ import ShareBookingPanel from "../components/ShareBookingPanel.jsx";
 import TomorrowReminders from "../components/TomorrowReminders.jsx";
 import { db, offlineQueue, syncOfflineQueue } from "../lib/db.js";
 import { fmt, todayStr, nowTime } from "../lib/utils.js";
+import { useSalon, fetchPublicSalonBranding } from "../lib/SalonContext";
+import { lighten, darken } from "../lib/colorUtils";
 import {
   DEFAULT_SERVICES, DEFAULT_STAFF, CATS,
   BLACK, GOLD, GOLD_LT, GOLD_DIM, CREAM, DARK, WHITE,
@@ -24,6 +26,36 @@ import {
 export default function POSApp({ onLogout, userRole }) {
   userRole = userRole || "staff";
   var isAdmin = userRole === "admin";
+
+  // This component also renders on the legacy unprefixed /pos route,
+  // which has no SalonGate at all — same gap LoginPage.jsx had. Mirror
+  // the same fallback: an independent, cosmetic-only lookup when there's
+  // no SalonGate-provided salon. Only used for the header strip below;
+  // the rest of this file's GOLD/DARK usage is deliberately untouched
+  // (see project decision: identity-only scope, not full app theming).
+  var contextSalon = useSalon();
+
+  var legacyBrandingState = useState(null);
+  var legacyBranding = legacyBrandingState[0]; var setLegacyBranding = legacyBrandingState[1];
+
+  useEffect(function() {
+    if (contextSalon) return;
+    var cancelled = false;
+    fetchPublicSalonBranding(null).then(function(result) {
+      if (!cancelled) setLegacyBranding(result);
+    });
+    return function() { cancelled = true; };
+  }, [contextSalon]);
+
+  var salon = contextSalon || legacyBranding;
+
+  var primary    = (salon && salon.primary_color) || GOLD;
+  var secondary  = (salon && salon.secondary_color) || DARK;
+  var primaryLt  = lighten(primary, 14);
+  var primaryDim = darken(primary, 18);
+  var bgStop3    = lighten(secondary, 3.5);
+  var bookingHref = (salon && salon.slug) ? "/" + salon.slug + "/booking" : "/booking";
+  var salonName  = (salon && salon.name) || "your salon";
 
   var darkModeState = useState(function(){ return localStorage.getItem("kimms_dark") === "true"; });
   var darkMode = darkModeState[0]; var setDarkMode = darkModeState[1];
@@ -343,10 +375,11 @@ export default function POSApp({ onLogout, userRole }) {
   function sendFeedbackRequest(phone, clientFirstName, token) {
     if (!phone) return;
     var cleanPhone = phone.replace(/^0/, "254").replace(/\D/g, "");
-    var ratingUrl = window.location.origin + "/rate/" + token;
-    var message = "Hi " + clientFirstName + "! 👋 Thank you for visiting Kimm's Beauty Parlour 💛\n\n" +
+    var ratingPath = (salon && salon.slug) ? "/" + salon.slug + "/rate/" + token : "/rate/" + token;
+    var ratingUrl = window.location.origin + ratingPath;
+    var message = "Hi " + clientFirstName + "! 👋 Thank you for visiting " + salonName + " 💛\n\n" +
       "We'd love to hear how your visit went — it only takes a few seconds:\n" + ratingUrl + "\n\n" +
-      "— Kimm's Beauty Parlour";
+      "— " + salonName;
     var waLink = "https://wa.me/" + cleanPhone + "?text=" + encodeURIComponent(message);
     window.open(waLink, "_blank");
   }
@@ -452,9 +485,9 @@ export default function POSApp({ onLogout, userRole }) {
   var inputStyle = { borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", background: WHITE };
 
   if (loading) return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(160deg," + BLACK + " 0%,#1A1400 100%)", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
-      <KimmsLogo size="lg" dark={false} />
-      <div style={{ color: GOLD_LT, fontSize: 13, letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 16 }}>Loading your salon data...</div>
+    <div style={{ minHeight: "100vh", background: "linear-gradient(160deg," + BLACK + " 0%," + secondary + " 100%)", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
+      <SalonBrandmark salon={salon} size="lg" />
+      <div style={{ color: primaryLt, fontSize: 13, letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 16 }}>Loading your salon data...</div>
     </div>
   );
 
@@ -520,18 +553,18 @@ export default function POSApp({ onLogout, userRole }) {
       {syncPending && isOnline && <div style={{ background: GREEN, color: WHITE, textAlign: "center", padding: "6px 16px", fontSize: 12, fontWeight: 700 }}>Syncing offline data...</div>}
 
       {/* Top bar */}
-      <div style={{ background: "linear-gradient(135deg," + BLACK + " 0%,#1A1400 60%,#2C1F00 100%)", borderBottom: "2px solid " + GOLD, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+      <div style={{ background: "linear-gradient(135deg," + BLACK + " 0%," + secondary + " 60%," + bgStop3 + " 100%)", borderBottom: "2px solid " + primary, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <KimmsLogo size="sm" dark={false} />
-          <div style={{ padding: "3px 10px", borderRadius: 20, fontSize: 10, fontWeight: 800, background: isAdmin ? "linear-gradient(135deg," + GOLD + "," + GOLD_LT + ")" : "rgba(255,255,255,0.1)", color: isAdmin ? BLACK : "rgba(255,255,255,0.6)" }}>
+          <SalonBrandmark salon={salon} size="sm" />
+          <div style={{ padding: "3px 10px", borderRadius: 20, fontSize: 10, fontWeight: 800, background: isAdmin ? "linear-gradient(135deg," + primary + "," + primaryLt + ")" : "rgba(255,255,255,0.1)", color: isAdmin ? BLACK : "rgba(255,255,255,0.6)" }}>
             {isAdmin ? "👑 ADMIN" : "✂ STAFF"}
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <a href="/booking" target="_blank" rel="noreferrer" style={{ background: "linear-gradient(135deg," + GOLD + "," + GOLD_LT + ")", color: BLACK, borderRadius: 20, padding: "7px 10px", fontSize: 11, fontWeight: 900, textDecoration: "none" }}>🔗</a>
+          <a href={bookingHref} target="_blank" rel="noreferrer" style={{ background: "linear-gradient(135deg," + primary + "," + primaryLt + ")", color: BLACK, borderRadius: 20, padding: "7px 10px", fontSize: 11, fontWeight: 900, textDecoration: "none" }}>🔗</a>
           {isAdmin && <NotificationBell products={products} />}
-          <button onClick={function() { setDarkMode(function(d) { return !d; }); }} style={{ background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.7)", border: "1px solid " + GOLD_DIM, borderRadius: "50%", width: 32, height: 32, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{darkMode ? "☀️" : "🌙"}</button>
-          <button onClick={onLogout} style={{ background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)", border: "1px solid " + GOLD_DIM, borderRadius: 20, padding: "7px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Out</button>
+          <button onClick={function() { setDarkMode(function(d) { return !d; }); }} style={{ background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.7)", border: "1px solid " + primaryDim, borderRadius: "50%", width: 32, height: 32, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{darkMode ? "☀️" : "🌙"}</button>
+          <button onClick={onLogout} style={{ background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)", border: "1px solid " + primaryDim, borderRadius: 20, padding: "7px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Out</button>
         </div>
       </div>
 
@@ -793,7 +826,7 @@ export default function POSApp({ onLogout, userRole }) {
               </div>
             </div>
 
-            <TomorrowReminders appointments={appointments} salonName="Kimm's Beauty Parlour" />
+            <TomorrowReminders appointments={appointments} salonName={salonName} />
 
             {!calView && (
               <div style={{ background: WHITE, borderRadius: 12, padding: "12px 14px", marginBottom: 14, border: "1px solid " + GOLD_DIM + "44" }}>
@@ -911,7 +944,7 @@ export default function POSApp({ onLogout, userRole }) {
                   return (
                     <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, padding: "8px 10px", background: WHITE, borderRadius: 8, border: "1px solid #FEE2E2" }}>
                       <div><div style={{ fontSize: 13, fontWeight: 700, color: DARK }}>{c.name}</div><div style={{ fontSize: 11, color: "#888" }}>{c.phone} · Last: {c.last_visit || "unknown"}</div></div>
-                      {c.phone && <a href={"https://wa.me/254" + c.phone.replace(/^0/,"").replace(/\D/g,"") + "?text=" + encodeURIComponent("Hi " + c.name + "! We miss you at Kimm's 💕\nBook: " + window.location.origin + "/booking")} target="_blank" rel="noreferrer" style={{ background: "#25D366", color: WHITE, borderRadius: 20, padding: "7px 12px", fontSize: 11, fontWeight: 800, textDecoration: "none", whiteSpace: "nowrap" }}>📲 WhatsApp</a>}
+                      {c.phone && <a href={"https://wa.me/254" + c.phone.replace(/^0/,"").replace(/\D/g,"") + "?text=" + encodeURIComponent("Hi " + c.name + "! We miss you at " + salonName + " 💕\nBook: " + window.location.origin + bookingHref)} target="_blank" rel="noreferrer" style={{ background: "#25D366", color: WHITE, borderRadius: 20, padding: "7px 12px", fontSize: 11, fontWeight: 800, textDecoration: "none", whiteSpace: "nowrap" }}>📲 WhatsApp</a>}
                     </div>
                   );
                 })}
@@ -932,7 +965,7 @@ export default function POSApp({ onLogout, userRole }) {
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <div style={{ textAlign: "right" }}><div style={{ fontSize: 13, fontWeight: 800, color: GOLD_DIM }}>{fmt(c.total_spend)}</div><div style={{ fontSize: 10, color: "#aaa" }}>{c.visit_count} visit{c.visit_count !== 1 ? "s" : ""}</div></div>
-                      {c.phone && <a href={"https://wa.me/254" + c.phone.replace(/^0/,"").replace(/\D/g,"") + "?text=" + encodeURIComponent("Hi " + c.name + "! 💕 Book: " + window.location.origin + "/booking")} target="_blank" rel="noreferrer" style={{ background: "#25D366", color: WHITE, borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, textDecoration: "none", flexShrink: 0 }}>📲</a>}
+                      {c.phone && <a href={"https://wa.me/254" + c.phone.replace(/^0/,"").replace(/\D/g,"") + "?text=" + encodeURIComponent("Hi " + c.name + "! 💕 Book: " + window.location.origin + bookingHref)} target="_blank" rel="noreferrer" style={{ background: "#25D366", color: WHITE, borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, textDecoration: "none", flexShrink: 0 }}>📲</a>}
                     </div>
                   </div>
                 </div>
@@ -1082,7 +1115,7 @@ export default function POSApp({ onLogout, userRole }) {
         {/* ── SHARE ── */}
         {page === "share" && (
           <div style={{ padding: "4px 0" }}>
-            <ShareBookingPanel salonName="Kimm's Beauty Parlour" />
+            <ShareBookingPanel salon={salon} />
           </div>
         )}
 
