@@ -7,7 +7,6 @@ import SalonBrandmark from "./components/SalonBrandmark";
 import LoginPage from "./pages/LoginPage";
 import RatingPage from "./pages/RatingPage";
 import DeviceLoginPage from "./pages/DeviceLoginPage";
-import TestSlugPage from "./pages/TestSlugPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import { getDeviceLoginStatus } from "./lib/deviceAuth";
 import { SalonGate } from "./lib/SalonContext";
@@ -71,7 +70,6 @@ export default function App() {
         <Route path="/booking"     element={<BookingPage />} />
         <Route path="/pos"         element={<DeviceGate><StaffRoute /></DeviceGate>} />
         <Route path="/rate/:token" element={<RatingPage />} />
-        <Route path="/test-slug"   element={<TestSlugPage />} />
         <Route path="/onboard"     element={<OnboardingPage />} />
 
         <Route path="/:slug/booking" element={<SalonGate mode="public"><BookingPage /></SalonGate>} />
