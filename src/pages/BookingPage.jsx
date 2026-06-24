@@ -10,7 +10,7 @@ import { fmt, todayStr, nowTime } from "../lib/utils";
 import { useSalon, fetchPublicSalonBranding } from "../lib/SalonContext";
 import { lighten, darken } from "../lib/colorUtils";
 import {
-  DEFAULT_SERVICES, DEFAULT_STAFF, CATS,
+  CATS,
   BLACK, GOLD, DARK, WHITE, GREEN, MPESA_GREEN, MPESA_TILL, MPESA_NAME,
 } from "../lib/constants";
 
@@ -45,8 +45,8 @@ export default function BookingPage() {
   const [showMpesa, setShowMpesa]   = useState(false);
   const [savedBooking, setSavedBooking] = useState(null);
   const [paymentStatus, setPaymentStatus] = useState(null);
-  const [bookingServices, setBookingServices] = useState(DEFAULT_SERVICES);
-  const [bookingStaff, setBookingStaff]       = useState(DEFAULT_STAFF);
+  const [bookingServices, setBookingServices] = useState([]);
+  const [bookingStaff, setBookingStaff]       = useState([]);
 
   useEffect(() => {
     async function loadBookingData() {
@@ -54,8 +54,8 @@ export default function BookingPage() {
         db("GET", "services", null, "?active=eq.true&order=cat.asc,name.asc"),
         db("GET", "public_staff_directory", null, "?active=eq.true&order=created_at.asc"),
       ]);
-      if (sv && sv.length > 0) setBookingServices(sv);
-      if (st && st.length > 0) setBookingStaff(st);
+      if (Array.isArray(sv)) setBookingServices(sv);
+      if (Array.isArray(st)) setBookingStaff(st);
     }
     loadBookingData();
   }, []);
@@ -164,7 +164,17 @@ export default function BookingPage() {
         {step === 1 && (
           <div>
             <div style={{ fontWeight: 800, fontSize: 16, color: WHITE, marginBottom: 14 }}>Choose a service</div>
-            {CATS.filter(c => c !== "All").map(cat => (
+            {bookingServices.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "32px 20px", background: "rgba(255,255,255,0.05)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.1)" }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>✂️</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: WHITE, marginBottom: 6 }}>Services coming soon</div>
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 16 }}>This salon is still setting up. Chat with us to book directly.</div>
+                <a href={`https://wa.me/?text=${encodeURIComponent("I'd like to book at " + salonName)}`} target="_blank" rel="noreferrer"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#25D366", color: WHITE, borderRadius: 24, padding: "10px 20px", fontWeight: 800, fontSize: 14, textDecoration: "none" }}>
+                  <span style={{ fontSize: 18 }}>💬</span> Chat on WhatsApp
+                </a>
+              </div>
+            ) : CATS.filter(c => c !== "All").map(cat => (
               <div key={cat} style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, fontWeight: 800, color: primaryLt, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>{cat}</div>
                 {bookingServices.filter(s => s.cat === cat).map(s => (
