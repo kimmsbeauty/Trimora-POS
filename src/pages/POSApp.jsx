@@ -528,7 +528,7 @@ export default function POSApp({ onLogout, userRole }) {
               {productTotal > 0 && <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span style={{ color: "#888" }}>Products</span><span>{fmt(productTotal)}</span></div>}
               <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 900, fontSize: 14, borderTop: "1px dashed #ddd", paddingTop: 6, marginTop: 4 }}><span>Total</span><span style={{ color: GOLD_DIM }}>{fmt(cartTotal)}</span></div>
             </div>
-            <MpesaInstructions amount={cartTotal} reference={clientName} />
+            <MpesaInstructions amount={cartTotal} reference={clientName} salon={salon} />
             {commission > 0 && (
               <div style={{ marginTop: 10, background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#92400E" }}>
                 Staff commission: <b>{fmt(commission)}</b> (on post-discount services)
@@ -824,7 +824,7 @@ export default function POSApp({ onLogout, userRole }) {
                       return <button key={m} onClick={function() { setPayMethod(m); }} style={{ flex: 1, border: "2px solid " + (payMethod === m ? GOLD : GOLD_DIM + "66"), borderRadius: 8, padding: "8px 0", background: payMethod === m ? "linear-gradient(135deg," + BLACK + ",#2C1F00)" : WHITE, color: payMethod === m ? GOLD_LT : DARK, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{m === "M-Pesa" ? "📱 M-Pesa" : "💵 Cash"}</button>;
                     })}
                   </div>
-                  {payMethod === "M-Pesa" && <div style={{ marginBottom: 12 }}><MpesaInstructions amount={cartTotal} reference={clientName} compact={true} /></div>}
+                  {payMethod === "M-Pesa" && <div style={{ marginBottom: 12 }}><MpesaInstructions amount={cartTotal} reference={clientName} compact={true} salon={salon} /></div>}
                   <GoldBtn onClick={checkout} style={{ width: "100%" }}>
                     {payMethod === "M-Pesa" ? "📱 Collect M-Pesa · " + fmt(cartTotal) : "✓ Complete Sale · " + fmt(cartTotal)}
                   </GoldBtn>
