@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import SalonBrandmark from "../components/SalonBrandmark";
 import GoldBtn from "../components/GoldBtn";
 import MpesaPaymentModal from "../components/MpesaPaymentModal";
-import MpesaInstructions from "../components/MpesaInstructions";
 import { db } from "../lib/db";
 import { fmt, todayStr, nowTime } from "../lib/utils";
 import { useSalon, fetchPublicSalonBranding } from "../lib/SalonContext";
