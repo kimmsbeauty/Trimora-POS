@@ -1,13 +1,13 @@
 // src/components/MpesaPaymentModal.jsx
 
 import { useState } from "react";
-import KimmsLogo from "./KimmsLogo";
+import SalonBrandmark from "./SalonBrandmark";
 import GoldBtn from "./GoldBtn";
 import MpesaInstructions from "./MpesaInstructions";
 import { WHITE, DARK, GOLD, GOLD_DIM, MPESA_GREEN, GRAY } from "../lib/constants";
 import { fmt } from "../lib/utils";
 
-export default function MpesaPaymentModal({ booking, onPaid, onPayLater }) {
+export default function MpesaPaymentModal({ salon, booking, onPaid, onPayLater }) {
   const [confirmed, setConfirmed] = useState(false);
 
   if (confirmed) {
@@ -31,7 +31,7 @@ export default function MpesaPaymentModal({ booking, onPaid, onPayLater }) {
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div style={{ background: WHITE, borderRadius: 20, padding: 24, maxWidth: 380, width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
         <div style={{ textAlign: "center", marginBottom: 20 }}>
-          <KimmsLogo size="sm" dark={true} />
+          <SalonBrandmark salon={salon} size="sm" dark={true} />
           <div style={{ fontSize: 12, color: "#888", marginTop: 8 }}>Pay for your booking</div>
         </div>
         <div style={{ background: GRAY, borderRadius: 12, padding: "12px 14px", marginBottom: 16, fontSize: 13, border: `1px solid ${GOLD_DIM}` }}>
