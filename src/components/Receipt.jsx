@@ -137,7 +137,7 @@ export default function Receipt({ salon, sale, onClose, onSendFeedback }) {
 
         {sale.payment === "M-Pesa" && (
           <div style={{ marginTop: 14 }}>
-            <MpesaInstructions amount={sale.total} reference={sale.client} compact={true} />
+            <MpesaInstructions amount={sale.total} reference={sale.client} compact={true} salon={salon} />
           </div>
         )}
 
