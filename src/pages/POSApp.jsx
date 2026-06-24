@@ -563,7 +563,7 @@ export default function POSApp({ onLogout, userRole }) {
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <a href={bookingHref} target="_blank" rel="noreferrer" style={{ background: "linear-gradient(135deg," + primary + "," + primaryLt + ")", color: BLACK, borderRadius: 20, padding: "7px 10px", fontSize: 11, fontWeight: 900, textDecoration: "none" }}>🔗</a>
-          {isAdmin && <NotificationBell products={products} />}
+          {isAdmin && <NotificationBell products={products} salonName={salonName} />}
           <button onClick={function() { setDarkMode(function(d) { return !d; }); }} style={{ background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.7)", border: "1px solid " + primaryDim, borderRadius: "50%", width: 32, height: 32, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{darkMode ? "☀️" : "🌙"}</button>
           <button onClick={onLogout} style={{ background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)", border: "1px solid " + primaryDim, borderRadius: 20, padding: "7px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Out</button>
         </div>
@@ -857,6 +857,7 @@ export default function POSApp({ onLogout, userRole }) {
                   appointments={appointments}
                   staffList={staffList}
                   date={apptDate}
+                  salonName={salonName}
                   onAction={function(action, a) {
                     if (action === "convert") convertToSale(a);
                     if (action === "done")    markDone(a.id);
@@ -976,7 +977,7 @@ export default function POSApp({ onLogout, userRole }) {
         )}
 
         {/* ── DASHBOARD ── */}
-        {page === "dashboard" && <Dashboard sales={sales} customers={customers} staffList={staffList} products={products} feedbacks={feedbacks} expenses={expenses} darkMode={darkMode} />}
+        {page === "dashboard" && <Dashboard sales={sales} customers={customers} staffList={staffList} products={products} feedbacks={feedbacks} expenses={expenses} darkMode={darkMode} salonName={salonName} />}
 
         {/* ── STAFF ── */}
         {page === "staff" && (
