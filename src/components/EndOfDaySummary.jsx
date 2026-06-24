@@ -4,7 +4,8 @@ import { useState } from "react";
 import { GOLD, GOLD_LT, GOLD_DIM, BLACK, WHITE, CREAM, DARK, GREEN, RED, AMBER } from "../lib/constants.js";
 import { fmt, todayStr } from "../lib/utils.js";
 
-export default function EndOfDaySummary({ sales, expenses, staffList, customers, ownerPhone }) {
+export default function EndOfDaySummary({ sales, expenses, staffList, customers, ownerPhone, salonName }) {
+  salonName = salonName || "the salon";
   var openState = useState(false); var open = openState[0]; var setOpen = openState[1];
 
   var today        = todayStr();
@@ -23,13 +24,28 @@ export default function EndOfDaySummary({ sales, expenses, staffList, customers,
 
   var uniqueClients = new Set(todaySales.map(function(s){ return s.client; })).size;
 
+  // Commission per staff member: for multi-stylist sales, read the
+  // per-staff breakdown saved in commission_by_stylist. For older
+  // single-stylist sales (or sales where that field is absent), fall
+  // back to the sale-level commission attributed to sale.stylist.
+  // This ensures the end-of-day report is accurate for both sale types.
   var staffCommissions = staffList.map(function(st) {
-    var mySales = todaySales.filter(function(s){ return s.stylist === st.name; });
+    var mySales = todaySales.filter(function(s) {
+      if (s.commission_by_stylist && s.commission_by_stylist[st.name] != null) return true;
+      return s.stylist === st.name;
+    });
+    var commission = mySales.reduce(function(a, s) {
+      if (s.commission_by_stylist && s.commission_by_stylist[st.name] != null) {
+        return a + s.commission_by_stylist[st.name];
+      }
+      return a + (s.commission || 0);
+    }, 0);
+    var revenue = mySales.reduce(function(a, s) { return a + s.total; }, 0);
     return {
       name: st.name,
       sales: mySales.length,
-      revenue: mySales.reduce(function(a,s){ return a+s.total; }, 0),
-      commission: mySales.reduce(function(a,s){ return a+(s.commission||0); }, 0),
+      revenue: revenue,
+      commission: commission,
     };
   }).filter(function(s){ return s.sales > 0; }).sort(function(a,b){ return b.commission - a.commission; });
 
@@ -67,7 +83,7 @@ export default function EndOfDaySummary({ sales, expenses, staffList, customers,
 
   function buildWhatsAppMessage() {
     var lines = [];
-    lines.push("📊 *Kimm's Beauty Parlour — Daily Close*");
+    lines.push("📊 *" + salonName + " — Daily Close*");
     lines.push(today);
     lines.push("");
     lines.push("💰 *Revenue*");
