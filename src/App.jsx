@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { useState, useEffect } from "react";
 import BookingPage from "./pages/BookingPage";
 import POSApp from "./pages/POSApp";
-import KimmsLogo from "./components/KimmsLogo";
+import SalonBrandmark from "./components/SalonBrandmark";
 import LoginPage from "./pages/LoginPage";
 import RatingPage from "./pages/RatingPage";
 import DeviceLoginPage from "./pages/DeviceLoginPage";
@@ -16,7 +16,7 @@ function RedirectToBooking() {
   useEffect(function() { window.location.href = "/booking"; }, []);
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#0A0A0A 0%,#1A1400 100%)", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
-      <KimmsLogo size="md" dark={false} />
+      <SalonBrandmark salon={null} size="md" />
       <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", marginTop: 8 }}>Redirecting...</div>
     </div>
   );
