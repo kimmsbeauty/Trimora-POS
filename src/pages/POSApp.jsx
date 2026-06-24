@@ -496,6 +496,7 @@ export default function POSApp({ onLogout, userRole }) {
 
       {receipt && (
         <Receipt
+          salon={salon}
           sale={receipt}
           onClose={function() { setReceipt(null); }}
           onSendFeedback={function() {
