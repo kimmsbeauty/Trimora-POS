@@ -15,7 +15,7 @@
 // NOT built. That's real, deliberately deferred scope, not an oversight.
 
 import { useState } from "react";
-import KimmsLogo from "../components/KimmsLogo";
+import SalonBrandmark from "../components/SalonBrandmark";
 import GoldBtn from "../components/GoldBtn";
 import { SUPABASE_URL, SUPABASE_KEY, GOLD, GOLD_LT, GOLD_DIM, BLACK, WHITE, RED } from "../lib/constants.js";
 import { persistSession } from "../lib/deviceAuth";
@@ -134,7 +134,7 @@ export default function OnboardingPage() {
 
       <div style={{ background: "rgba(255,255,255,0.04)", border: "1.5px solid " + GOLD_DIM, borderRadius: 24, padding: 36, maxWidth: 360, width: "100%", textAlign: "center", boxShadow: "0 8px 40px rgba(0,0,0,0.6)" }}>
 
-        <KimmsLogo size="md" dark={false} />
+        <SalonBrandmark salon={null} size="md" />
         <div style={{ borderTop: "1px solid " + GOLD_DIM, margin: "20px 0 18px", opacity: 0.4 }} />
 
         <div style={{ fontSize: 16, fontWeight: 900, color: GOLD_LT, marginBottom: 16 }}>Set up your salon</div>
