@@ -17,7 +17,7 @@ import { fmt, todayStr, nowTime } from "../lib/utils.js";
 import { useSalon, fetchPublicSalonBranding } from "../lib/SalonContext";
 import { lighten, darken } from "../lib/colorUtils";
 import {
-  DEFAULT_SERVICES, DEFAULT_STAFF, CATS,
+  CATS,
   BLACK, GOLD, GOLD_LT, GOLD_DIM, CREAM, DARK, WHITE,
   GREEN, RED, AMBER, MPESA_GREEN,
   SUPABASE_URL, SUPABASE_KEY,
@@ -96,8 +96,8 @@ export default function POSApp({ onLogout, userRole }) {
   var feedbacksState = useState([]); var feedbacks = feedbacksState[0]; var setFeedbacks = feedbacksState[1];
   var appointmentsState = useState([]); var appointments = appointmentsState[0]; var setAppointments = appointmentsState[1];
   var customersState = useState([]); var customers = customersState[0]; var setCustomers = customersState[1];
-  var staffListState = useState(DEFAULT_STAFF); var staffList = staffListState[0]; var setStaffList = staffListState[1];
-  var servicesListState = useState(DEFAULT_SERVICES); var servicesList = servicesListState[0]; var setServicesList = servicesListState[1];
+  var staffListState = useState([]); var staffList = staffListState[0]; var setStaffList = staffListState[1];
+  var servicesListState = useState([]); var servicesList = servicesListState[0]; var setServicesList = servicesListState[1];
   var loadingState = useState(true); var loading = loadingState[0]; var setLoading = loadingState[1];
 
   var showAddStaffState = useState(false); var showAddStaff = showAddStaffState[0]; var setShowAddStaff = showAddStaffState[1];
@@ -155,8 +155,8 @@ export default function POSApp({ onLogout, userRole }) {
         if (results[1] && results[1].length > 0) setProducts(results[1]);
         if (results[2]) setFeedbacks(results[2]);
         if (results[3]) setCustomers(results[3]);
-        if (results[4] && results[4].length > 0) setStaffList(results[4]);
-        if (results[5] && results[5].length > 0) setServicesList(results[5]);
+        if (Array.isArray(results[4])) setStaffList(results[4]);
+        if (Array.isArray(results[5])) setServicesList(results[5]);
         if (results[6]) setExpenses(results[6]);
       } catch (e) {
         console.error("Load error:", e);
@@ -640,10 +640,16 @@ export default function POSApp({ onLogout, userRole }) {
             {/* Default Stylist */}
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Default Stylist</div>
-              <select value={selStaff} onChange={function(e) { setSelStaff(e.target.value); }} style={Object.assign({}, inputStyle, { width: "100%", color: selStaff ? DARK : "#aaa" })}>
-                <option value="">Select stylist</option>
-                {staffList.map(function(s) { return <option key={s.id} value={s.name}>{s.name} · {s.role}</option>; })}
-              </select>
+              {staffList.length === 0 ? (
+                <div style={{ padding: "10px 12px", background: "#FFFBEB", border: "1.5px dashed #FDE68A", borderRadius: 10, fontSize: 12, color: "#92400E", fontWeight: 700 }}>
+                  No staff added yet — go to the <b>Staff</b> tab to add your team.
+                </div>
+              ) : (
+                <select value={selStaff} onChange={function(e) { setSelStaff(e.target.value); }} style={Object.assign({}, inputStyle, { width: "100%", color: selStaff ? DARK : "#aaa" })}>
+                  <option value="">Select stylist</option>
+                  {staffList.map(function(s) { return <option key={s.id} value={s.name}>{s.name} · {s.role}</option>; })}
+                </select>
+              )}
               <div style={{ fontSize: 10, color: "#aaa", marginTop: 4 }}>Auto-fills new items — you can reassign each service in the cart below</div>
             </div>
 
@@ -663,6 +669,20 @@ export default function POSApp({ onLogout, userRole }) {
 
             {/* Items grid */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
+              {typeFilter === "services" && servicesList.length === 0 && (
+                <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "32px 20px", background: WHITE, borderRadius: 12, border: "1.5px dashed " + GOLD_DIM + "66" }}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>✂️</div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: DARK, marginBottom: 4 }}>No services added yet</div>
+                  <div style={{ fontSize: 11, color: "#888" }}>Go to the <b>Services</b> tab to add your first service.</div>
+                </div>
+              )}
+              {typeFilter === "products" && products.length === 0 && (
+                <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "32px 20px", background: WHITE, borderRadius: 12, border: "1.5px dashed " + GOLD_DIM + "66" }}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>🧴</div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: DARK, marginBottom: 4 }}>No products added yet</div>
+                  <div style={{ fontSize: 11, color: "#888" }}>Go to the <b>Stock</b> tab to add your first product.</div>
+                </div>
+              )}
               {(typeFilter === "services" ? servicesList.filter(function(s) { return catFilter === "All" || s.cat === catFilter; }) : products.filter(function(p) { return catFilter === "All" || p.cat === catFilter; })).map(function(item) {
                 return (
                   <div key={item.id} onClick={function() { addToCart(item, typeFilter === "services" ? "service" : "product"); }} style={{ background: WHITE, borderRadius: 12, padding: "12px 10px", cursor: "pointer", border: "1.5px solid " + GOLD_DIM + "44" }}>
