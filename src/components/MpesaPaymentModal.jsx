@@ -38,7 +38,7 @@ export default function MpesaPaymentModal({ salon, booking, onPaid, onPayLater }
           <div style={{ fontWeight: 800, color: DARK, marginBottom: 4 }}>{booking.service}</div>
           <div style={{ color: "#888" }}>📅 {booking.date} at {booking.time} · {booking.stylist}</div>
         </div>
-        <MpesaInstructions amount={booking.price} reference={booking.name} />
+        <MpesaInstructions amount={booking.price} reference={booking.name} salon={salon} />
         <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
           <button
             onClick={() => setConfirmed(true)}
