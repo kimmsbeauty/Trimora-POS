@@ -6,14 +6,15 @@ import { fmt } from "../lib/utils.js";
 
 var LOW_STOCK_THRESHOLD = 3;
 
-export default function NotificationBell({ products, ownerPhone }) {
+export default function NotificationBell({ products, ownerPhone, salonName }) {
+  salonName = salonName || "the salon";
   var openState = useState(false); var open = openState[0]; var setOpen = openState[1];
 
   var lowStockItems = products.filter(function(p) { return p.stock <= LOW_STOCK_THRESHOLD; });
   var count = lowStockItems.length;
 
   function buildAlertMessage(item) {
-    return "⚠️ Low Stock Alert — Kimm's Beauty Parlour\n\n" +
+    return "⚠️ Low Stock Alert — " + salonName + "\n\n" +
       item.name + " is down to " + item.stock + " unit" + (item.stock !== 1 ? "s" : "") + ".\n" +
       "Category: " + item.cat + "\n\n" +
       "Please reorder soon to avoid running out.";
@@ -23,7 +24,7 @@ export default function NotificationBell({ products, ownerPhone }) {
     var lines = lowStockItems.map(function(p) {
       return "• " + p.name + " — " + p.stock + " left";
     }).join("\n");
-    return "⚠️ Low Stock Alert — Kimm's Beauty Parlour\n\n" +
+    return "⚠️ Low Stock Alert — " + salonName + "\n\n" +
       "The following products need restocking:\n\n" + lines +
       "\n\nPlease arrange reorder soon.";
   }
