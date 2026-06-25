@@ -130,7 +130,7 @@ export default function BookingPage() {
           )}
           {contactPhone && <a href={`https://wa.me/${contactPhone}?text=${waMessage}`} target="_blank" rel="noreferrer"
             style={{ display: "block", background: "#25D366", color: WHITE, borderRadius: 12, padding: "13px 0", fontWeight: 800, fontSize: 15, textDecoration: "none", marginBottom: 10 }}>
-            📲 Confirm via WhatsApp
+            📲 Message us on WhatsApp
           </a>}
           <button onClick={() => { setSel({ service: null, stylist: null, date: "", time: "", name: "", phone: "" }); setStep(1); setDone(false); setPaymentStatus(null); setSavedBooking(null); }}
             style={{ background: "transparent", border: `1px solid ${primaryDim}`, borderRadius: 10, padding: "10px 24px", fontWeight: 700, fontSize: 13, cursor: "pointer", color: "rgba(255,255,255,0.5)" }}>

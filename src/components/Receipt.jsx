@@ -117,22 +117,6 @@ export default function Receipt({ salon, sale, onClose, onSendFeedback }) {
           <span>TOTAL</span><span style={{ color: primaryDim }}>{fmt(sale.total)}</span>
         </div>
 
-        {/* Commission */}
-        {sale.commission > 0 && (
-          <div style={{ marginTop: 6, background: "#FFFBEB", borderRadius: 8, padding: "6px 10px", fontSize: 11, color: "#92400E", border: "1px solid #FDE68A" }}>
-            {sale.is_multi_stylist && sale.commission_by_stylist ? (
-              <div>
-                <div style={{ fontWeight: 700, marginBottom: 3 }}>Commission by stylist:</div>
-                {Object.entries(sale.commission_by_stylist).map(function(entry, i) {
-                  return <div key={i} style={{ display: "flex", justifyContent: "space-between" }}><span>{entry[0]}</span><span style={{ fontWeight: 700 }}>{fmt(entry[1])}</span></div>;
-                })}
-              </div>
-            ) : (
-              <span>Staff commission: <b>{fmt(sale.commission)}</b>{discountAmt > 0 && <span style={{ color: "#B45309" }}> (post-discount)</span>}</span>
-            )}
-          </div>
-        )}
-
         <div style={{ fontSize: 12, color: "#888", marginTop: 8 }}><b>Payment:</b> {sale.payment}</div>
 
         {sale.payment === "M-Pesa" && (
