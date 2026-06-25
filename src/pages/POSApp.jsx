@@ -8,6 +8,8 @@ import Receipt from "../components/Receipt";
 import Dashboard from "./Dashboard";
 import ExpensesPage from "./ExpensesPage.jsx";
 import CalendarView from "./CalendarView.jsx";
+import SalonSettingsPage from "./SalonSettingsPage.jsx";
+import SetupChecklist from "../components/SetupChecklist.jsx";
 import LoyaltyBadge from "../components/LoyaltyBadge.jsx";
 import NotificationBell from "../components/NotificationBell.jsx";
 import ShareBookingPanel from "../components/ShareBookingPanel.jsx";
@@ -605,6 +607,7 @@ export default function POSApp({ onLogout, userRole }) {
     { id: "inventory",    label: "Stock",    icon: "📦", adminOnly: true },
     { id: "expenses",     label: "Expenses", icon: "💸", adminOnly: true },
     { id: "share",        label: "Share",    icon: "🔗", adminOnly: true },
+    { id: "settings",     label: "Settings", icon: "⚙️",  adminOnly: true },
   ];
   var NAV = isAdmin ? ALL_NAV : ALL_NAV.filter(function(n) { return !n.adminOnly; });
   var inputStyle = { borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", background: WHITE };
@@ -810,6 +813,15 @@ export default function POSApp({ onLogout, userRole }) {
         {/* ── POS ── */}
         {page === "pos" && (
           <div>
+            {/* Setup checklist — shown to admin on fresh salons only */}
+            {isAdmin && (
+              <SetupChecklist
+                salon={salon}
+                servicesList={servicesList}
+                staffList={staffList}
+                onNavigate={function(tab) { setPage(tab); }}
+              />
+            )}
             {/* Customer */}
             <div style={{ marginBottom: 12, position: "relative" }}>
               <div style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Client</div>
@@ -1362,6 +1374,13 @@ export default function POSApp({ onLogout, userRole }) {
           <div style={{ padding: "4px 0" }}>
             <ShareBookingPanel salon={salon} />
           </div>
+        )}
+
+        {page === "settings" && (
+          <SalonSettingsPage
+            salon={salon}
+            onSettingsUpdated={function() { loadAll(); }}
+          />
         )}
 
         {/* ── INVENTORY ── */}
