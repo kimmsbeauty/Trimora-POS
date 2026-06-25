@@ -7,7 +7,7 @@ import { getCurrentSalonId } from "./currentSalon";
 const TENANT_TABLES = new Set([
   "bookings", "customers", "expenses", "feedback",
   "sales", "services", "staff", "stock", "salon_pins",
-  "public_staff_directory",
+  "public_staff_directory", "salon_settings",
 ]);
 
 export const offlineQueue = [];
