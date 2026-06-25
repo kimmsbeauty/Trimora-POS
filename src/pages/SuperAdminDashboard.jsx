@@ -58,6 +58,11 @@ export default function SuperAdminDashboard({ onLogout }) {
   var [payAmount,    setPayAmount]    = useState("");
   var [payNotes,     setPayNotes]     = useState("");
   var [paymentSaving,setPaymentSaving]= useState(false);
+  var [inviteModal,  setInviteModal]  = useState(false);
+  var [inviteEmail,  setInviteEmail]  = useState("");
+  var [inviteName,   setInviteName]   = useState("");
+  var [inviteLink,   setInviteLink]   = useState("");
+  var [inviteLoading,setInviteLoading]= useState(false);
   var [search,       setSearch]       = useState("");
   var [filter,       setFilter]       = useState("all"); // "all" | "active" | "suspended"
 
@@ -111,6 +116,32 @@ export default function SuperAdminDashboard({ onLogout }) {
     } else {
       var err = await res.json().catch(function() { return {}; });
       alert("Failed to record payment: " + (err.message || res.status));
+    }
+  }
+
+  async function generateInvite() {
+    setInviteLoading(true);
+    setInviteLink("");
+    var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/create_invite", {
+      method: "POST",
+      headers: {
+        apikey:         SUPABASE_KEY,
+        Authorization:  "Bearer " + token,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        p_email:      inviteEmail || null,
+        p_salon_name: inviteName  || null,
+      }),
+    });
+    setInviteLoading(false);
+    if (res.ok) {
+      var inviteToken = await res.json();
+      var link = window.location.origin + "/onboard?token=" + inviteToken;
+      setInviteLink(link);
+    } else {
+      alert("Failed to generate invite link.");
     }
   }
 
@@ -327,12 +358,20 @@ export default function SuperAdminDashboard({ onLogout }) {
             <div style={{ fontSize: 16, fontWeight: 900, color: GOLD, letterSpacing: "0.1em" }}>TRIMORA</div>
             <div style={{ fontSize: 10, color: GOLD_DIM, letterSpacing: "0.15em" }}>SUPER ADMIN</div>
           </div>
-          <button
-            onClick={handleLogout}
-            style={{ background: "rgba(255,255,255,0.08)", border: "1px solid " + GOLD_DIM + "44", color: GOLD_DIM, borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontWeight: 700 }}
-          >
-            Sign Out
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={function() { setInviteModal(true); setInviteLink(""); setInviteEmail(""); setInviteName(""); }}
+              style={{ background: GOLD_DIM, border: "none", color: BLACK, borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer", fontWeight: 800 }}
+            >
+              + Invite
+            </button>
+            <button
+              onClick={handleLogout}
+              style={{ background: "rgba(255,255,255,0.08)", border: "1px solid " + GOLD_DIM + "44", color: GOLD_DIM, borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontWeight: 700 }}
+            >
+              Sign Out
+            </button>
+          </div>
         </div>
         {session && <div style={{ fontSize: 10, color: GOLD_DIM + "88", marginTop: 4 }}>{session.email}</div>}
       </div>
@@ -423,6 +462,68 @@ export default function SuperAdminDashboard({ onLogout }) {
           );
         })}
       </div>
+
+      {/* Invite modal */}
+      {inviteModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 2000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div style={{ background: WHITE, borderRadius: "20px 20px 0 0", padding: "24px 20px 32px", width: "100%", maxWidth: 480 }}>
+            <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 4 }}>🔗 Generate Invite Link</div>
+            <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>One-time link, expires in 7 days.</div>
+
+            <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 6, textTransform: "uppercase" }}>Prospect's Email (optional — pre-fills the form)</label>
+            <input
+              value={inviteEmail}
+              onChange={function(e) { setInviteEmail(e.target.value); setInviteLink(""); }}
+              placeholder="salon@example.com"
+              style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM + "44", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, marginBottom: 12 }}
+            />
+
+            <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 6, textTransform: "uppercase" }}>Salon Name (optional — pre-fills the form)</label>
+            <input
+              value={inviteName}
+              onChange={function(e) { setInviteName(e.target.value); setInviteLink(""); }}
+              placeholder="e.g. Grace Beauty Studio"
+              style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM + "44", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, marginBottom: 16 }}
+            />
+
+            {inviteLink ? (
+              <div>
+                <div style={{ background: "#F0FDF4", border: "1.5px solid #86EFAC", borderRadius: 10, padding: "12px 14px", marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: "#166534", marginBottom: 6 }}>✓ Invite link ready — share this with the prospect:</div>
+                  <div style={{ fontSize: 11, color: "#166534", wordBreak: "break-all", fontFamily: "monospace", background: WHITE, borderRadius: 6, padding: "8px 10px", marginBottom: 8 }}>{inviteLink}</div>
+                  <button
+                    onClick={function() { navigator.clipboard.writeText(inviteLink); alert("Link copied!"); }}
+                    style={{ width: "100%", background: "#22C55E", color: WHITE, border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 800, fontSize: 13, cursor: "pointer" }}
+                  >
+                    📋 Copy Link
+                  </button>
+                </div>
+                <button
+                  onClick={function() { setInviteLink(""); setInviteEmail(""); setInviteName(""); }}
+                  style={{ width: "100%", background: WHITE, color: GOLD_DIM, border: "1.5px solid " + GOLD_DIM, borderRadius: 10, padding: "10px 0", fontWeight: 700, fontSize: 13, cursor: "pointer", marginBottom: 8 }}
+                >
+                  Generate Another
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={generateInvite}
+                disabled={inviteLoading}
+                style={{ width: "100%", background: GOLD_DIM, color: WHITE, border: "none", borderRadius: 12, padding: "14px 0", fontWeight: 900, fontSize: 14, cursor: "pointer", marginBottom: 10, opacity: inviteLoading ? 0.7 : 1 }}
+              >
+                {inviteLoading ? "Generating..." : "Generate Invite Link →"}
+              </button>
+            )}
+
+            <button
+              onClick={function() { setInviteModal(false); setInviteLink(""); setInviteEmail(""); setInviteName(""); }}
+              style={{ width: "100%", background: WHITE, color: "#888", border: "1.5px solid #ddd", borderRadius: 12, padding: "12px 0", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Payment modal */}
       {paymentModal && (
