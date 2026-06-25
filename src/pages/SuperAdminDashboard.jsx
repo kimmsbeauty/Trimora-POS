@@ -113,6 +113,8 @@ export default function SuperAdminDashboard({ onLogout }) {
       alert("Failed to record payment: " + (err.message || res.status));
     }
   }
+
+  async function suspendSalon(salon, reason) {
     setActionLoading(true);
     var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
     var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/suspend_salon", {
