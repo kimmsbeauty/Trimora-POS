@@ -392,6 +392,12 @@ export default function POSApp({ onLogout, userRole }) {
     window.open(waLink, "_blank");
   }
 
+  async function deleteCustomer(customer) {
+    if (!window.confirm("Delete " + customer.name + "?\n\nThis cannot be undone. Their sales history will be kept but they will be removed from the client list.")) return;
+    await db("DELETE", "customers", null, "?id=eq." + customer.id);
+    setCustomers(function(prev) { return prev.filter(function(c) { return c.id !== customer.id; }); });
+  }
+
   async function completeSale() {
     if (!clientName) return alert("Please enter or select a client");
     if (cart.length === 0) return alert("Cart is empty");
@@ -1238,6 +1244,13 @@ export default function POSApp({ onLogout, userRole }) {
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <div style={{ textAlign: "right" }}><div style={{ fontSize: 13, fontWeight: 800, color: GOLD_DIM }}>{fmt(c.total_spend)}</div><div style={{ fontSize: 10, color: "#aaa" }}>{c.visit_count} visit{c.visit_count !== 1 ? "s" : ""}</div></div>
                       {c.phone && <a href={"https://wa.me/254" + c.phone.replace(/^0/,"").replace(/\D/g,"") + "?text=" + encodeURIComponent("Hi " + c.name + "! 💕 Book: " + window.location.origin + bookingHref)} target="_blank" rel="noreferrer" style={{ background: "#25D366", color: WHITE, borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, textDecoration: "none", flexShrink: 0 }}>📲</a>}
+                      {isAdmin && (
+                        <button
+                          onClick={function() { deleteCustomer(c); }}
+                          style={{ background: "none", border: "1px solid #fca5a5", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, cursor: "pointer", flexShrink: 0, color: RED }}
+                          title="Delete customer"
+                        >🗑</button>
+                      )}
                     </div>
                   </div>
                 </div>
