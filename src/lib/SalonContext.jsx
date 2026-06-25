@@ -58,6 +58,14 @@ export function SalonGate({ mode, children }) {
       if (rows && rows.length > 0) {
         var resolvedSalon = rows[0];
 
+        // Block suspended salons — show suspended screen regardless of mode
+        if (resolvedSalon.suspended) {
+          setSalon(resolvedSalon);
+          setCurrentSalonId(null);
+          setStatus("suspended");
+          return;
+        }
+
         if (mode === "authenticated") {
           var settingsRows = await db("GET", "salon_settings", null, "?salon_id=eq." + encodeURIComponent(resolvedSalon.id) + "&limit=1");
           if (cancelled) return;
@@ -115,6 +123,21 @@ export function SalonGate({ mode, children }) {
         <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", maxWidth: 320 }}>
           This page doesn't exist, or this device doesn't have access to it.
         </div>
+      </div>
+    );
+  }
+
+  if (status === "suspended") {
+    return (
+      <div style={{ minHeight: "100vh", background: "#0A0A0A", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12, fontFamily: "sans-serif", padding: 20, textAlign: "center" }}>
+        <div style={{ fontSize: 48 }}>⛔</div>
+        <div style={{ fontSize: 20, fontWeight: 900, color: "#EF4444" }}>Account Suspended</div>
+        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", maxWidth: 320, lineHeight: 1.6 }}>
+          This salon's account has been suspended. Please contact Trimora Systems to resolve this.
+        </div>
+        <a href="mailto:admin@trimorasystems.com" style={{ marginTop: 8, color: "#C9A84C", fontSize: 13, fontWeight: 700 }}>
+          admin@trimorasystems.com
+        </a>
       </div>
     );
   }
