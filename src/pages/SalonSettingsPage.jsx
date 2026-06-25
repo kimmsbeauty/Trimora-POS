@@ -516,6 +516,54 @@ export default function SalonSettingsPage({ salon, onSettingsUpdated }) {
         <SaveBtn onClick={savePins} saving={pinSaving} saved={pinSaved} disabled={!newStaffPin && !newAdminPin} />
       </div>
 
+      {/* ── SUBSCRIPTION ─────────────────────────────────────────── */}
+      <div style={Object.assign({}, sectionStyle, { background: "#FFFBEB", border: "1.5px solid #FDE68A" })}>
+        <div style={sectionTitleStyle}><span>💳</span> Subscription</div>
+        {salon && salon.subscription_plan ? (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 900, color: DARK, textTransform: "capitalize" }}>
+                  {(salon.subscription_plan || "").replace("_", " ")} Plan
+                </div>
+                <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>
+                  {salon.subscription_status === "lifetime"
+                    ? "✓ Lifetime access — never expires"
+                    : salon.subscription_expires_at
+                      ? (new Date(salon.subscription_expires_at) > new Date()
+                          ? "Expires " + new Date(salon.subscription_expires_at).toLocaleDateString("en-KE", { day: "numeric", month: "long", year: "numeric" })
+                          : "⚠️ Expired " + new Date(salon.subscription_expires_at).toLocaleDateString("en-KE", { day: "numeric", month: "long", year: "numeric" }))
+                      : ""}
+                </div>
+              </div>
+              <div style={{
+                background: salon.subscription_status === "lifetime" ? GOLD_DIM + "22" :
+                            salon.subscription_status === "active"   ? GREEN + "22" :
+                            salon.subscription_status === "grace"    ? AMBER + "22" : RED + "22",
+                color:      salon.subscription_status === "lifetime" ? GOLD_DIM :
+                            salon.subscription_status === "active"   ? GREEN :
+                            salon.subscription_status === "grace"    ? AMBER : RED,
+                borderRadius: 20, padding: "4px 12px",
+                fontSize: 11, fontWeight: 800, textTransform: "uppercase",
+              }}>
+                {salon.subscription_status || "active"}
+              </div>
+            </div>
+            {salon.subscription_grace && (
+              <div style={{ background: "#FEF3C7", borderRadius: 8, padding: "8px 12px", fontSize: 11, color: "#92400E", marginTop: 4 }}>
+                ⏰ Grace period: {salon.subscription_days_overdue} day{salon.subscription_days_overdue !== 1 ? "s" : ""} overdue. Contact us to renew before access is blocked.
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: "#888" }}>No subscription information available.</div>
+        )}
+        <div style={{ marginTop: 12, fontSize: 11, color: "#92400E", lineHeight: 1.5 }}>
+          To renew or upgrade your plan, contact:<br />
+          <a href="mailto:admin@trimorasystems.com" style={{ color: GOLD_DIM, fontWeight: 800 }}>admin@trimorasystems.com</a>
+        </div>
+      </div>
+
       {/* ── SALON INFO (read-only) ────────────────────────────────── */}
       <div style={Object.assign({}, sectionStyle, { background: CREAM })}>
         <div style={sectionTitleStyle}><span>ℹ️</span> Salon Info</div>

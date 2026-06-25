@@ -51,8 +51,13 @@ export default function SuperAdminDashboard({ onLogout }) {
   var [selectedSalon,setSelectedSalon]= useState(null);
   var [loading,      setLoading]      = useState(true);
   var [actionLoading,setActionLoading]= useState(false);
-  var [suspendModal, setSuspendModal] = useState(null); // salon object
+  var [suspendModal, setSuspendModal] = useState(null);
   var [suspendReason,setSuspendReason]= useState("");
+  var [paymentModal, setPaymentModal] = useState(null); // salon object
+  var [payPlan,      setPayPlan]      = useState("monthly");
+  var [payAmount,    setPayAmount]    = useState("");
+  var [payNotes,     setPayNotes]     = useState("");
+  var [paymentSaving,setPaymentSaving]= useState(false);
   var [search,       setSearch]       = useState("");
   var [filter,       setFilter]       = useState("all"); // "all" | "active" | "suspended"
 
@@ -71,7 +76,43 @@ export default function SuperAdminDashboard({ onLogout }) {
     setLoading(false);
   }
 
-  async function suspendSalon(salon, reason) {
+  var PLANS = {
+    monthly:     { label: "Monthly",      price: 1200,  days: 30  },
+    quarterly:   { label: "Quarterly",    price: 3300,  days: 90  },
+    semi_annual: { label: "Semi-Annual",  price: 6000,  days: 180 },
+    annual:      { label: "Annual",       price: 10800, days: 365 },
+    lifetime:    { label: "Lifetime",     price: 38000, days: null },
+  };
+
+  async function recordPayment(salon, plan, amount, notes) {
+    setPaymentSaving(true);
+    var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/record_subscription_payment", {
+      method: "POST",
+      headers: {
+        apikey:         SUPABASE_KEY,
+        Authorization:  "Bearer " + token,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        p_salon_id: salon.id,
+        p_plan:     plan,
+        p_amount:   parseFloat(amount),
+        p_notes:    notes || null,
+      }),
+    });
+    setPaymentSaving(false);
+    if (res.ok) {
+      setPaymentModal(null);
+      setPayPlan("monthly");
+      setPayAmount("");
+      setPayNotes("");
+      await loadData();
+    } else {
+      var err = await res.json().catch(function() { return {}; });
+      alert("Failed to record payment: " + (err.message || res.status));
+    }
+  }
     setActionLoading(true);
     var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
     var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/suspend_salon", {
@@ -157,6 +198,46 @@ export default function SuperAdminDashboard({ onLogout }) {
         </div>
 
         <div style={{ padding: "16px 16px 0" }}>
+          {/* Subscription status */}
+          <div style={{ background: WHITE, borderRadius: 14, padding: "14px 16px", marginBottom: 14, border: "1.5px solid " + GOLD_DIM + "33" }}>
+            <div style={{ fontSize: 12, fontWeight: 900, color: DARK, marginBottom: 10 }}>Subscription</div>
+            {s.subscription_plan ? (
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: DARK, textTransform: "capitalize" }}>
+                    {(s.subscription_plan || "").replace("_", " ")}
+                  </span>
+                  <Badge color={
+                    s.subscription_status === "lifetime" ? GOLD_DIM :
+                    s.subscription_status === "active"   ? GREEN :
+                    s.subscription_status === "grace"    ? AMBER : RED
+                  }>
+                    {s.subscription_status || "unknown"}
+                  </Badge>
+                </div>
+                {s.subscription_expires_at && (
+                  <div style={{ fontSize: 11, color: "#888" }}>
+                    {new Date(s.subscription_expires_at) > new Date()
+                      ? "Expires: " + new Date(s.subscription_expires_at).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })
+                      : "Expired: " + new Date(s.subscription_expires_at).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })
+                    }
+                  </div>
+                )}
+                {s.subscription_status === "lifetime" && (
+                  <div style={{ fontSize: 11, color: GOLD_DIM, fontWeight: 700 }}>✓ Lifetime access — never expires</div>
+                )}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: "#aaa" }}>No subscription recorded yet</div>
+            )}
+            <button
+              onClick={function() { setPaymentModal(s); setPayAmount(String(PLANS["monthly"].price)); }}
+              style={{ width: "100%", background: GOLD_DIM, color: WHITE, border: "none", borderRadius: 10, padding: "12px 0", fontWeight: 900, fontSize: 13, cursor: "pointer", marginTop: 12 }}
+            >
+              💳 Record Payment
+            </button>
+          </div>
+
           {/* Stats grid */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
             <StatCard icon="💰" label="Total Revenue"  value={fmt(s.total_revenue)} />
@@ -326,12 +407,76 @@ export default function SuperAdminDashboard({ onLogout }) {
                 {s.suspended
                   ? <Badge color={RED}>Suspended</Badge>
                   : <Badge color={GREEN}>Active</Badge>}
+                {s.subscription_plan
+                  ? <Badge color={
+                      s.subscription_status === "lifetime" ? GOLD_DIM :
+                      s.subscription_status === "active"   ? GREEN :
+                      s.subscription_status === "grace"    ? AMBER : RED
+                    }>{(s.subscription_plan || "").replace("_", " ")}</Badge>
+                  : <Badge color={"#aaa"}>no plan</Badge>
+                }
                 <span style={{ fontSize: 10, color: "#aaa" }}>→</span>
               </div>
             </div>
           );
         })}
       </div>
+
+      {/* Payment modal */}
+      {paymentModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 2000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div style={{ background: WHITE, borderRadius: "20px 20px 0 0", padding: "24px 20px 32px", width: "100%", maxWidth: 480 }}>
+            <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 4 }}>💳 Record Payment</div>
+            <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>{paymentModal.name}</div>
+
+            <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 6, textTransform: "uppercase" }}>Plan</label>
+            <select
+              value={payPlan}
+              onChange={function(e) {
+                setPayPlan(e.target.value);
+                setPayAmount(String(PLANS[e.target.value].price));
+              }}
+              style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM + "44", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, marginBottom: 12 }}
+            >
+              {Object.entries(PLANS).map(function([key, plan]) {
+                return <option key={key} value={key}>{plan.label} — KES {plan.price.toLocaleString()}{plan.days ? " / " + plan.days + " days" : " (lifetime)"}</option>;
+              })}
+            </select>
+
+            <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 6, textTransform: "uppercase" }}>Amount Paid (KES)</label>
+            <input
+              value={payAmount}
+              onChange={function(e) { setPayAmount(e.target.value); }}
+              placeholder="1200"
+              style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM + "44", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, marginBottom: 12 }}
+            />
+
+            <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 6, textTransform: "uppercase" }}>Notes (optional)</label>
+            <input
+              value={payNotes}
+              onChange={function(e) { setPayNotes(e.target.value); }}
+              placeholder="e.g. M-Pesa ref ABC123"
+              style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM + "44", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, marginBottom: 16 }}
+            />
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <button
+                onClick={function() { recordPayment(paymentModal, payPlan, payAmount, payNotes); }}
+                disabled={paymentSaving || !payAmount}
+                style={{ width: "100%", background: GOLD_DIM, color: WHITE, border: "none", borderRadius: 12, padding: "14px 0", fontWeight: 900, fontSize: 14, cursor: "pointer", opacity: paymentSaving || !payAmount ? 0.6 : 1 }}
+              >
+                {paymentSaving ? "Saving..." : "✓ Confirm Payment"}
+              </button>
+              <button
+                onClick={function() { setPaymentModal(null); setPayPlan("monthly"); setPayAmount(""); setPayNotes(""); }}
+                style={{ width: "100%", background: WHITE, color: "#888", border: "1.5px solid #ddd", borderRadius: 12, padding: "12px 0", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Suspend modal */}
       {suspendModal && (

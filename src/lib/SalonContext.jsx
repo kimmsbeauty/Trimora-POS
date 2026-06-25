@@ -65,6 +65,30 @@ export function SalonGate({ mode, children }) {
           return;
         }
 
+        // Check subscription expiry (only block on POS/authenticated routes)
+        // Public booking page is never blocked — only warn admin inside POS
+        if (mode === "authenticated") {
+          var subStatus    = resolvedSalon.subscription_status;
+          var subExpires   = resolvedSalon.subscription_expires_at;
+          var isLifetime   = subStatus === "lifetime";
+          var hasNoSub     = !subStatus; // new salon, no subscription yet
+
+          if (!isLifetime && !hasNoSub && subStatus !== "active" && subExpires) {
+            var expiresAt  = new Date(subExpires);
+            var now        = new Date();
+            var daysPast   = Math.floor((now - expiresAt) / (1000 * 60 * 60 * 24));
+            // Grace period: 7 days after expiry
+            if (daysPast > 7) {
+              setSalon(resolvedSalon);
+              setCurrentSalonId(null);
+              setStatus("subscription_expired");
+              return;
+            }
+            // Within grace period — let them in but flag it
+            resolvedSalon = Object.assign({}, resolvedSalon, { subscription_grace: true, subscription_days_overdue: daysPast });
+          }
+        }
+
         if (mode === "authenticated") {
           var settingsRows = await db("GET", "salon_settings", null, "?salon_id=eq." + encodeURIComponent(resolvedSalon.id) + "&limit=1");
           if (cancelled) return;
@@ -137,6 +161,22 @@ export function SalonGate({ mode, children }) {
         <a href="mailto:admin@trimorasystems.com" style={{ marginTop: 8, color: "#C9A84C", fontSize: 13, fontWeight: 700 }}>
           admin@trimorasystems.com
         </a>
+      </div>
+    );
+  }
+
+  if (status === "subscription_expired") {
+    return (
+      <div style={{ minHeight: "100vh", background: "#0A0A0A", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12, fontFamily: "sans-serif", padding: 20, textAlign: "center" }}>
+        <div style={{ fontSize: 48 }}>⏰</div>
+        <div style={{ fontSize: 20, fontWeight: 900, color: "#F59E0B" }}>Subscription Expired</div>
+        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", maxWidth: 320, lineHeight: 1.6 }}>
+          Your Trimora POS subscription has expired. Please renew to continue using the system.
+        </div>
+        <a href="mailto:admin@trimorasystems.com" style={{ marginTop: 8, display: "inline-block", background: "#C9A84C", color: "#000", borderRadius: 10, padding: "12px 24px", fontWeight: 900, fontSize: 14, textDecoration: "none" }}>
+          Contact us to Renew
+        </a>
+        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 4 }}>admin@trimorasystems.com</div>
       </div>
     );
   }

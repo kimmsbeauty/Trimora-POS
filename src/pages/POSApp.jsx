@@ -822,6 +822,21 @@ export default function POSApp({ onLogout, userRole }) {
                 onNavigate={function(tab) { setPage(tab); }}
               />
             )}
+
+            {/* Subscription grace period warning — admin only */}
+            {isAdmin && salon && salon.subscription_grace && (
+              <div style={{ background: "#FEF3C7", border: "1.5px solid #F59E0B", borderRadius: 12, padding: "12px 16px", marginBottom: 12, display: "flex", alignItems: "flex-start", gap: 10 }}>
+                <span style={{ fontSize: 20, flexShrink: 0 }}>⏰</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: "#92400E" }}>Subscription Overdue</div>
+                  <div style={{ fontSize: 11, color: "#B45309", marginTop: 2, lineHeight: 1.5 }}>
+                    Your subscription expired {salon.subscription_days_overdue} day{salon.subscription_days_overdue !== 1 ? "s" : ""} ago.
+                    Access will be blocked after the 7-day grace period.
+                    Contact <a href="mailto:admin@trimorasystems.com" style={{ color: "#92400E", fontWeight: 800 }}>admin@trimorasystems.com</a> to renew.
+                  </div>
+                </div>
+              </div>
+            )}
             {/* Customer */}
             <div style={{ marginBottom: 12, position: "relative" }}>
               <div style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Client</div>
