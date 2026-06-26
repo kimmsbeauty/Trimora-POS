@@ -148,11 +148,29 @@ export default function OnboardingPage() {
       }
 
       var rpcData   = await rpcRes.json();
+      // The RPC returns a composite type (salon_id, slug) which Supabase
+      // wraps as [{"complete_salon_onboarding":"(uuid,slug-value)"}]
+      // Parse the composite string to extract the slug.
       var resultRow = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+      var slug_result = null;
 
-      if (!resultRow || !resultRow.slug) {
+      if (resultRow) {
+        // Try direct object first (in case it returns named columns)
+        if (resultRow.slug) {
+          slug_result = resultRow.slug;
+        } else if (resultRow.p_slug) {
+          slug_result = resultRow.p_slug;
+        } else {
+          // Parse composite type string: "(uuid-value,slug-value)"
+          var composite = resultRow.complete_salon_onboarding || Object.values(resultRow)[0] || "";
+          var match = String(composite).match(/^\(([^,]+),(.+)\)$/);
+          if (match) slug_result = match[2].trim();
+        }
+      }
+
+      if (!slug_result) {
         setLoading(false);
-        return setError("Salon was created but redirect failed. Contact support — your salon may already be active.");
+        return setError("Salon was created but redirect failed. Your salon is active — contact support to get your login link. Raw: " + JSON.stringify(rpcData));
       }
 
       // Step 3: Mark invite as used
@@ -164,7 +182,7 @@ export default function OnboardingPage() {
 
       // Step 4: Persist device session and redirect
       persistSession(signupData);
-      window.location.href = "/" + resultRow.slug + "/pos";
+      window.location.href = "/" + slug_result + "/pos";
 
     } catch (e) {
       setLoading(false);
