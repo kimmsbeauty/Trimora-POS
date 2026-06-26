@@ -14,6 +14,7 @@ import LoyaltyBadge from "../components/LoyaltyBadge.jsx";
 import NotificationBell from "../components/NotificationBell.jsx";
 import ShareBookingPanel from "../components/ShareBookingPanel.jsx";
 import TomorrowReminders from "../components/TomorrowReminders.jsx";
+import BirthdayReminders from "../components/BirthdayReminders.jsx";
 import { db, offlineQueue, syncOfflineQueue } from "../lib/db.js";
 import { fmt, todayStr, nowTime } from "../lib/utils.js";
 import { useSalon, fetchPublicSalonBranding } from "../lib/SalonContext";
@@ -96,6 +97,9 @@ export default function POSApp({ onLogout, userRole }) {
   var salesState = useState([]); var sales = salesState[0]; var setSales = salesState[1];
   var postSaleCampaignState = useState(null); var postSaleCampaign = postSaleCampaignState[0]; var setPostSaleCampaign = postSaleCampaignState[1];
   var appointmentCampaignState = useState(null); var appointmentCampaign = appointmentCampaignState[0]; var setAppointmentCampaign = appointmentCampaignState[1];
+  var birthdayCampaignState = useState(null); var birthdayCampaign = birthdayCampaignState[0]; var setBirthdayCampaign = birthdayCampaignState[1];
+  var winbackCampaignState = useState(null); var winbackCampaign = winbackCampaignState[0]; var setWinbackCampaign = winbackCampaignState[1];
+  var winbackSmsStatusState = useState({}); var winbackSmsStatus = winbackSmsStatusState[0]; var setWinbackSmsStatus = winbackSmsStatusState[1];
   var productsState = useState([]); var products = productsState[0]; var setProducts = productsState[1];
   var feedbacksState = useState([]); var feedbacks = feedbacksState[0]; var setFeedbacks = feedbacksState[1];
   var appointmentsState = useState([]); var appointments = appointmentsState[0]; var setAppointments = appointmentsState[1];
@@ -162,6 +166,8 @@ export default function POSApp({ onLogout, userRole }) {
           db("GET", "expenses",  null, "?order=date.desc&limit=200"),
           db("GET", "marketing_campaigns", null, "?type=eq.post_sale&is_active=eq.true&limit=1"),
           db("GET", "marketing_campaigns", null, "?type=eq.appointment_reminder&is_active=eq.true&limit=1"),
+          db("GET", "marketing_campaigns", null, "?type=eq.birthday&is_active=eq.true&limit=1"),
+          db("GET", "marketing_campaigns", null, "?type=eq.winback&is_active=eq.true&limit=1"),
         ]);
         if (results[0]) setSales(results[0]);
         if (results[1] && results[1].length > 0) setProducts(results[1]);
@@ -172,6 +178,8 @@ export default function POSApp({ onLogout, userRole }) {
         if (results[6]) setExpenses(results[6]);
         if (Array.isArray(results[7]) && results[7][0]) setPostSaleCampaign(results[7][0]);
         if (Array.isArray(results[8]) && results[8][0]) setAppointmentCampaign(results[8][0]);
+        if (Array.isArray(results[9]) && results[9][0]) setBirthdayCampaign(results[9][0]);
+        if (Array.isArray(results[10]) && results[10][0]) setWinbackCampaign(results[10][0]);
       } catch (e) {
         console.error("Load error:", e);
         setLoadError(true);
@@ -644,7 +652,38 @@ export default function POSApp({ onLogout, userRole }) {
   });
   var pendingCount      = appointments.filter(function(a) { return a.status === "pending"; }).length;
   var frequentCustomers = customers.filter(function(c) { return c.visit_count >= 4; });
-  var atRiskCustomers   = customers.filter(function(c) { if (!c.last_visit) return false; return (new Date() - new Date(c.last_visit)) / (1000 * 60 * 60 * 24) >= 28; });
+  var winbackThreshold = (winbackCampaign && winbackCampaign.winback_days) || 28;
+  var atRiskCustomers   = customers.filter(function(c) { if (!c.last_visit) return false; return (new Date() - new Date(c.last_visit)) / (1000 * 60 * 60 * 24) >= winbackThreshold; });
+
+  // Manual, operator-triggered winback SMS via the marketing engine — same
+  // pattern as the other campaign types. Dormant until a winback campaign
+  // is created and switched on.
+  async function sendWinbackSms(customer) {
+    if (!winbackCampaign || !customer || !customer.id) return;
+    var salonId = salon && salon.id;
+    if (!salonId) return;
+    setWinbackSmsStatus(function(p) { return Object.assign({}, p, { [customer.id]: "sending" }); });
+    try {
+      var res = await fetch(SUPABASE_URL + "/functions/v1/send-marketing-message", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: SUPABASE_KEY,
+          Authorization: "Bearer " + SUPABASE_KEY,
+        },
+        body: JSON.stringify({
+          campaign_id: winbackCampaign.id,
+          customer_id: customer.id,
+          salon_id: salonId,
+        }),
+      });
+      var data = await res.json().catch(function() { return {}; });
+      setWinbackSmsStatus(function(p) { return Object.assign({}, p, { [customer.id]: (data && data.success) ? "sent" : "error" }); });
+    } catch (e) {
+      console.error("Winback SMS error:", e);
+      setWinbackSmsStatus(function(p) { return Object.assign({}, p, { [customer.id]: "error" }); });
+    }
+  }
 
   var ALL_NAV = [
     { id: "pos",          label: "POS",      icon: "🛒", adminOnly: false },
@@ -1151,6 +1190,8 @@ export default function POSApp({ onLogout, userRole }) {
 
             <TomorrowReminders appointments={appointments} salonName={salonName} customers={customers} salon={salon} appointmentCampaign={appointmentCampaign} />
 
+            <BirthdayReminders customers={customers} salonName={salonName} salon={salon} birthdayCampaign={birthdayCampaign} />
+
             {!calView && (
               <div style={{ background: WHITE, borderRadius: 12, padding: "12px 14px", marginBottom: 14, border: "1px solid " + GOLD_DIM + "44" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -1237,7 +1278,7 @@ export default function POSApp({ onLogout, userRole }) {
         {page === "customers" && (
           <div>
             <div style={{ fontWeight: 900, fontSize: 18, color: DARK, marginBottom: 4 }}>Clients</div>
-            <div style={{ fontSize: 12, color: "#888", marginBottom: 14 }}>{customers.length} total · {frequentCustomers.length} regulars · {atRiskCustomers.length} not seen in 28+ days</div>
+            <div style={{ fontSize: 12, color: "#888", marginBottom: 14 }}>{customers.length} total · {frequentCustomers.length} regulars · {atRiskCustomers.length} not seen in {winbackThreshold}+ days</div>
 
             {/* Loyalty tier summary */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
@@ -1263,12 +1304,31 @@ export default function POSApp({ onLogout, userRole }) {
             </div>
             {atRiskCustomers.length > 0 && (
               <div style={{ background: "#FFF5F5", borderRadius: 12, padding: 14, marginBottom: 14, border: "1.5px solid #FEE2E2" }}>
-                <div style={{ fontWeight: 800, fontSize: 13, color: RED, marginBottom: 10 }}>⚠️ Not seen in 28+ days</div>
+                <div style={{ fontWeight: 800, fontSize: 13, color: RED, marginBottom: 10 }}>⚠️ Not seen in {winbackThreshold}+ days</div>
                 {atRiskCustomers.map(function(c) {
+                  var wbStatus = winbackSmsStatus[c.id] || "idle";
+                  var canSendWinbackSms = !!(winbackCampaign && c.id && !c.marketing_opt_out);
                   return (
                     <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, padding: "8px 10px", background: WHITE, borderRadius: 8, border: "1px solid #FEE2E2" }}>
                       <div><div style={{ fontSize: 13, fontWeight: 700, color: DARK }}>{c.name}</div><div style={{ fontSize: 11, color: "#888" }}>{c.phone} · Last: {c.last_visit || "unknown"}</div></div>
-                      {c.phone && <a href={"https://wa.me/254" + c.phone.replace(/^0/,"").replace(/\D/g,"") + "?text=" + encodeURIComponent("Hi " + c.name + "! We miss you at " + salonName + " 💕\nBook: " + window.location.origin + bookingHref)} target="_blank" rel="noreferrer" style={{ background: "#25D366", color: WHITE, borderRadius: 20, padding: "7px 12px", fontSize: 11, fontWeight: 800, textDecoration: "none", whiteSpace: "nowrap" }}>📲 WhatsApp</a>}
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                        {canSendWinbackSms && (
+                          <button
+                            onClick={function() { sendWinbackSms(c); }}
+                            disabled={wbStatus === "sending" || wbStatus === "sent"}
+                            title={wbStatus === "error" ? "Failed — tap to retry" : "Send winback SMS"}
+                            style={{
+                              background: wbStatus === "sent" ? "#D1FAE5" : wbStatus === "error" ? "#FEE2E2" : GOLD,
+                              color: wbStatus === "sent" ? "#065F46" : wbStatus === "error" ? "#991B1B" : BLACK,
+                              border: "none", borderRadius: 20, padding: "7px 12px", fontSize: 11, fontWeight: 800,
+                              cursor: (wbStatus === "sending" || wbStatus === "sent") ? "default" : "pointer", whiteSpace: "nowrap",
+                            }}
+                          >
+                            {wbStatus === "sent" ? "✅ Sent" : wbStatus === "error" ? "⚠️ Retry" : wbStatus === "sending" ? "Sending…" : "📩 SMS"}
+                          </button>
+                        )}
+                        {c.phone && <a href={"https://wa.me/254" + c.phone.replace(/^0/,"").replace(/\D/g,"") + "?text=" + encodeURIComponent("Hi " + c.name + "! We miss you at " + salonName + " 💕\nBook: " + window.location.origin + bookingHref)} target="_blank" rel="noreferrer" style={{ background: "#25D366", color: WHITE, borderRadius: 20, padding: "7px 12px", fontSize: 11, fontWeight: 800, textDecoration: "none", whiteSpace: "nowrap" }}>📲 WhatsApp</a>}
+                      </div>
                     </div>
                   );
                 })}
