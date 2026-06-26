@@ -950,7 +950,7 @@ export default function POSApp({ onLogout, userRole }) {
       <div style={{ background: darkMode ? "#0A0A00" : BLACK, borderBottom: "1px solid " + GOLD_DIM, display: "flex", flexShrink: 0, overflowX: "auto", WebkitOverflowScrolling: "touch", scrollbarWidth: "none", msOverflowStyle: "none" }}>
         {NAV.map(function(n) {
           return (
-            <button key={n.id} onClick={function() { setPage(n.id); }} style={{ flexShrink: 0, minWidth: 60, border: "none", background: "none", padding: "8px 6px", cursor: "pointer", borderBottom: "3px solid " + (page === n.id ? GOLD : "transparent"), color: page === n.id ? GOLD_LT : "rgba(255,255,255,0.35)", transition: "all 0.15s", position: "relative" }}>
+            <button key={n.id} onClick={function() { setPage(n.id); }} style={{ flex: 1, minWidth: 60, border: "none", background: "none", padding: "8px 6px", cursor: "pointer", borderBottom: "3px solid " + (page === n.id ? GOLD : "transparent"), color: page === n.id ? GOLD_LT : "rgba(255,255,255,0.35)", transition: "all 0.15s", position: "relative" }}>
               <div style={{ fontSize: 15 }}>{n.icon}</div>
               <div style={{ fontSize: 8, fontWeight: 700, marginTop: 1, letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{n.label}</div>
               {n.badge > 0 && <div style={{ position: "absolute", top: 4, right: "10%", background: RED, color: WHITE, borderRadius: "50%", width: 14, height: 14, fontSize: 8, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>{n.badge}</div>}
