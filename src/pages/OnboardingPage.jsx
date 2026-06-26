@@ -118,7 +118,13 @@ export default function OnboardingPage() {
       }
 
       // Step 2: Create salon via RPC
-      var slug = await generateUniqueSlug(salonName);
+      var slug;
+      try {
+        slug = await generateUniqueSlug(salonName);
+      } catch (slugErr) {
+        setLoading(false);
+        return setError("Failed to generate salon URL. Please try again. (" + slugErr.message + ")");
+      }
 
       var rpcRes = await fetch(SUPABASE_URL + "/rest/v1/rpc/complete_salon_onboarding", {
         method: "POST",
@@ -136,12 +142,18 @@ export default function OnboardingPage() {
       });
 
       if (!rpcRes.ok) {
+        var rpcErr = await rpcRes.json().catch(function() { return {}; });
         setLoading(false);
-        return setError("Your account was created but salon setup failed. Please contact support.");
+        return setError("Salon setup failed: " + (rpcErr.message || rpcErr.hint || rpcErr.details || JSON.stringify(rpcErr) || "Unknown error. Contact support."));
       }
 
       var rpcData   = await rpcRes.json();
       var resultRow = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+
+      if (!resultRow || !resultRow.slug) {
+        setLoading(false);
+        return setError("Salon was created but redirect failed. Contact support — your salon may already be active.");
+      }
 
       // Step 3: Mark invite as used
       await fetch(SUPABASE_URL + "/rest/v1/rpc/consume_invite", {
