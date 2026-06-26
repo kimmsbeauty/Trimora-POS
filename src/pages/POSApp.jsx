@@ -859,7 +859,6 @@ export default function POSApp({ onLogout, userRole }) {
           );
         })}
       </div>
-      </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: 16, background: BG }}>
 
