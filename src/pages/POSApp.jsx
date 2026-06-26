@@ -95,6 +95,7 @@ export default function POSApp({ onLogout, userRole }) {
 
   var salesState = useState([]); var sales = salesState[0]; var setSales = salesState[1];
   var postSaleCampaignState = useState(null); var postSaleCampaign = postSaleCampaignState[0]; var setPostSaleCampaign = postSaleCampaignState[1];
+  var appointmentCampaignState = useState(null); var appointmentCampaign = appointmentCampaignState[0]; var setAppointmentCampaign = appointmentCampaignState[1];
   var productsState = useState([]); var products = productsState[0]; var setProducts = productsState[1];
   var feedbacksState = useState([]); var feedbacks = feedbacksState[0]; var setFeedbacks = feedbacksState[1];
   var appointmentsState = useState([]); var appointments = appointmentsState[0]; var setAppointments = appointmentsState[1];
@@ -160,6 +161,7 @@ export default function POSApp({ onLogout, userRole }) {
           db("GET", "services",  null, "?active=eq.true&order=cat.asc,name.asc"),
           db("GET", "expenses",  null, "?order=date.desc&limit=200"),
           db("GET", "marketing_campaigns", null, "?type=eq.post_sale&is_active=eq.true&limit=1"),
+          db("GET", "marketing_campaigns", null, "?type=eq.appointment_reminder&is_active=eq.true&limit=1"),
         ]);
         if (results[0]) setSales(results[0]);
         if (results[1] && results[1].length > 0) setProducts(results[1]);
@@ -169,6 +171,7 @@ export default function POSApp({ onLogout, userRole }) {
         if (Array.isArray(results[5])) setServicesList(results[5]);
         if (results[6]) setExpenses(results[6]);
         if (Array.isArray(results[7]) && results[7][0]) setPostSaleCampaign(results[7][0]);
+        if (Array.isArray(results[8]) && results[8][0]) setAppointmentCampaign(results[8][0]);
       } catch (e) {
         console.error("Load error:", e);
         setLoadError(true);
@@ -1146,7 +1149,7 @@ export default function POSApp({ onLogout, userRole }) {
               </div>
             </div>
 
-            <TomorrowReminders appointments={appointments} salonName={salonName} />
+            <TomorrowReminders appointments={appointments} salonName={salonName} customers={customers} salon={salon} appointmentCampaign={appointmentCampaign} />
 
             {!calView && (
               <div style={{ background: WHITE, borderRadius: 12, padding: "12px 14px", marginBottom: 14, border: "1px solid " + GOLD_DIM + "44" }}>
