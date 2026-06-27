@@ -124,6 +124,7 @@ export default function SalonSettingsPage({ salon, onSettingsUpdated }) {
   var [prefSaving, setPrefSaving] = useState(false);
   var [prefSaved,  setPrefSaved]  = useState(false);
   var [prefError,  setPrefError]  = useState("");
+  var [selectedPlan, setSelectedPlan] = useState("");
 
   // Reset saved state after 3 seconds
   function autoResetSaved(setter) {
@@ -519,9 +520,11 @@ export default function SalonSettingsPage({ salon, onSettingsUpdated }) {
       {/* ── SUBSCRIPTION ─────────────────────────────────────────── */}
       <div style={Object.assign({}, sectionStyle, { background: "#FFFBEB", border: "1.5px solid #FDE68A" })}>
         <div style={sectionTitleStyle}><span>💳</span> Subscription</div>
+
+        {/* Current plan */}
         {salon && salon.subscription_plan ? (
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 900, color: DARK, textTransform: "capitalize" }}>
                   {(salon.subscription_plan || "").replace("_", " ")} Plan
@@ -550,17 +553,77 @@ export default function SalonSettingsPage({ salon, onSettingsUpdated }) {
               </div>
             </div>
             {salon.subscription_grace && (
-              <div style={{ background: "#FEF3C7", borderRadius: 8, padding: "8px 12px", fontSize: 11, color: "#92400E", marginTop: 4 }}>
-                ⏰ Grace period: {salon.subscription_days_overdue} day{salon.subscription_days_overdue !== 1 ? "s" : ""} overdue. Contact us to renew before access is blocked.
+              <div style={{ background: "#FEF3C7", borderRadius: 8, padding: "8px 12px", fontSize: 11, color: "#92400E", marginTop: 8 }}>
+                ⏰ Grace period: {salon.subscription_days_overdue} day{salon.subscription_days_overdue !== 1 ? "s" : ""} overdue.
               </div>
             )}
           </div>
         ) : (
-          <div style={{ fontSize: 12, color: "#888" }}>No subscription information available.</div>
+          <div style={{ fontSize: 12, color: "#888", marginBottom: 14 }}>No active subscription. Choose a plan below to get started.</div>
         )}
+
+        {/* Plan selector */}
+        {salon && salon.subscription_status !== "lifetime" && (
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: "#92400E", textTransform: "uppercase", marginBottom: 8 }}>
+              {salon.subscription_plan ? "Renew or Upgrade" : "Choose a Plan"}
+            </div>
+            {[
+              { key: "monthly",     label: "Monthly",     price: 1200,  period: "30 days",   save: "" },
+              { key: "quarterly",   label: "Quarterly",   price: 3300,  period: "90 days",   save: "Save 8%" },
+              { key: "semi_annual", label: "Semi-Annual", price: 6000,  period: "180 days",  save: "Save 17%" },
+              { key: "annual",      label: "Annual",      price: 10800, period: "365 days",  save: "Save 25%" },
+              { key: "lifetime",    label: "Lifetime",    price: 38000, period: "Forever",   save: "One-time" },
+            ].map(function(plan) {
+              return (
+                <div key={plan.key}
+                  onClick={function() { setSelectedPlan(plan.key === selectedPlan ? "" : plan.key); }}
+                  style={{
+                    background: selectedPlan === plan.key ? GOLD_DIM + "11" : WHITE,
+                    border: "1.5px solid " + (selectedPlan === plan.key ? GOLD_DIM : "#E5E7EB"),
+                    borderRadius: 10, padding: "10px 14px", marginBottom: 8,
+                    cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center",
+                  }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: DARK }}>{plan.label}</div>
+                    <div style={{ fontSize: 11, color: "#888" }}>{plan.period}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 14, fontWeight: 900, color: GOLD_DIM }}>KES {plan.price.toLocaleString()}</div>
+                    {plan.save && <div style={{ fontSize: 10, color: GREEN, fontWeight: 700 }}>{plan.save}</div>}
+                  </div>
+                </div>
+              );
+            })}
+
+            {selectedPlan && (
+              <div style={{ background: "#F0FDF4", border: "1.5px solid #86EFAC", borderRadius: 12, padding: "14px", marginTop: 6 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: "#166534", marginBottom: 8 }}>
+                  Pay via M-Pesa to activate
+                </div>
+                <div style={{ fontSize: 12, color: "#166534", marginBottom: 4 }}>
+                  📱 <b>Lipa na M-Pesa → Buy Goods</b>
+                </div>
+                <div style={{ fontSize: 12, color: "#166534", marginBottom: 4 }}>
+                  Till Number: <b style={{ fontSize: 14 }}>— Contact admin —</b>
+                </div>
+                <div style={{ fontSize: 12, color: "#166534", marginBottom: 10 }}>
+                  Amount: <b>KES {[{ key: "monthly", price: 1200 }, { key: "quarterly", price: 3300 }, { key: "semi_annual", price: 6000 }, { key: "annual", price: 10800 }, { key: "lifetime", price: 38000 }].find(function(p) { return p.key === selectedPlan; })?.price.toLocaleString()}</b>
+                </div>
+                <div style={{ fontSize: 11, color: "#888", lineHeight: 1.6, marginBottom: 10 }}>
+                  After payment, send your M-Pesa confirmation SMS screenshot to <b>admin@trimorasystems.com</b> or WhatsApp us. We'll activate your subscription within 2 hours.
+                </div>
+                <a href="mailto:admin@trimorasystems.com?subject=Subscription Payment — " + (salon && salon.name) + "&body=Hi Trimora Team,%0D%0A%0D%0AI have made a payment for the " + selectedPlan.replace("_", " ") + " plan.%0D%0A%0D%0ASalon: " + (salon && salon.name) + "%0D%0APlan: " + selectedPlan.replace("_", " ") + "%0D%0A%0D%0APlease find my M-Pesa confirmation attached.%0D%0A%0D%0AThank you."
+                  style={{ display: "block", background: GOLD_DIM, color: WHITE, borderRadius: 10, padding: "11px 0", fontWeight: 900, fontSize: 13, textAlign: "center", textDecoration: "none" }}>
+                  📧 Notify Trimora of Payment
+                </a>
+              </div>
+            )}
+          </div>
+        )}
+
         <div style={{ marginTop: 12, fontSize: 11, color: "#92400E", lineHeight: 1.5 }}>
-          To renew or upgrade your plan, contact:<br />
-          <a href="mailto:admin@trimorasystems.com" style={{ color: GOLD_DIM, fontWeight: 800 }}>admin@trimorasystems.com</a>
+          Questions? Contact: <a href="mailto:admin@trimorasystems.com" style={{ color: GOLD_DIM, fontWeight: 800 }}>admin@trimorasystems.com</a>
         </div>
       </div>
 

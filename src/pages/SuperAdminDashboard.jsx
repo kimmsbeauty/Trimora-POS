@@ -63,6 +63,14 @@ export default function SuperAdminDashboard({ onLogout }) {
   var [inviteName,   setInviteName]   = useState("");
   var [inviteLink,   setInviteLink]   = useState("");
   var [inviteLoading,setInviteLoading]= useState(false);
+  var [manualModal,  setManualModal]  = useState(false);
+  var [manualName,   setManualName]   = useState("");
+  var [manualEmail,  setManualEmail]  = useState("");
+  var [manualPass,   setManualPass]   = useState("");
+  var [manualStaff,  setManualStaff]  = useState("");
+  var [manualAdmin,  setManualAdmin]  = useState("");
+  var [manualLoading,setManualLoading]= useState(false);
+  var [manualDone,   setManualDone]   = useState("");
   var [search,       setSearch]       = useState("");
   var [filter,       setFilter]       = useState("all"); // "all" | "active" | "suspended"
 
@@ -116,6 +124,98 @@ export default function SuperAdminDashboard({ onLogout }) {
     } else {
       var err = await res.json().catch(function() { return {}; });
       alert("Failed to record payment: " + (err.message || res.status));
+    }
+  }
+
+  async function manualOnboard() {
+    if (!manualName || !manualEmail || !manualPass || !manualStaff || !manualAdmin) {
+      return alert("Please fill in all fields.");
+    }
+    if (manualStaff === manualAdmin) return alert("Staff and admin PINs must be different.");
+    if (!/^\d{4,6}$/.test(manualStaff) || !/^\d{4,6}$/.test(manualAdmin)) {
+      return alert("PINs must be 4–6 digits.");
+    }
+    setManualLoading(true);
+    setManualDone("");
+
+    try {
+      var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+
+      // Step 1: Create Auth user via Supabase Admin API
+      var signupRes = await fetch(SUPABASE_URL + "/auth/v1/admin/users", {
+        method: "POST",
+        headers: {
+          apikey:         SUPABASE_KEY,
+          Authorization:  "Bearer " + token,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email:              manualEmail.trim(),
+          password:           manualPass,
+          email_confirm:      true,
+        }),
+      });
+
+      var signupData = await signupRes.json();
+
+      if (!signupRes.ok) {
+        setManualLoading(false);
+        return alert("Failed to create user: " + (signupData.msg || signupData.error || JSON.stringify(signupData)));
+      }
+
+      var userToken = signupData.access_token;
+
+      // If admin API doesn't return a token, sign in as the new user
+      if (!userToken) {
+        var signinRes = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=password", {
+          method: "POST",
+          headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify({ email: manualEmail.trim(), password: manualPass }),
+        });
+        var signinData = await signinRes.json();
+        userToken = signinData.access_token;
+      }
+
+      if (!userToken) {
+        setManualLoading(false);
+        return alert("User created but could not get session token. Try invite link instead.");
+      }
+
+      // Step 2: Generate slug
+      var base = manualName.toLowerCase().replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-");
+      var slug = base;
+
+      // Step 3: Call complete_salon_onboarding
+      var rpcRes = await fetch(SUPABASE_URL + "/rest/v1/rpc/complete_salon_onboarding", {
+        method: "POST",
+        headers: {
+          apikey:          SUPABASE_KEY,
+          Authorization:   "Bearer " + userToken,
+          "Content-Type":  "application/json",
+        },
+        body: JSON.stringify({
+          p_salon_name: manualName.trim(),
+          p_slug:       slug,
+          p_staff_pin:  manualStaff,
+          p_admin_pin:  manualAdmin,
+        }),
+      });
+
+      if (!rpcRes.ok) {
+        var rpcErr = await rpcRes.json().catch(function() { return {}; });
+        setManualLoading(false);
+        return alert("Salon setup failed: " + (rpcErr.message || JSON.stringify(rpcErr)));
+      }
+
+      setManualLoading(false);
+      setManualDone("✅ " + manualName + " onboarded successfully! POS: /" + slug + "/pos");
+      setManualName(""); setManualEmail(""); setManualPass("");
+      setManualStaff(""); setManualAdmin("");
+      await loadData();
+
+    } catch (e) {
+      setManualLoading(false);
+      alert("Error: " + e.message);
     }
   }
 
@@ -360,6 +460,12 @@ export default function SuperAdminDashboard({ onLogout }) {
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button
+              onClick={function() { setManualModal(true); setManualDone(""); }}
+              style={{ background: "rgba(255,255,255,0.1)", border: "1px solid " + GOLD_DIM + "44", color: WHITE, borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer", fontWeight: 800 }}
+            >
+              + Manual
+            </button>
+            <button
               onClick={function() { setInviteModal(true); setInviteLink(""); setInviteEmail(""); setInviteName(""); }}
               style={{ background: GOLD_DIM, border: "none", color: BLACK, borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer", fontWeight: 800 }}
             >
@@ -462,6 +568,60 @@ export default function SuperAdminDashboard({ onLogout }) {
           );
         })}
       </div>
+
+      {/* Manual Onboard modal */}
+      {manualModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 2000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div style={{ background: WHITE, borderRadius: "20px 20px 0 0", padding: "24px 20px 32px", width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}>
+            <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 4 }}>🏪 Manual Onboarding</div>
+            <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>Create a salon directly without an invite link.</div>
+
+            {[
+              ["Salon Name", manualName, setManualName, "text", "e.g. Grace Beauty Studio"],
+              ["Owner Email", manualEmail, setManualEmail, "email", "owner@salon.com"],
+              ["Temporary Password", manualPass, setManualPass, "password", "Min 6 characters"],
+            ].map(function(field) {
+              return (
+                <div key={field[0]} style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 5, textTransform: "uppercase" }}>{field[0]}</label>
+                  <input type={field[3]} value={field[1]} onChange={function(e) { field[2](e.target.value); }} placeholder={field[4]}
+                    style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM + "44", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK }} />
+                </div>
+              );
+            })}
+
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 5, textTransform: "uppercase" }}>Staff PIN</label>
+                <input value={manualStaff} onChange={function(e) { setManualStaff(e.target.value.replace(/\D/g, "").slice(0, 6)); }} placeholder="4–6 digits" inputMode="numeric" maxLength={6}
+                  style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM + "44", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, textAlign: "center" }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 5, textTransform: "uppercase" }}>Admin PIN</label>
+                <input value={manualAdmin} onChange={function(e) { setManualAdmin(e.target.value.replace(/\D/g, "").slice(0, 6)); }} placeholder="4–6 digits" inputMode="numeric" maxLength={6}
+                  style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM + "44", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, textAlign: "center" }} />
+              </div>
+            </div>
+
+            {manualDone && (
+              <div style={{ background: "#F0FDF4", border: "1.5px solid #86EFAC", borderRadius: 10, padding: "12px 14px", marginBottom: 12, fontSize: 13, color: "#166534", fontWeight: 700 }}>
+                {manualDone}
+              </div>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <button onClick={manualOnboard} disabled={manualLoading}
+                style={{ width: "100%", background: DARK, color: WHITE, border: "none", borderRadius: 12, padding: "14px 0", fontWeight: 900, fontSize: 14, cursor: "pointer", opacity: manualLoading ? 0.7 : 1 }}>
+                {manualLoading ? "Creating salon..." : "🏪 Create Salon"}
+              </button>
+              <button onClick={function() { setManualModal(false); setManualDone(""); }}
+                style={{ width: "100%", background: WHITE, color: "#888", border: "1.5px solid #ddd", borderRadius: 12, padding: "12px 0", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Invite modal */}
       {inviteModal && (
