@@ -302,18 +302,18 @@ export default function OnboardingPage() {
           </button>
         </div>
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 8, width: "100%" }}>
           <input
             placeholder="Staff PIN" value={staffPin} maxLength={6} inputMode="numeric"
             onChange={function(e) { setStaffPin(e.target.value.replace(/\D/g, "")); setError(""); }}
             disabled={loading}
-            style={{ flex: 1, borderRadius: 10, border: "1.5px solid " + GOLD_DIM, background: "rgba(255,255,255,0.06)", padding: "12px 14px", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: WHITE, textAlign: "center" }}
+            style={{ flex: 1, minWidth: 0, borderRadius: 10, border: "1.5px solid " + GOLD_DIM, background: "rgba(255,255,255,0.06)", padding: "12px 8px", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: WHITE, textAlign: "center" }}
           />
           <input
             placeholder="Admin PIN" value={adminPin} maxLength={6} inputMode="numeric"
             onChange={function(e) { setAdminPin(e.target.value.replace(/\D/g, "")); setError(""); }}
             disabled={loading}
-            style={{ flex: 1, borderRadius: 10, border: "1.5px solid " + GOLD_DIM, background: "rgba(255,255,255,0.06)", padding: "12px 14px", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: WHITE, textAlign: "center" }}
+            style={{ flex: 1, minWidth: 0, borderRadius: 10, border: "1.5px solid " + GOLD_DIM, background: "rgba(255,255,255,0.06)", padding: "12px 8px", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: WHITE, textAlign: "center" }}
           />
         </div>
         <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 14, textAlign: "left" }}>
