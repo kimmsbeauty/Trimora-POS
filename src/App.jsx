@@ -7,6 +7,8 @@ import SalonBrandmark from "./components/SalonBrandmark";
 import LoginPage from "./pages/LoginPage";
 import RatingPage from "./pages/RatingPage";
 import DeviceLoginPage from "./pages/DeviceLoginPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import SuperAdminGate from "./pages/SuperAdminGate";
 import OnboardingPage from "./pages/OnboardingPage";
 import { getDeviceLoginStatus } from "./lib/deviceAuth";
@@ -71,8 +73,11 @@ export default function App() {
         <Route path="/booking"     element={<BookingPage />} />
         <Route path="/pos"         element={<DeviceGate><StaffRoute /></DeviceGate>} />
         <Route path="/rate/:token" element={<RatingPage />} />
-        <Route path="/onboard"      element={<OnboardingPage />} />
-        <Route path="/superadmin"   element={<SuperAdminGate />} />
+        <Route path="/onboard"                element={<OnboardingPage />} />
+        <Route path="/superadmin"             element={<SuperAdminGate />} />
+        <Route path="/reset-password"         element={<ResetPasswordPage />} />
+        <Route path="/:slug/forgot-password"  element={<ForgotPasswordPage />} />
+        <Route path="/forgot-password"        element={<ForgotPasswordPage />} />
 
         <Route path="/:slug/booking" element={<SalonGate mode="public"><BookingPage /></SalonGate>} />
         <Route path="/:slug/rate/:token" element={<SalonGate mode="public"><RatingPage /></SalonGate>} />

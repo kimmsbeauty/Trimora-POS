@@ -127,6 +127,13 @@ export default function DeviceLoginPage({ onSuccess, reauth }) {
         <GoldBtn onClick={handleLogin} disabled={loading} style={{ width: "100%", marginTop: 8 }}>
           {loading ? "Signing in..." : "Sign In →"}
         </GoldBtn>
+
+        <a
+          href={(slug ? "/" + slug : "") + "/forgot-password"}
+          style={{ display: "block", marginTop: 14, fontSize: 12, color: "rgba(255,255,255,0.3)", fontWeight: 700, textDecoration: "none" }}
+        >
+          Forgot password?
+        </a>
       </div>
     </div>
   );
