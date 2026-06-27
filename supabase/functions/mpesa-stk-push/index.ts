@@ -53,6 +53,38 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    // This client uses the service role key, which bypasses RLS entirely -
+    // suspension must be checked explicitly here, RLS won't catch it.
+    const { data: salonRow } = await supabase
+      .from("salons")
+      .select("suspended")
+      .eq("id", salon_id)
+      .single();
+
+    if (salonRow && salonRow.suspended) {
+      return new Response(
+        JSON.stringify({ error: "This salon's account is currently suspended." }),
+        { status: 403, headers: { ...CORS, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Basic abuse guard: cap STK pushes to the same phone number, since
+    // each one is an unwanted payment prompt on someone's real phone if
+    // misused, separate from any cost concern.
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const { count: recentPushCount } = await supabase
+      .from("salon_mpesa_payments")
+      .select("*", { count: "exact", head: true })
+      .eq("phone", cleanPhone)
+      .gte("created_at", tenMinutesAgo);
+
+    if ((recentPushCount || 0) >= 5) {
+      return new Response(
+        JSON.stringify({ error: "Too many payment requests to this number recently. Please wait a few minutes and try again." }),
+        { status: 429, headers: { ...CORS, "Content-Type": "application/json" } }
+      );
+    }
+
     // Load this salon's Daraja credentials
     const { data: config, error: configError } = await supabase
       .from("salon_mpesa_config")
