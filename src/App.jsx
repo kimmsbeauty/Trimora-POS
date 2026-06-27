@@ -15,7 +15,16 @@ import { getDeviceLoginStatus } from "./lib/deviceAuth";
 import { SalonGate } from "./lib/SalonContext";
 
 function RedirectToBooking() {
-  useEffect(function() { window.location.href = "/booking"; }, []);
+  useEffect(function() {
+    // Supabase password reset redirects to the Site URL with the token in the hash.
+    // Detect it here and forward to the reset-password page.
+    var hash = window.location.hash;
+    if (hash && hash.includes("type=recovery") && hash.includes("access_token")) {
+      window.location.href = "/reset-password" + hash;
+      return;
+    }
+    window.location.href = "/booking";
+  }, []);
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#0A0A0A 0%,#1A1400 100%)", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
       <SalonBrandmark salon={null} size="md" />
