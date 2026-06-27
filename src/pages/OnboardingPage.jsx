@@ -44,6 +44,7 @@ export default function OnboardingPage() {
   var [fatalError, setFatalError] = useState("");
   var [loading,      setLoading]      = useState(false);
   var [needsConfirm, setNeedsConfirm] = useState(false);
+  var [error,        setError]        = useState("");
 
   // ── Validate token on mount ──────────────────────────────────────
   useEffect(function() {
