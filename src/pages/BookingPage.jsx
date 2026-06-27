@@ -100,12 +100,15 @@ export default function BookingPage() {
   }
 
   if (done) {
-    // Phone number here (254113828280) is the salon's own WhatsApp
-    // contact line — deferred to Phase 2.5 along with the M-Pesa till
-    // number, same decision, not touched in this step.
     const waMessage = encodeURIComponent(
       `✂ ${salonName}\n\nHi ${sel.name}! Your booking is confirmed 💕\n\nService: ${sel.service?.name}\nStylist: ${sel.stylist || "Any available"}\nDate: ${sel.date}\nTime: ${sel.time}\nPrice: KES ${sel.service?.price?.toLocaleString()}\nPayment: ${paymentStatus === "paid" ? "✅ Paid via M-Pesa" : "Pay at salon"}\n\nWe look forward to seeing you!`
     );
+
+    // Owner notification message — sent TO the salon
+    const ownerMessage = encodeURIComponent(
+      `📅 New Booking — ${salonName}\n\nClient: ${sel.name}${sel.phone ? " (" + sel.phone + ")" : ""}\nService: ${sel.service?.name}\nStylist: ${sel.stylist || "Any available"}\nDate: ${sel.date} at ${sel.time}\nPrice: KES ${sel.service?.price?.toLocaleString()}\nPayment: ${paymentStatus === "paid" ? "✅ Paid via M-Pesa" : "Pay at salon"}`
+    );
+
     return (
       <div style={{ minHeight: "100vh", background: `linear-gradient(160deg,${BLACK} 0%,${secondary} 100%)`, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
         <div style={{ background: "rgba(255,255,255,0.05)", border: `1.5px solid ${primaryDim}`, borderRadius: 20, padding: 36, maxWidth: 380, width: "100%", textAlign: "center" }}>
@@ -132,6 +135,15 @@ export default function BookingPage() {
             style={{ display: "block", background: "#25D366", color: WHITE, borderRadius: 12, padding: "13px 0", fontWeight: 800, fontSize: 15, textDecoration: "none", marginBottom: 10 }}>
             📲 Message us on WhatsApp
           </a>}
+
+          {/* Owner notification — opens on salon's phone automatically */}
+          {contactPhone && (
+            <a href={`https://wa.me/${contactPhone}?text=${ownerMessage}`} target="_blank" rel="noreferrer"
+              style={{ display: "block", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", borderRadius: 10, padding: "9px 0", fontWeight: 700, fontSize: 11, textDecoration: "none", marginBottom: 14 }}>
+              📩 Send booking details to salon
+            </a>
+          )}
+
           <button onClick={() => { setSel({ service: null, stylist: null, date: "", time: "", name: "", phone: "" }); setStep(1); setDone(false); setPaymentStatus(null); setSavedBooking(null); }}
             style={{ background: "transparent", border: `1px solid ${primaryDim}`, borderRadius: 10, padding: "10px 24px", fontWeight: 700, fontSize: 13, cursor: "pointer", color: "rgba(255,255,255,0.5)" }}>
             Book another

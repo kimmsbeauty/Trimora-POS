@@ -170,6 +170,14 @@ export default function Receipt({ salon, sale, onClose, onSendFeedback, canSendT
           <GoldBtn onClick={onClose} style={{ flex: 2 }}>Close</GoldBtn>
         </div>
 
+        {/* Trimora branding footer */}
+        <div style={{ textAlign: "center", marginTop: 16, paddingTop: 12, borderTop: "1px dashed #ddd" }}>
+          <div style={{ fontSize: 10, color: "#bbb", letterSpacing: "0.08em" }}>
+            Powered by <span style={{ fontWeight: 900, color: "#C9A84C" }}>TRIMORA POS</span>
+          </div>
+          <div style={{ fontSize: 9, color: "#ccc", marginTop: 2 }}>trimora-pos.vercel.app</div>
+        </div>
+
         <style>{`@media print { body * { visibility: hidden; } .receipt-print, .receipt-print * { visibility: visible; } .receipt-print { position: fixed; top: 0; left: 0; width: 100%; } }`}</style>
       </div>
     </div>
