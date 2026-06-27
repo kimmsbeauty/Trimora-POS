@@ -1,0 +1,77 @@
+// src/components/CampaignEditorCard.jsx
+
+import { useState, useEffect } from "react";
+import { GOLD, GOLD_DIM, DARK, WHITE, BLACK } from "../lib/constants.js";
+
+export default function CampaignEditorCard({ type, label, icon, placeholder, existingCampaign, onSave, showWinbackDays }) {
+  var templateState = useState(""); var template = templateState[0]; var setTemplate = templateState[1];
+  var activeState = useState(false); var isActive = activeState[0]; var setIsActive = activeState[1];
+  var daysState = useState(30); var winbackDays = daysState[0]; var setWinbackDays = daysState[1];
+  var statusState = useState("idle"); var status = statusState[0]; var setStatus = statusState[1];
+
+  var existingId = existingCampaign && existingCampaign.id;
+
+  useEffect(function() {
+    if (existingCampaign) {
+      setTemplate(existingCampaign.message_template || "");
+      setIsActive(!!existingCampaign.is_active);
+      if (showWinbackDays) setWinbackDays(existingCampaign.winback_days || 30);
+    }
+  }, [existingId]);
+
+  async function handleSave() {
+    if (!template.trim()) return;
+    setStatus("saving");
+    var extra = showWinbackDays ? { winback_days: Number(winbackDays) || 30 } : {};
+    var ok = await onSave(template.trim(), isActive, extra);
+    setStatus(ok ? "saved" : "error");
+    if (ok) setTimeout(function() { setStatus("idle"); }, 2500);
+  }
+
+  return (
+    <div style={{ background: WHITE, borderRadius: 12, border: "1.5px solid " + GOLD_DIM + "55", padding: 16, marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: DARK }}>{icon} {label}</div>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, color: isActive ? "#065F46" : "#999", cursor: "pointer" }}>
+          <input type="checkbox" checked={isActive} onChange={function(e) { setIsActive(e.target.checked); }} />
+          {isActive ? "Active" : "Off"}
+        </label>
+      </div>
+
+      {showWinbackDays && (
+        <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+          <label style={{ fontSize: 12, color: "#666" }}>Send after</label>
+          <input
+            type="number" min="1" value={winbackDays}
+            onChange={function(e) { setWinbackDays(e.target.value); }}
+            style={{ width: 60, padding: "4px 8px", borderRadius: 6, border: "1px solid " + GOLD_DIM + "88", fontSize: 12 }}
+          />
+          <label style={{ fontSize: 12, color: "#666" }}>days with no visit</label>
+        </div>
+      )}
+
+      <textarea
+        value={template}
+        onChange={function(e) { setTemplate(e.target.value); }}
+        placeholder={placeholder}
+        rows={3}
+        style={{ width: "100%", borderRadius: 8, border: "1.5px solid " + GOLD_DIM + "55", padding: 10, fontSize: 13, fontFamily: "inherit", outline: "none", resize: "vertical", marginBottom: 8, boxSizing: "border-box" }}
+      />
+      <div style={{ fontSize: 10, color: "#999", marginBottom: 10 }}>Variables: <code>{"{{customer_name}}"}</code> · <code>{"{{salon_name}}"}</code></div>
+
+      <button
+        onClick={handleSave}
+        disabled={!template.trim() || status === "saving"}
+        style={{
+          background: status === "saved" ? "#D1FAE5" : status === "error" ? "#FEE2E2" : GOLD,
+          color: status === "saved" ? "#065F46" : status === "error" ? "#991B1B" : BLACK,
+          border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 800,
+          cursor: (!template.trim() || status === "saving") ? "default" : "pointer",
+          opacity: (!template.trim()) ? 0.6 : 1,
+        }}
+      >
+        {status === "saving" ? "Saving…" : status === "saved" ? "✅ Saved" : status === "error" ? "⚠️ Failed — Retry" : "Save"}
+      </button>
+    </div>
+  );
+}

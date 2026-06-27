@@ -15,6 +15,7 @@ import NotificationBell from "../components/NotificationBell.jsx";
 import ShareBookingPanel from "../components/ShareBookingPanel.jsx";
 import TomorrowReminders from "../components/TomorrowReminders.jsx";
 import BirthdayReminders from "../components/BirthdayReminders.jsx";
+import CampaignEditorCard from "../components/CampaignEditorCard.jsx";
 import { db, offlineQueue, syncOfflineQueue } from "../lib/db.js";
 import { fmt, todayStr, nowTime } from "../lib/utils.js";
 import { useSalon, fetchPublicSalonBranding } from "../lib/SalonContext";
@@ -99,6 +100,8 @@ export default function POSApp({ onLogout, userRole }) {
   var appointmentCampaignState = useState(null); var appointmentCampaign = appointmentCampaignState[0]; var setAppointmentCampaign = appointmentCampaignState[1];
   var birthdayCampaignState = useState(null); var birthdayCampaign = birthdayCampaignState[0]; var setBirthdayCampaign = birthdayCampaignState[1];
   var winbackCampaignState = useState(null); var winbackCampaign = winbackCampaignState[0]; var setWinbackCampaign = winbackCampaignState[1];
+  var allCampaignsState = useState([]); var allCampaigns = allCampaignsState[0]; var setAllCampaigns = allCampaignsState[1];
+  var marketingConfigState = useState(null); var marketingConfig = marketingConfigState[0]; var setMarketingConfig = marketingConfigState[1];
   var winbackSmsStatusState = useState({}); var winbackSmsStatus = winbackSmsStatusState[0]; var setWinbackSmsStatus = winbackSmsStatusState[1];
 
   var broadcastMessageState = useState(""); var broadcastMessage = broadcastMessageState[0]; var setBroadcastMessage = broadcastMessageState[1];
@@ -174,6 +177,8 @@ export default function POSApp({ onLogout, userRole }) {
           db("GET", "marketing_campaigns", null, "?type=eq.appointment_reminder&is_active=eq.true&limit=1"),
           db("GET", "marketing_campaigns", null, "?type=eq.birthday&is_active=eq.true&limit=1"),
           db("GET", "marketing_campaigns", null, "?type=eq.winback&is_active=eq.true&limit=1"),
+          db("GET", "marketing_campaigns", null, "?order=created_at.desc"),
+          db("GET", "salon_marketing_config", null, "?limit=1"),
         ]);
         if (results[0]) setSales(results[0]);
         if (results[1] && results[1].length > 0) setProducts(results[1]);
@@ -186,6 +191,8 @@ export default function POSApp({ onLogout, userRole }) {
         if (Array.isArray(results[8]) && results[8][0]) setAppointmentCampaign(results[8][0]);
         if (Array.isArray(results[9]) && results[9][0]) setBirthdayCampaign(results[9][0]);
         if (Array.isArray(results[10]) && results[10][0]) setWinbackCampaign(results[10][0]);
+        if (Array.isArray(results[11])) setAllCampaigns(results[11]);
+        if (Array.isArray(results[12]) && results[12][0]) setMarketingConfig(results[12][0]);
       } catch (e) {
         console.error("Load error:", e);
         setLoadError(true);
@@ -742,6 +749,45 @@ export default function POSApp({ onLogout, userRole }) {
     }
     setBroadcastSending(false);
     setBroadcastDone(true);
+  }
+
+  // Settings UI support: refetch the full unfiltered campaign list after
+  // any save, and a generic upsert (PATCH if a campaign of this type
+  // already exists, POST a new one if not).
+  async function refreshCampaigns() {
+    var fresh = await db("GET", "marketing_campaigns", null, "?order=created_at.desc");
+    if (Array.isArray(fresh)) setAllCampaigns(fresh);
+  }
+
+  async function saveCampaignSettings(type, defaultName, template, isActive, extra) {
+    var salonId = salon && salon.id;
+    if (!salonId) return false;
+    var existing = allCampaigns.find(function(c) { return c.type === type; });
+    var body = Object.assign({ message_template: template, is_active: isActive }, extra || {});
+    var result;
+    if (existing) {
+      result = await db("PATCH", "marketing_campaigns", body, "?id=eq." + existing.id);
+    } else {
+      body.salon_id = salonId;
+      body.type = type;
+      body.name = defaultName;
+      result = await db("POST", "marketing_campaigns", body);
+    }
+    await refreshCampaigns();
+    return !!result;
+  }
+
+  async function toggleSmsActive() {
+    var salonId = salon && salon.id;
+    if (!salonId) return;
+    var newVal = !(marketingConfig && marketingConfig.is_sms_active);
+    if (marketingConfig && marketingConfig.id) {
+      await db("PATCH", "salon_marketing_config", { is_sms_active: newVal }, "?salon_id=eq." + salonId);
+    } else {
+      await db("POST", "salon_marketing_config", { salon_id: salonId, is_sms_active: newVal });
+    }
+    var fresh = await db("GET", "salon_marketing_config", null, "?limit=1");
+    if (Array.isArray(fresh) && fresh[0]) setMarketingConfig(fresh[0]);
   }
 
   var ALL_NAV = [
@@ -1572,6 +1618,45 @@ export default function POSApp({ onLogout, userRole }) {
 
         {page === "marketing" && (
           <div style={{ padding: "4px 0" }}>
+
+            <div style={{ background: WHITE, borderRadius: 14, padding: 18, border: "1.5px solid " + GOLD_DIM + "66", marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: DARK }}>⚙️ Automated Messages</div>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 800, color: (marketingConfig && marketingConfig.is_sms_active) ? "#065F46" : "#999", cursor: "pointer" }}>
+                  SMS Marketing: {(marketingConfig && marketingConfig.is_sms_active) ? "ON" : "OFF"}
+                  <input type="checkbox" checked={!!(marketingConfig && marketingConfig.is_sms_active)} onChange={toggleSmsActive} />
+                </label>
+              </div>
+              <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>
+                Master switch for all automated SMS below. Turning this off stops every automated and manual SMS send for this salon, instantly.
+              </div>
+
+              <CampaignEditorCard
+                type="post_sale" label="Post-Sale Thank You" icon="💬"
+                placeholder="Thanks for visiting {{salon_name}} today, {{customer_name}}! We hope you loved your visit 💛"
+                existingCampaign={allCampaigns.find(function(c) { return c.type === "post_sale"; })}
+                onSave={function(t, a, e) { return saveCampaignSettings("post_sale", "Post-Sale Thank You", t, a, e); }}
+              />
+              <CampaignEditorCard
+                type="appointment_reminder" label="Appointment Reminder" icon="📅"
+                placeholder="Hi {{customer_name}}! Friendly reminder of your appointment tomorrow at {{salon_name}}. See you then 💛"
+                existingCampaign={allCampaigns.find(function(c) { return c.type === "appointment_reminder"; })}
+                onSave={function(t, a, e) { return saveCampaignSettings("appointment_reminder", "Appointment Reminder", t, a, e); }}
+              />
+              <CampaignEditorCard
+                type="birthday" label="Birthday Wishes" icon="🎂"
+                placeholder="Happy Birthday, {{customer_name}}! 🎉 Everyone at {{salon_name}} wishes you a wonderful day."
+                existingCampaign={allCampaigns.find(function(c) { return c.type === "birthday"; })}
+                onSave={function(t, a, e) { return saveCampaignSettings("birthday", "Birthday Wishes", t, a, e); }}
+              />
+              <CampaignEditorCard
+                type="winback" label="Winback (lapsed customers)" icon="💔" showWinbackDays
+                placeholder="Hi {{customer_name}}, we miss you at {{salon_name}}! Come back soon, we'd love to see you again 💕"
+                existingCampaign={allCampaigns.find(function(c) { return c.type === "winback"; })}
+                onSave={function(t, a, e) { return saveCampaignSettings("winback", "Winback", t, a, e); }}
+              />
+            </div>
+
             <div style={{ background: WHITE, borderRadius: 14, padding: 18, border: "1.5px solid " + GOLD_DIM + "66" }}>
               <div style={{ fontSize: 16, fontWeight: 800, color: DARK, marginBottom: 4 }}>📣 Send a Broadcast Message</div>
               <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>Write a one-off message and send it to a group of customers via SMS, right now.</div>
