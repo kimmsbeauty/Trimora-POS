@@ -15,10 +15,10 @@ import NotificationBell from "../components/NotificationBell.jsx";
 import ShareBookingPanel from "../components/ShareBookingPanel.jsx";
 import TomorrowReminders from "../components/TomorrowReminders.jsx";
 import BirthdayReminders from "../components/BirthdayReminders.jsx";
-import CampaignEditorCard from "../components/CampaignEditorCard.jsx";
 import { db, offlineQueue, syncOfflineQueue } from "../lib/db.js";
 import { fmt, todayStr, nowTime } from "../lib/utils.js";
 import { useSalon, fetchPublicSalonBranding } from "../lib/SalonContext";
+import { getValidAccessToken } from "../lib/deviceAuth";
 import { lighten, darken } from "../lib/colorUtils";
 import {
   CATS,
@@ -100,15 +100,7 @@ export default function POSApp({ onLogout, userRole }) {
   var appointmentCampaignState = useState(null); var appointmentCampaign = appointmentCampaignState[0]; var setAppointmentCampaign = appointmentCampaignState[1];
   var birthdayCampaignState = useState(null); var birthdayCampaign = birthdayCampaignState[0]; var setBirthdayCampaign = birthdayCampaignState[1];
   var winbackCampaignState = useState(null); var winbackCampaign = winbackCampaignState[0]; var setWinbackCampaign = winbackCampaignState[1];
-  var allCampaignsState = useState([]); var allCampaigns = allCampaignsState[0]; var setAllCampaigns = allCampaignsState[1];
-  var marketingConfigState = useState(null); var marketingConfig = marketingConfigState[0]; var setMarketingConfig = marketingConfigState[1];
   var winbackSmsStatusState = useState({}); var winbackSmsStatus = winbackSmsStatusState[0]; var setWinbackSmsStatus = winbackSmsStatusState[1];
-
-  var broadcastMessageState = useState(""); var broadcastMessage = broadcastMessageState[0]; var setBroadcastMessage = broadcastMessageState[1];
-  var broadcastSegmentState = useState("all"); var broadcastSegment = broadcastSegmentState[0]; var setBroadcastSegment = broadcastSegmentState[1];
-  var broadcastSendingState = useState(false); var broadcastSending = broadcastSendingState[0]; var setBroadcastSending = broadcastSendingState[1];
-  var broadcastProgressState = useState({ sent: 0, failed: 0, total: 0 }); var broadcastProgress = broadcastProgressState[0]; var setBroadcastProgress = broadcastProgressState[1];
-  var broadcastDoneState = useState(false); var broadcastDone = broadcastDoneState[0]; var setBroadcastDone = broadcastDoneState[1];
   var productsState = useState([]); var products = productsState[0]; var setProducts = productsState[1];
   var feedbacksState = useState([]); var feedbacks = feedbacksState[0]; var setFeedbacks = feedbacksState[1];
   var appointmentsState = useState([]); var appointments = appointmentsState[0]; var setAppointments = appointmentsState[1];
@@ -177,8 +169,6 @@ export default function POSApp({ onLogout, userRole }) {
           db("GET", "marketing_campaigns", null, "?type=eq.appointment_reminder&is_active=eq.true&limit=1"),
           db("GET", "marketing_campaigns", null, "?type=eq.birthday&is_active=eq.true&limit=1"),
           db("GET", "marketing_campaigns", null, "?type=eq.winback&is_active=eq.true&limit=1"),
-          db("GET", "marketing_campaigns", null, "?order=created_at.desc"),
-          db("GET", "salon_marketing_config", null, "?limit=1"),
         ]);
         if (results[0]) setSales(results[0]);
         if (results[1] && results[1].length > 0) setProducts(results[1]);
@@ -191,8 +181,6 @@ export default function POSApp({ onLogout, userRole }) {
         if (Array.isArray(results[8]) && results[8][0]) setAppointmentCampaign(results[8][0]);
         if (Array.isArray(results[9]) && results[9][0]) setBirthdayCampaign(results[9][0]);
         if (Array.isArray(results[10]) && results[10][0]) setWinbackCampaign(results[10][0]);
-        if (Array.isArray(results[11])) setAllCampaigns(results[11]);
-        if (Array.isArray(results[12]) && results[12][0]) setMarketingConfig(results[12][0]);
       } catch (e) {
         console.error("Load error:", e);
         setLoadError(true);
@@ -293,11 +281,12 @@ export default function POSApp({ onLogout, userRole }) {
   async function loadTodayStaffStats() {
     setLoadingStaffStats(true);
     try {
+      var deviceToken = await getValidAccessToken();
       var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/get_today_staff_stats", {
         method: "POST",
         headers: {
           "apikey":        SUPABASE_KEY,
-          "Authorization": "Bearer " + SUPABASE_KEY,
+          "Authorization": "Bearer " + (deviceToken || SUPABASE_KEY),
           "Content-Type":  "application/json",
         },
         body: JSON.stringify({}),
@@ -698,98 +687,6 @@ export default function POSApp({ onLogout, userRole }) {
     }
   }
 
-  // Eligible = has a phone number and hasn't opted out, scoped to the
-  // chosen segment. Same eligibility rule the single-customer triggers use.
-  function eligibleFor(segment) {
-    var base = segment === "frequent" ? frequentCustomers : segment === "atrisk" ? atRiskCustomers : customers;
-    return base.filter(function(c) { return c.phone && !c.marketing_opt_out; });
-  }
-  var broadcastRecipients = eligibleFor(broadcastSegment);
-
-  async function sendBroadcast() {
-    if (!broadcastMessage.trim() || broadcastRecipients.length === 0) return;
-    var salonId = salon && salon.id;
-    if (!salonId) return;
-    setBroadcastSending(true);
-    setBroadcastDone(false);
-    setBroadcastProgress({ sent: 0, failed: 0, total: broadcastRecipients.length });
-
-    var campaignResult = await db("POST", "marketing_campaigns", {
-      salon_id: salonId,
-      name: "Broadcast " + new Date().toLocaleString(),
-      type: "manual_broadcast",
-      message_template: broadcastMessage.trim(),
-      is_active: true,
-    });
-    var campaign = campaignResult && campaignResult[0];
-    if (!campaign) {
-      setBroadcastSending(false);
-      alert("Could not create the broadcast. Please check your connection and try again.");
-      return;
-    }
-
-    var sentCount = 0, failedCount = 0;
-    for (var i = 0; i < broadcastRecipients.length; i++) {
-      var c = broadcastRecipients[i];
-      try {
-        var res = await fetch(SUPABASE_URL + "/functions/v1/send-marketing-message", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY },
-          body: JSON.stringify({ campaign_id: campaign.id, customer_id: c.id, salon_id: salonId }),
-        });
-        var data = await res.json().catch(function() { return {}; });
-        if (data && data.success) sentCount++; else failedCount++;
-      } catch (e) {
-        failedCount++;
-      }
-      setBroadcastProgress({ sent: sentCount, failed: failedCount, total: broadcastRecipients.length });
-      // Small stagger between sends — a deliberate brake of our own, since
-      // the edge function itself has no rate limiting yet.
-      await new Promise(function(resolve) { setTimeout(resolve, 300); });
-    }
-    setBroadcastSending(false);
-    setBroadcastDone(true);
-  }
-
-  // Settings UI support: refetch the full unfiltered campaign list after
-  // any save, and a generic upsert (PATCH if a campaign of this type
-  // already exists, POST a new one if not).
-  async function refreshCampaigns() {
-    var fresh = await db("GET", "marketing_campaigns", null, "?order=created_at.desc");
-    if (Array.isArray(fresh)) setAllCampaigns(fresh);
-  }
-
-  async function saveCampaignSettings(type, defaultName, template, isActive, extra) {
-    var salonId = salon && salon.id;
-    if (!salonId) return false;
-    var existing = allCampaigns.find(function(c) { return c.type === type; });
-    var body = Object.assign({ message_template: template, is_active: isActive }, extra || {});
-    var result;
-    if (existing) {
-      result = await db("PATCH", "marketing_campaigns", body, "?id=eq." + existing.id);
-    } else {
-      body.salon_id = salonId;
-      body.type = type;
-      body.name = defaultName;
-      result = await db("POST", "marketing_campaigns", body);
-    }
-    await refreshCampaigns();
-    return !!result;
-  }
-
-  async function toggleSmsActive() {
-    var salonId = salon && salon.id;
-    if (!salonId) return;
-    var newVal = !(marketingConfig && marketingConfig.is_sms_active);
-    if (marketingConfig && marketingConfig.id) {
-      await db("PATCH", "salon_marketing_config", { is_sms_active: newVal }, "?salon_id=eq." + salonId);
-    } else {
-      await db("POST", "salon_marketing_config", { salon_id: salonId, is_sms_active: newVal });
-    }
-    var fresh = await db("GET", "salon_marketing_config", null, "?limit=1");
-    if (Array.isArray(fresh) && fresh[0]) setMarketingConfig(fresh[0]);
-  }
-
   var ALL_NAV = [
     { id: "pos",          label: "POS",      icon: "🛒", adminOnly: false },
     { id: "appointments", label: "Bookings", icon: "📅", adminOnly: false, badge: pendingCount },
@@ -800,7 +697,6 @@ export default function POSApp({ onLogout, userRole }) {
     { id: "inventory",    label: "Stock",    icon: "📦", adminOnly: true },
     { id: "expenses",     label: "Expenses", icon: "💸", adminOnly: true },
     { id: "share",        label: "Share",    icon: "🔗", adminOnly: true },
-    { id: "marketing",    label: "Marketing",icon: "📣", adminOnly: true },
     { id: "settings",     label: "Settings", icon: "⚙️",  adminOnly: true },
   ];
   var NAV = isAdmin ? ALL_NAV : ALL_NAV.filter(function(n) { return !n.adminOnly; });
@@ -996,7 +892,7 @@ export default function POSApp({ onLogout, userRole }) {
       <div style={{ background: darkMode ? "#0A0A00" : BLACK, borderBottom: "1px solid " + GOLD_DIM, display: "flex", flexShrink: 0, overflowX: "auto", WebkitOverflowScrolling: "touch", scrollbarWidth: "none", msOverflowStyle: "none" }}>
         {NAV.map(function(n) {
           return (
-            <button key={n.id} onClick={function() { setPage(n.id); }} style={{ flex: 1, minWidth: 60, border: "none", background: "none", padding: "8px 6px", cursor: "pointer", borderBottom: "3px solid " + (page === n.id ? GOLD : "transparent"), color: page === n.id ? GOLD_LT : "rgba(255,255,255,0.35)", transition: "all 0.15s", position: "relative" }}>
+            <button key={n.id} onClick={function() { setPage(n.id); }} style={{ flexShrink: 0, minWidth: 60, border: "none", background: "none", padding: "8px 6px", cursor: "pointer", borderBottom: "3px solid " + (page === n.id ? GOLD : "transparent"), color: page === n.id ? GOLD_LT : "rgba(255,255,255,0.35)", transition: "all 0.15s", position: "relative" }}>
               <div style={{ fontSize: 15 }}>{n.icon}</div>
               <div style={{ fontSize: 8, fontWeight: 700, marginTop: 1, letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{n.label}</div>
               {n.badge > 0 && <div style={{ position: "absolute", top: 4, right: "10%", background: RED, color: WHITE, borderRadius: "50%", width: 14, height: 14, fontSize: 8, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>{n.badge}</div>}
@@ -1613,129 +1509,6 @@ export default function POSApp({ onLogout, userRole }) {
         {page === "share" && (
           <div style={{ padding: "4px 0" }}>
             <ShareBookingPanel salon={salon} />
-          </div>
-        )}
-
-        {page === "marketing" && (
-          <div style={{ padding: "4px 0" }}>
-
-            <div style={{ background: WHITE, borderRadius: 14, padding: 18, border: "1.5px solid " + GOLD_DIM + "66", marginBottom: 16 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                <div style={{ fontSize: 16, fontWeight: 800, color: DARK }}>⚙️ Automated Messages</div>
-                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 800, color: (marketingConfig && marketingConfig.is_sms_active) ? "#065F46" : "#999", cursor: "pointer" }}>
-                  SMS Marketing: {(marketingConfig && marketingConfig.is_sms_active) ? "ON" : "OFF"}
-                  <input type="checkbox" checked={!!(marketingConfig && marketingConfig.is_sms_active)} onChange={toggleSmsActive} />
-                </label>
-              </div>
-              <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>
-                Master switch for all automated SMS below. Turning this off stops every automated and manual SMS send for this salon, instantly.
-              </div>
-
-              <CampaignEditorCard
-                type="post_sale" label="Post-Sale Thank You" icon="💬"
-                placeholder="Thanks for visiting {{salon_name}} today, {{customer_name}}! We hope you loved your visit 💛"
-                existingCampaign={allCampaigns.find(function(c) { return c.type === "post_sale"; })}
-                onSave={function(t, a, e) { return saveCampaignSettings("post_sale", "Post-Sale Thank You", t, a, e); }}
-              />
-              <CampaignEditorCard
-                type="appointment_reminder" label="Appointment Reminder" icon="📅"
-                placeholder="Hi {{customer_name}}! Friendly reminder of your appointment tomorrow at {{salon_name}}. See you then 💛"
-                existingCampaign={allCampaigns.find(function(c) { return c.type === "appointment_reminder"; })}
-                onSave={function(t, a, e) { return saveCampaignSettings("appointment_reminder", "Appointment Reminder", t, a, e); }}
-              />
-              <CampaignEditorCard
-                type="birthday" label="Birthday Wishes" icon="🎂"
-                placeholder="Happy Birthday, {{customer_name}}! 🎉 Everyone at {{salon_name}} wishes you a wonderful day."
-                existingCampaign={allCampaigns.find(function(c) { return c.type === "birthday"; })}
-                onSave={function(t, a, e) { return saveCampaignSettings("birthday", "Birthday Wishes", t, a, e); }}
-              />
-              <CampaignEditorCard
-                type="winback" label="Winback (lapsed customers)" icon="💔" showWinbackDays
-                placeholder="Hi {{customer_name}}, we miss you at {{salon_name}}! Come back soon, we'd love to see you again 💕"
-                existingCampaign={allCampaigns.find(function(c) { return c.type === "winback"; })}
-                onSave={function(t, a, e) { return saveCampaignSettings("winback", "Winback", t, a, e); }}
-              />
-            </div>
-
-            <div style={{ background: WHITE, borderRadius: 14, padding: 18, border: "1.5px solid " + GOLD_DIM + "66" }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: DARK, marginBottom: 4 }}>📣 Send a Broadcast Message</div>
-              <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>Write a one-off message and send it to a group of customers via SMS, right now.</div>
-
-              <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-                {[
-                  { id: "all", label: "All Customers (" + eligibleFor("all").length + ")" },
-                  { id: "frequent", label: "Frequent (" + eligibleFor("frequent").length + ")" },
-                  { id: "atrisk", label: "At-Risk (" + eligibleFor("atrisk").length + ")" },
-                ].map(function(seg) {
-                  return (
-                    <button
-                      key={seg.id}
-                      onClick={function() { setBroadcastSegment(seg.id); }}
-                      disabled={broadcastSending}
-                      style={{
-                        padding: "8px 14px", borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: broadcastSending ? "default" : "pointer",
-                        border: "1.5px solid " + (broadcastSegment === seg.id ? GOLD : GOLD_DIM),
-                        background: broadcastSegment === seg.id ? GOLD : WHITE,
-                        color: broadcastSegment === seg.id ? BLACK : DARK,
-                      }}
-                    >
-                      {seg.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div style={{ fontSize: 12, color: "#888", marginBottom: 10 }}>
-                This will reach <b>{broadcastRecipients.length}</b> {broadcastRecipients.length === 1 ? "customer" : "customers"} (customers with no phone on file or who've opted out are automatically excluded).
-              </div>
-
-              <textarea
-                value={broadcastMessage}
-                onChange={function(e) { setBroadcastMessage(e.target.value); }}
-                disabled={broadcastSending}
-                placeholder="e.g. We're running a 20% off special this weekend — come treat yourself! 💛"
-                rows={4}
-                style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "12px", fontSize: 13, fontFamily: "inherit", outline: "none", resize: "vertical", marginBottom: 14, boxSizing: "border-box" }}
-              />
-
-              {!broadcastSending && !broadcastDone && (
-                <button
-                  onClick={sendBroadcast}
-                  disabled={!broadcastMessage.trim() || broadcastRecipients.length === 0}
-                  style={{
-                    background: (!broadcastMessage.trim() || broadcastRecipients.length === 0) ? "#E5E7EB" : "linear-gradient(135deg," + primary + "," + primaryLt + ")",
-                    color: (!broadcastMessage.trim() || broadcastRecipients.length === 0) ? "#999" : BLACK,
-                    border: "none", borderRadius: 10, padding: "12px 24px", fontWeight: 800, fontSize: 13,
-                    cursor: (!broadcastMessage.trim() || broadcastRecipients.length === 0) ? "default" : "pointer",
-                  }}
-                >
-                  Send to {broadcastRecipients.length} {broadcastRecipients.length === 1 ? "Customer" : "Customers"}
-                </button>
-              )}
-
-              {broadcastSending && (
-                <div style={{ fontSize: 13, fontWeight: 700, color: DARK }}>
-                  Sending… {broadcastProgress.sent + broadcastProgress.failed} / {broadcastProgress.total}
-                  {broadcastProgress.failed > 0 && <span style={{ color: "#991B1B" }}> ({broadcastProgress.failed} failed)</span>}
-                </div>
-              )}
-
-              {broadcastDone && !broadcastSending && (
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: broadcastProgress.failed === 0 ? "#065F46" : "#991B1B", marginBottom: 10 }}>
-                    {broadcastProgress.failed === 0
-                      ? "✅ Done — " + broadcastProgress.sent + " sent."
-                      : "⚠️ Done — " + broadcastProgress.sent + " sent, " + broadcastProgress.failed + " failed."}
-                  </div>
-                  <button
-                    onClick={function() { setBroadcastMessage(""); setBroadcastDone(false); setBroadcastProgress({ sent: 0, failed: 0, total: 0 }); }}
-                    style={{ background: WHITE, border: "1.5px solid " + GOLD_DIM, borderRadius: 10, padding: "10px 18px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
-                  >
-                    Send Another
-                  </button>
-                </div>
-              )}
-            </div>
           </div>
         )}
 
