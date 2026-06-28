@@ -95,13 +95,18 @@ export function SalonGate({ mode, children }) {
 
           if (settingsRows && settingsRows.length > 0) {
             resolvedSalon = Object.assign({}, resolvedSalon, {
-              primary_color:   settingsRows[0].primary_color,
-              secondary_color: settingsRows[0].secondary_color,
-              logo_url:        settingsRows[0].logo_url,
-              tagline:         settingsRows[0].tagline,
-              mpesa_till:      settingsRows[0].mpesa_till,
-              mpesa_name:      settingsRows[0].mpesa_name,
-              contact_phone:   settingsRows[0].contact_phone,
+              primary_color:        settingsRows[0].primary_color,
+              secondary_color:      settingsRows[0].secondary_color,
+              logo_url:             settingsRows[0].logo_url,
+              tagline:              settingsRows[0].tagline,
+              mpesa_till:           settingsRows[0].mpesa_till,
+              mpesa_name:           settingsRows[0].mpesa_name,
+              contact_phone:        settingsRows[0].contact_phone,
+              // subscription fields already on resolvedSalon from public_salon_directory
+              // — preserve them explicitly so they aren't lost in the merge
+              subscription_plan:       resolvedSalon.subscription_plan,
+              subscription_status:     resolvedSalon.subscription_status,
+              subscription_expires_at: resolvedSalon.subscription_expires_at,
             });
           }
         }

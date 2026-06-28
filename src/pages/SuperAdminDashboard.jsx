@@ -53,7 +53,8 @@ export default function SuperAdminDashboard({ onLogout }) {
   var [actionLoading,setActionLoading]= useState(false);
   var [suspendModal, setSuspendModal] = useState(null);
   var [suspendReason,setSuspendReason]= useState("");
-  var [paymentModal, setPaymentModal] = useState(null); // salon object
+  var [paymentHistory, setPaymentHistory] = useState([]);
+  var [historyLoading, setHistoryLoading] = useState(false);
   var [payPlan,      setPayPlan]      = useState("monthly");
   var [payAmount,    setPayAmount]    = useState("");
   var [payNotes,     setPayNotes]     = useState("");
@@ -245,7 +246,15 @@ export default function SuperAdminDashboard({ onLogout }) {
     }
   }
 
-  async function suspendSalon(salon, reason) {
+  async function openSalonDetail(salon) {
+    setSelectedSalon(salon);
+    setView("detail");
+    setHistoryLoading(true);
+    var history = await saFetch("GET", "salon_subscription_payments",
+      "?salon_id=eq." + salon.id + "&order=payment_date.desc&limit=20");
+    setPaymentHistory(history || []);
+    setHistoryLoading(false);
+  }
     setActionLoading(true);
     var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
     var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/suspend_salon", {
@@ -369,6 +378,27 @@ export default function SuperAdminDashboard({ onLogout }) {
             >
               💳 Record Payment
             </button>
+          </div>
+
+          {/* Payment history */}
+          <div style={{ background: WHITE, borderRadius: 14, padding: "14px 16px", marginBottom: 14, border: "1.5px solid " + GOLD_DIM + "33" }}>
+            <div style={{ fontSize: 12, fontWeight: 900, color: DARK, marginBottom: 10 }}>Payment History</div>
+            {historyLoading ? (
+              <div style={{ fontSize: 12, color: "#aaa", textAlign: "center", padding: 10 }}>Loading...</div>
+            ) : paymentHistory.length === 0 ? (
+              <div style={{ fontSize: 12, color: "#aaa" }}>No payments recorded yet.</div>
+            ) : paymentHistory.map(function(p, i) {
+              return (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: i < paymentHistory.length - 1 ? "1px solid #f0f0f0" : "none" }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: DARK, textTransform: "capitalize" }}>{(p.plan || "").replace("_", " ")}</div>
+                    <div style={{ fontSize: 10, color: "#aaa" }}>{new Date(p.payment_date).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}</div>
+                    {p.notes && <div style={{ fontSize: 10, color: "#888", fontStyle: "italic" }}>{p.notes}</div>}
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: GREEN }}>KES {Number(p.amount).toLocaleString()}</div>
+                </div>
+              );
+            })}
           </div>
 
           {/* Stats grid */}
@@ -522,7 +552,7 @@ export default function SuperAdminDashboard({ onLogout }) {
         ) : filteredSalons.map(function(s) {
           return (
             <div key={s.id}
-              onClick={function() { setSelectedSalon(s); setView("detail"); }}
+              onClick={function() { openSalonDetail(s); }}
               style={{
                 background: WHITE, borderRadius: 14, padding: "14px 16px",
                 marginBottom: 10, border: "1.5px solid " + (s.suspended ? RED + "33" : GOLD_DIM + "22"),
