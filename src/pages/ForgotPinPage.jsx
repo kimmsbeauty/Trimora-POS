@@ -40,6 +40,13 @@ export default function ForgotPinPage() {
     if (!email.trim()) return setError("Please enter your email address.");
     setLoading(true); setError("");
 
+    // Supabase's redirect URL allow-list likely doesn't cover the dynamic
+    // /:slug/forgot-pin path, so it may silently fall back to the site
+    // root regardless of what we ask for below. This marker lets the root
+    // interceptor in App.jsx route correctly anyway, rather than this
+    // request's link always landing on the unrelated password-reset flow.
+    window.localStorage.setItem("trimora_pin_reset_slug", slug || "__noslug__");
+
     var redirectTo = window.location.origin + "/" + (slug ? slug + "/" : "") + "forgot-pin#";
 
     var res = await fetch(SUPABASE_URL + "/auth/v1/recover", {
