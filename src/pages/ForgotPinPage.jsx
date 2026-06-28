@@ -47,7 +47,7 @@ export default function ForgotPinPage() {
     // request's link always landing on the unrelated password-reset flow.
     window.localStorage.setItem("trimora_pin_reset_slug", slug || "__noslug__");
 
-    var redirectTo = window.location.origin + "/" + (slug ? slug + "/" : "") + "forgot-pin#";
+    var redirectTo = window.location.origin + "/forgot-pin";
 
     var res = await fetch(SUPABASE_URL + "/auth/v1/recover", {
       method: "POST",
