@@ -22,6 +22,12 @@ export default function ForgotPasswordPage() {
     setLoading(true);
     setError("");
 
+    // The slug is passed as a query param below, but query strings are
+    // not reliably preserved once Supabase reconstructs the final
+    // redirect URL with its own auth token attached - storing it here
+    // too means ResetPasswordPage can still find it even if that happens.
+    window.localStorage.setItem("trimora_password_reset_slug", slug || "");
+
     var redirectTo = window.location.origin + "/reset-password" + (slug ? "?slug=" + slug : "");
 
     var res = await fetch(SUPABASE_URL + "/auth/v1/recover", {

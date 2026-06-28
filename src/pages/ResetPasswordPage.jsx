@@ -18,8 +18,11 @@ export default function ResetPasswordPage() {
   var [error,      setError]      = useState("");
   var [tokenError, setTokenError] = useState(false);
 
-  // Extract slug from query params for redirect after reset
-  var slug = new URLSearchParams(window.location.search).get("slug") || "";
+  // Extract slug from query params for redirect after reset - falling back
+  // to the marker left in localStorage if Supabase dropped the query
+  // string when reconstructing this URL with its own token attached.
+  var slugFromQuery = new URLSearchParams(window.location.search).get("slug") || "";
+  var slug = slugFromQuery || window.localStorage.getItem("trimora_password_reset_slug") || "";
 
   useEffect(function() {
     // Supabase puts the access token in the URL hash after redirect
@@ -55,6 +58,7 @@ export default function ResetPasswordPage() {
 
     if (res.ok) {
       setDone(true);
+      window.localStorage.removeItem("trimora_password_reset_slug");
       // Redirect to their POS after 3 seconds
       setTimeout(function() {
         window.location.href = slug ? "/" + slug + "/pos" : "/pos";
