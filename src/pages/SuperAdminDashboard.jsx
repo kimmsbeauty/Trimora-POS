@@ -255,6 +255,8 @@ export default function SuperAdminDashboard({ onLogout }) {
     setPaymentHistory(history || []);
     setHistoryLoading(false);
   }
+
+  async function suspendSalon(salon, reason) {
     setActionLoading(true);
     var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
     var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/suspend_salon", {
