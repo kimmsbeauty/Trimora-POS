@@ -110,6 +110,75 @@ export default function SalonSettingsPage({ salon, onSettingsUpdated }) {
   var [contactSaved,   setContactSaved]   = useState(false);
   var [contactError,   setContactError]   = useState("");
 
+  // ── M-Pesa STK Push (Daraja) fields ───────────────────────────────
+  // Lives in salon_mpesa_config, not salon_settings - a separate table
+  // since it's only ever read by edge functions via the service role,
+  // never through the normal TENANT_TABLES auto-scoped db() path.
+  var [mpesaConfigId,      setMpesaConfigId]      = useState(null);
+  var [hasSavedStkCreds,   setHasSavedStkCreds]   = useState(false);
+  var [consumerKey,        setConsumerKey]        = useState("");
+  var [consumerSecret,     setConsumerSecret]     = useState(""); // write-only - never re-fetched or displayed
+  var [stkShortcode,       setStkShortcode]       = useState("");
+  var [transactionType,    setTransactionType]    = useState("CustomerBuyGoodsOnline");
+  var [stkSaving, setStkSaving] = useState(false);
+  var [stkSaved,  setStkSaved]  = useState(false);
+  var [stkError,  setStkError]  = useState("");
+
+  useEffect(function() {
+    if (!salon || !salon.id) return;
+    (async function() {
+      var result = await db("GET", "salon_mpesa_config", null, "?salon_id=eq." + salon.id + "&select=id,shortcode,transaction_type,consumer_key");
+      if (result && result[0]) {
+        setMpesaConfigId(result[0].id);
+        setStkShortcode(result[0].shortcode || "");
+        setTransactionType(result[0].transaction_type || "CustomerBuyGoodsOnline");
+        setConsumerKey(result[0].consumer_key || "");
+        setHasSavedStkCreds(true);
+      }
+    })();
+  }, [salon && salon.id]);
+
+  async function saveStkConfig() {
+    setStkError("");
+    if (!stkShortcode || !/^\d{5,10}$/.test(stkShortcode)) {
+      setStkError("Shortcode/Till number should be 5–10 digits.");
+      return;
+    }
+    if (!consumerKey.trim()) {
+      setStkError("Consumer Key is required.");
+      return;
+    }
+    if (!hasSavedStkCreds && !consumerSecret.trim()) {
+      setStkError("Consumer Secret is required.");
+      return;
+    }
+    setStkSaving(true);
+    var payload = {
+      salon_id: salon.id,
+      shortcode: stkShortcode,
+      transaction_type: transactionType,
+      consumer_key: consumerKey.trim(),
+    };
+    // Only send the secret if something was actually typed - blank means
+    // "keep the existing one", since we never fetch it back to display.
+    if (consumerSecret.trim()) {
+      payload.consumer_secret = consumerSecret.trim();
+    }
+    var ok;
+    if (mpesaConfigId) {
+      ok = await db("PATCH", "salon_mpesa_config", payload, "?id=eq." + mpesaConfigId);
+    } else {
+      ok = await db("POST", "salon_mpesa_config", payload);
+      if (ok && ok[0]) setMpesaConfigId(ok[0].id);
+    }
+    setStkSaving(false);
+    if (ok === null) { setStkError("Save failed. Check your connection."); return; }
+    setHasSavedStkCreds(true);
+    setConsumerSecret("");
+    setStkSaved(true);
+    autoResetSaved(setStkSaved);
+  }
+
   // ── PIN fields ───────────────────────────────────────────────────
   var [newStaffPin,   setNewStaffPin]   = useState("");
   var [newAdminPin,   setNewAdminPin]   = useState("");
@@ -424,6 +493,60 @@ export default function SalonSettingsPage({ salon, onSettingsUpdated }) {
 
         {contactError && <div style={{ color: RED, fontSize: 12, marginBottom: 8 }}>{contactError}</div>}
         <SaveBtn onClick={saveContact} saving={contactSaving} saved={contactSaved} />
+      </div>
+
+      {/* ── M-PESA STK PUSH (DARAJA) ────────────────────────────────── */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}><span>📲</span> M-Pesa STK Push</div>
+        <div style={{ fontSize: 11, color: "#888", marginBottom: 14, marginTop: -8 }}>
+          {hasSavedStkCreds
+            ? "Connected. Customers get a real payment prompt on their phone at checkout."
+            : "Not connected yet — checkout falls back to manual till payment until this is set up."}
+          {" "}Get these from your own Safaricom Daraja app at <b>developer.safaricom.co.ke</b>.
+        </div>
+
+        <Field label="Shortcode / Till Number">
+          <input
+            value={stkShortcode}
+            onChange={function(e) { setStkShortcode(e.target.value); setStkSaved(false); }}
+            placeholder="5927571"
+            style={inputStyle}
+          />
+        </Field>
+
+        <Field label="Transaction Type">
+          <select
+            value={transactionType}
+            onChange={function(e) { setTransactionType(e.target.value); setStkSaved(false); }}
+            style={inputStyle}
+          >
+            <option value="CustomerBuyGoodsOnline">Till Number (Buy Goods)</option>
+            <option value="CustomerPayBillOnline">Paybill</option>
+          </select>
+        </Field>
+
+        <Field label="Consumer Key">
+          <input
+            value={consumerKey}
+            onChange={function(e) { setConsumerKey(e.target.value); setStkSaved(false); }}
+            placeholder="From your Daraja app"
+            style={inputStyle}
+          />
+        </Field>
+
+        <Field label="Consumer Secret">
+          <input
+            type="password"
+            value={consumerSecret}
+            onChange={function(e) { setConsumerSecret(e.target.value); setStkSaved(false); }}
+            placeholder={hasSavedStkCreds ? "•••••••• (leave blank to keep current)" : "From your Daraja app"}
+            style={inputStyle}
+          />
+          <div style={{ fontSize: 10, color: "#888", marginTop: 4 }}>Never shown again once saved, for safety — leave blank unless changing it.</div>
+        </Field>
+
+        {stkError && <div style={{ color: RED, fontSize: 12, marginBottom: 8 }}>{stkError}</div>}
+        <SaveBtn onClick={saveStkConfig} saving={stkSaving} saved={stkSaved} />
       </div>
 
       {/* ── PREFERENCES ──────────────────────────────────────────── */}
