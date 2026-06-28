@@ -259,6 +259,15 @@ export default function LoginPage({ onLogin }) {
             <GoldBtn onClick={handleLogin} disabled={loading} style={{ width: "100%", marginTop: 8 }}>
               {loading ? "Verifying..." : "Login →"}
             </GoldBtn>
+
+            {role === "admin" && (
+              <a
+                href={(salon && salon.slug ? "/" + salon.slug : "") + "/forgot-pin"}
+                style={{ display: "block", marginTop: 12, fontSize: 11, color: "rgba(255,255,255,0.25)", fontWeight: 700, textDecoration: "none" }}
+              >
+                Forgot admin PIN?
+              </a>
+            )}
           </div>
         )}
 

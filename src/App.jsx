@@ -9,6 +9,7 @@ import RatingPage from "./pages/RatingPage";
 import DeviceLoginPage from "./pages/DeviceLoginPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
+import ForgotPinPage from "./pages/ForgotPinPage";
 import TermsPage from "./pages/TermsPage";
 import SuperAdminGate from "./pages/SuperAdminGate";
 import OnboardingPage from "./pages/OnboardingPage";
@@ -89,6 +90,8 @@ export default function App() {
         <Route path="/reset-password"         element={<ResetPasswordPage />} />
         <Route path="/:slug/forgot-password"  element={<ForgotPasswordPage />} />
         <Route path="/forgot-password"        element={<ForgotPasswordPage />} />
+        <Route path="/:slug/forgot-pin"       element={<ForgotPinPage />} />
+        <Route path="/forgot-pin"             element={<ForgotPinPage />} />
 
         <Route path="/:slug/booking" element={<SalonGate mode="public"><BookingPage /></SalonGate>} />
         <Route path="/:slug/rate/:token" element={<SalonGate mode="public"><RatingPage /></SalonGate>} />
