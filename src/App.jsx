@@ -21,14 +21,17 @@ import { SalonGate, fetchPublicSalonBranding } from "./lib/SalonContext";
 
 function RedirectToBooking() {
   useEffect(function() {
-    // Supabase password/PIN reset emails redirect to the Site URL with the
-    // token in the hash. Forward to /reset-password which handles both flows:
-    //  - Password reset: no query params → shows password form
-    //  - PIN reset: ?mode=pin&slug=xxx embedded in redirectTo by ForgotPinPage → shows PIN form
+    // Supabase always lands recovery emails on the site root regardless of redirectTo.
+    // Distinguish PIN reset vs password reset using localStorage marker set by ForgotPinPage.
     var hash = window.location.hash;
-    var search = window.location.search; // may contain mode=pin&slug=xxx if Supabase preserved it
     if (hash && hash.includes("type=recovery") && hash.includes("access_token")) {
-      window.location.href = "/reset-password" + search + hash;
+      var pinSlug = window.localStorage.getItem("trimora_pin_reset_slug");
+      if (pinSlug) {
+        // PIN reset — keep marker so ResetPinPage success screen can link back
+        window.location.href = "/reset-pin" + hash;
+      } else {
+        window.location.href = "/reset-password" + hash;
+      }
       return;
     }
     window.location.href = "/booking";
