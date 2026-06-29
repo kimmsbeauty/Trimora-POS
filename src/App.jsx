@@ -20,22 +20,14 @@ import { SalonGate, fetchPublicSalonBranding } from "./lib/SalonContext";
 
 function RedirectToBooking() {
   useEffect(function() {
-    // Supabase password reset redirects to the Site URL with the token in the hash.
-    // Detect it here and forward to the reset-password page - unless this
-    // recovery link was actually requested by the PIN-reset flow (which
-    // wants /forgot-pin instead, but whose dynamic /:slug/forgot-pin
-    // destination Supabase's redirect allow-list likely doesn't cover,
-    // so it falls back to landing here regardless of what was requested).
+    // Supabase password/PIN reset emails redirect to the Site URL with the
+    // token in the hash. Forward to /reset-password which handles both flows:
+    //  - Password reset: no query params → shows password form
+    //  - PIN reset: ?mode=pin&slug=xxx embedded in redirectTo by ForgotPinPage → shows PIN form
     var hash = window.location.hash;
+    var search = window.location.search; // may contain mode=pin&slug=xxx if Supabase preserved it
     if (hash && hash.includes("type=recovery") && hash.includes("access_token")) {
-      var pendingPinSlug = window.localStorage.getItem("trimora_pin_reset_slug");
-      if (pendingPinSlug) {
-        window.localStorage.removeItem("trimora_pin_reset_slug");
-        var slugPath = pendingPinSlug === "__noslug__" ? "" : "/" + pendingPinSlug;
-        window.location.href = slugPath + "/forgot-pin" + hash;
-        return;
-      }
-      window.location.href = "/reset-password" + hash;
+      window.location.href = "/reset-password" + search + hash;
       return;
     }
     window.location.href = "/booking";
