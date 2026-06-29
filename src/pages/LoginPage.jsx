@@ -261,9 +261,12 @@ export default function LoginPage({ onLogin }) {
             </GoldBtn>
 
             {role === "admin" && (
-              <div style={{ display: "block", marginTop: 12, fontSize: 11, color: "rgba(255,255,255,0.25)", fontWeight: 700 }}>
-                Forgot admin PIN? Contact Trimora support to reset it.
-              </div>
+              <a
+                href={(salon && salon.slug) ? "/" + salon.slug + "/forgot-pin" : "/forgot-pin"}
+                style={{ display: "block", marginTop: 12, fontSize: 11, color: "rgba(255,255,255,0.25)", fontWeight: 700, textDecoration: "none" }}
+              >
+                Forgot admin PIN? Click here to reset it.
+              </a>
             )}
           </div>
         )}
