@@ -6,7 +6,6 @@ import POSApp from "./pages/POSApp";
 import SalonBrandmark from "./components/SalonBrandmark";
 import LoginPage from "./pages/LoginPage";
 import RatingPage from "./pages/RatingPage";
-import DeviceLoginPage from "./pages/DeviceLoginPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import ResetPinPage from "./pages/ResetPinPage";
