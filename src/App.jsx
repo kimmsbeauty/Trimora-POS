@@ -39,10 +39,14 @@ function RedirectToBooking() {
     if (isRecovery) {
       var pinSlug = window.localStorage.getItem("trimora_pin_reset_slug");
       if (pinSlug) {
-        // PIN reset — keep marker so ResetPinPage success screen can link back
-        window.location.href = "/reset-pin" + hash + search;
+        // PIN reset — embed slug in the forward path so ResetPinPage gets it via useParams
+        var pinPath = (pinSlug && pinSlug !== "__noslug__") ? "/reset-pin/" + pinSlug : "/reset-pin";
+        window.location.href = pinPath + hash;
       } else {
-        window.location.href = "/reset-password" + hash + search;
+        var pwSlug = window.localStorage.getItem("trimora_password_reset_slug");
+        var validPwSlug = pwSlug && /^[a-z0-9][a-z0-9-]{2,}$/.test(pwSlug) ? pwSlug : "";
+        var pwPath = validPwSlug ? "/reset-password/" + validPwSlug : "/reset-password";
+        window.location.href = pwPath + hash;
       }
       return;
     }
