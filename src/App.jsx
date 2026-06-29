@@ -1,5 +1,5 @@
 // src/App.jsx
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useParams } from "react-router-dom";
 import { useState, useEffect } from "react";
 import BookingPage from "./pages/BookingPage";
 import POSApp from "./pages/POSApp";
@@ -14,8 +14,8 @@ import DebugPinTest from "./pages/DebugPinTest";
 import TermsPage from "./pages/TermsPage";
 import SuperAdminGate from "./pages/SuperAdminGate";
 import OnboardingPage from "./pages/OnboardingPage";
-import { getDeviceLoginStatus } from "./lib/deviceAuth";
-import { SalonGate } from "./lib/SalonContext";
+import { getDeviceLoginStatus, silentDeviceLogin } from "./lib/deviceAuth";
+import { SalonGate, fetchPublicSalonBranding } from "./lib/SalonContext";
 
 function RedirectToBooking() {
   useEffect(function() {
@@ -48,32 +48,63 @@ function RedirectToBooking() {
 }
 
 function DeviceGate({ children }) {
+  var params = useParams();
+  var slug = params.slug;
+
   var statusState = useState("checking");
   var status      = statusState[0]; var setStatus = statusState[1];
 
-  var reauthState = useState(false);
-  var reauth      = reauthState[0]; var setReauth = reauthState[1];
-
-  function check() {
-    var loginStatus = getDeviceLoginStatus();
-    if (loginStatus === "active") {
-      setStatus("ok");
-    } else {
-      setReauth(loginStatus === "expired");
-      setStatus("needs-login");
-    }
-  }
+  var errorState = useState("");
+  var error      = errorState[0]; var setError = errorState[1];
 
   useEffect(function() {
+    var cancelled = false;
+
+    async function check() {
+      var loginStatus = getDeviceLoginStatus();
+      if (loginStatus === "active") {
+        if (!cancelled) setStatus("ok");
+        return;
+      }
+
+      // No human-facing login screen anymore - resolve the salon from the
+      // URL slug (works even with no session yet, same public lookup the
+      // booking page uses) and silently establish a device session.
+      var salon = await fetchPublicSalonBranding(slug);
+      if (cancelled) return;
+
+      if (!salon || !salon.id) {
+        setStatus("error");
+        setError("Could not find this salon. Please check the link and try again.");
+        return;
+      }
+
+      var result = await silentDeviceLogin(salon.id);
+      if (cancelled) return;
+
+      if (result.ok) {
+        setStatus("ok");
+      } else {
+        setStatus("error");
+        setError(result.error || "Could not connect. Please contact support.");
+      }
+    }
+
     check();
     var interval = setInterval(check, 5 * 60 * 1000);
-    return function() { clearInterval(interval); };
-  }, []);
+    return function() { cancelled = true; clearInterval(interval); };
+  }, [slug]);
 
   if (status === "checking") return null;
 
-  if (status === "needs-login") {
-    return <DeviceLoginPage reauth={reauth} onSuccess={function(){ setStatus("ok"); }} />;
+  if (status === "error") {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center", fontFamily: "sans-serif", background: "#1A1400", color: "#fff" }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
+        <h2 style={{ marginBottom: 8 }}>Could not connect</h2>
+        <p style={{ color: "#ccc", maxWidth: 320 }}>{error}</p>
+      </div>
+    );
   }
 
   return children;
