@@ -21,15 +21,28 @@ import { SalonGate, fetchPublicSalonBranding } from "./lib/SalonContext";
 function RedirectToBooking() {
   useEffect(function() {
     // Supabase always lands recovery emails on the site root regardless of redirectTo.
-    // Distinguish PIN reset vs password reset using localStorage marker set by ForgotPinPage.
-    var hash = window.location.hash;
-    if (hash && hash.includes("type=recovery") && hash.includes("access_token")) {
+    // The token can arrive in the hash (most cases) OR as query params (some email
+    // clients strip the hash before following the link). Check both.
+    var hash   = window.location.hash || "";
+    var search = window.location.search || "";
+
+    // Parse token from hash: #access_token=xxx&type=recovery
+    var hashParams  = new URLSearchParams(hash.replace(/^#/, ""));
+    // Parse token from query string: ?access_token=xxx&type=recovery
+    var searchParams = new URLSearchParams(search.replace(/^\?/, ""));
+
+    var isRecovery = (
+      (hashParams.get("type") === "recovery" && hashParams.get("access_token")) ||
+      (searchParams.get("type") === "recovery" && searchParams.get("access_token"))
+    );
+
+    if (isRecovery) {
       var pinSlug = window.localStorage.getItem("trimora_pin_reset_slug");
       if (pinSlug) {
         // PIN reset — keep marker so ResetPinPage success screen can link back
-        window.location.href = "/reset-pin" + hash;
+        window.location.href = "/reset-pin" + hash + search;
       } else {
-        window.location.href = "/reset-password" + hash;
+        window.location.href = "/reset-password" + hash + search;
       }
       return;
     }

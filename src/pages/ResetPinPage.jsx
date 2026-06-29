@@ -24,9 +24,11 @@ export default function ResetPinPage() {
   var backHref = slug && slug !== "__noslug__" ? "/" + slug + "/pos" : "/pos";
 
   useEffect(function() {
-    var hash   = window.location.hash;
-    var params = new URLSearchParams(hash.replace("#", "?"));
-    var t      = params.get("access_token");
+    var hash         = window.location.hash || "";
+    var search       = window.location.search || "";
+    var hashParams   = new URLSearchParams(hash.replace(/^#/, ""));
+    var searchParams = new URLSearchParams(search.replace(/^\?/, ""));
+    var t = hashParams.get("access_token") || searchParams.get("access_token");
     if (t) {
       setToken(t);
     } else {

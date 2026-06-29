@@ -38,9 +38,13 @@ export default function ResetPasswordPage() {
   var [confirmPin, setConfirmPin] = useState("");
 
   useEffect(function() {
-    var hash   = window.location.hash;
-    var params = new URLSearchParams(hash.replace("#", "?"));
-    var t      = params.get("access_token");
+    // Token can arrive in hash (#access_token=...) or query string (?access_token=...)
+    // depending on the email client. Check both.
+    var hash         = window.location.hash || "";
+    var search       = window.location.search || "";
+    var hashParams   = new URLSearchParams(hash.replace(/^#/, ""));
+    var searchParams = new URLSearchParams(search.replace(/^\?/, ""));
+    var t = hashParams.get("access_token") || searchParams.get("access_token");
     if (t) {
       setToken(t);
     } else {
