@@ -37,14 +37,36 @@ function RedirectToBooking() {
     );
 
     if (isRecovery) {
+      // Primary signal: localStorage marker set by ForgotPinPage/ForgotPasswordPage
+      // in the same browser session before sending the email.
       var pinSlug = window.localStorage.getItem("trimora_pin_reset_slug");
-      if (pinSlug) {
-        // PIN reset — embed slug in the forward path so ResetPinPage gets it via useParams
-        var pinPath = (pinSlug && pinSlug !== "__noslug__") ? "/reset-pin/" + pinSlug : "/reset-pin";
+      var pwSlug  = window.localStorage.getItem("trimora_password_reset_slug");
+
+      // Secondary signal: the redirectTo path Supabase received.
+      // Supabase sometimes preserves it as the "redirect_to" param in the hash.
+      var redirectTo = hashParams.get("redirect_to") || searchParams.get("redirect_to") || "";
+      var isRedirectToPin = redirectTo.includes("/reset-pin");
+
+      function validSlug(s) { return !!(s && /^[a-z0-9][a-z0-9-]{2,}$/.test(s)); }
+
+      if (pinSlug || isRedirectToPin) {
+        // PIN reset flow
+        var slug = validSlug(pinSlug) ? pinSlug : "";
+        // Try to extract slug from redirectTo path e.g. /reset-pin/urban-streets-beauty
+        if (!slug && isRedirectToPin) {
+          var match = redirectTo.match(/\/reset-pin\/([a-z0-9][a-z0-9-]{2,})/);
+          if (match) slug = match[1];
+        }
+        var pinPath = slug ? "/reset-pin/" + slug : "/reset-pin";
         window.location.href = pinPath + hash;
       } else {
-        var pwSlug = window.localStorage.getItem("trimora_password_reset_slug");
-        var validPwSlug = pwSlug && /^[a-z0-9][a-z0-9-]{2,}$/.test(pwSlug) ? pwSlug : "";
+        // Password reset flow
+        var validPwSlug = validSlug(pwSlug) ? pwSlug : "";
+        // Try to extract slug from redirectTo path e.g. /reset-password/urban-streets-beauty
+        if (!validPwSlug && redirectTo.includes("/reset-password")) {
+          var pwMatch = redirectTo.match(/\/reset-password\/([a-z0-9][a-z0-9-]{2,})/);
+          if (pwMatch) validPwSlug = pwMatch[1];
+        }
         var pwPath = validPwSlug ? "/reset-password/" + validPwSlug : "/reset-password";
         window.location.href = pwPath + hash;
       }
