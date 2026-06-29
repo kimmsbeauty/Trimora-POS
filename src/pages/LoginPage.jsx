@@ -5,6 +5,7 @@ import SalonBrandmark from "../components/SalonBrandmark";
 import GoldBtn from "../components/GoldBtn";
 import { SUPABASE_URL, SUPABASE_KEY, GOLD, BLACK, DARK, WHITE, RED } from "../lib/constants.js";
 import { lighten, darken } from "../lib/colorUtils";
+import { useParams } from "react-router-dom";
 import { useSalon, fetchPublicSalonBranding } from "../lib/SalonContext";
 import { getValidAccessToken } from "../lib/deviceAuth";
 
@@ -43,19 +44,28 @@ export default function LoginPage({ onLogin }) {
   // its real branding and fall back to generic chrome.
   var contextSalon = useSalon();
 
+  // On slugged routes (/:slug/pos), SalonGate is in the tree and will provide
+  // contextSalon once it resolves. We must NOT fall back to Kimms branding while
+  // it is still loading — that causes the cross-salon branding flash.
+  // On the legacy /pos route there is no SalonGate so contextSalon is always null;
+  // that is the only case where we do the independent Kimms lookup.
+  var routeParams = useParams();
+  var isSlugRoute = !!(routeParams && routeParams.slug);
+
   var legacyBrandingState = useState(null);
   var legacyBranding = legacyBrandingState[0]; var setLegacyBranding = legacyBrandingState[1];
 
   useEffect(function() {
-    if (contextSalon) return;
+    // Only fetch fallback branding on the legacy /pos route (no slug in URL).
+    if (contextSalon || isSlugRoute) return;
     var cancelled = false;
     fetchPublicSalonBranding(null).then(function(result) {
       if (!cancelled) setLegacyBranding(result);
     });
     return function() { cancelled = true; };
-  }, [contextSalon]);
+  }, [contextSalon, isSlugRoute]);
 
-  var salon = contextSalon || legacyBranding;
+  var salon = contextSalon || (!isSlugRoute ? legacyBranding : null);
 
   var primary   = (salon && salon.primary_color) || GOLD;
   var secondary = (salon && salon.secondary_color) || DARK;
