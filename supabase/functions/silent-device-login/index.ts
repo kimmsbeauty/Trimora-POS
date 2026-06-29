@@ -1,19 +1,15 @@
 // supabase/functions/silent-device-login/index.ts
 //
-// Replaces the human-facing email+password device login entirely.
-// Receives: { salon_id }
+// Silently establishes a device session for a salon without requiring
+// any human-typed credentials.
 //
-// Looks up the salon's Auth user and its stored secret (set once via
-// admin-set-device-secret), then signs in using the exact same plain
-// password-grant endpoint the old human-typed login already used
-// successfully - just triggered server-side, with a secret nobody ever
-// sees or types. Deliberately lightweight: one DB lookup, one Admin API
-// call, one plain HTTP fetch - no generateLink/verifyOtp, which is the
-// likely cause of device-pin-login's resource-limit failures.
-//
-// No PIN involved at this stage at all - the PIN screen continues to
-// work exactly as it always has, completely unchanged, once this has
-// silently established a device session in the background.
+// Flow:
+//  1. Look up salon_auth_users + salon_device_secrets for this salon_id
+//  2. Attempt password grant with stored secret
+//  3. If password grant fails (secret out of sync — e.g. after a PIN reset
+//     which sets a placeholder password), auto-resync: generate a new secret,
+//     update Auth password, upsert secret, retry grant
+//  4. Return access_token + refresh_token
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -22,6 +18,23 @@ const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+function randomSecret() {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function attemptPasswordGrant(supabaseUrl: string, serviceKey: string, email: string, password: string) {
+  const res = await fetch(supabaseUrl + "/auth/v1/token?grant_type=password", {
+    method: "POST",
+    headers: { apikey: serviceKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.access_token ? data : null;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -35,11 +48,12 @@ serve(async (req) => {
         { status: 400, headers: { ...CORS, "Content-Type": "application/json" } });
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+    const supabase = createClient(supabaseUrl, serviceKey);
+
+    // Check suspension
     const { data: salonRow } = await supabase
       .from("salons")
       .select("suspended")
@@ -51,6 +65,7 @@ serve(async (req) => {
         { status: 403, headers: { ...CORS, "Content-Type": "application/json" } });
     }
 
+    // Get auth user
     const { data: authUserRow, error: authUserError } = await supabase
       .from("salon_auth_users")
       .select("id")
@@ -62,6 +77,7 @@ serve(async (req) => {
         { status: 404, headers: { ...CORS, "Content-Type": "application/json" } });
     }
 
+    // Get stored secret
     const { data: secretRow, error: secretError } = await supabase
       .from("salon_device_secrets")
       .select("secret")
@@ -73,32 +89,56 @@ serve(async (req) => {
         { status: 404, headers: { ...CORS, "Content-Type": "application/json" } });
     }
 
+    // Get email
     const { data: userData, error: userError } = await supabase.auth.admin.getUserById(authUserRow.id);
-    if (userError || !userData || !userData.user || !userData.user.email) {
-      console.error("getUserById error:", userError);
+    if (userError || !userData?.user?.email) {
       return new Response(JSON.stringify({ error: "Could not resolve device account. Please contact support." }),
         { status: 500, headers: { ...CORS, "Content-Type": "application/json" } });
     }
 
-    // Same exact endpoint the human-typed login already uses successfully -
-    // just called server-side with a secret nobody ever needs to know.
-    const tokenRes = await fetch(Deno.env.get("SUPABASE_URL") + "/auth/v1/token?grant_type=password", {
-      method: "POST",
-      headers: {
-        apikey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ email: userData.user.email, password: secretRow.secret }),
-    });
+    const email = userData.user.email;
 
-    if (!tokenRes.ok) {
-      const errBody = await tokenRes.text();
-      console.error("password grant failed:", errBody);
-      return new Response(JSON.stringify({ error: "Could not establish device session. Please contact support." }),
-        { status: 500, headers: { ...CORS, "Content-Type": "application/json" } });
+    // Attempt 1: use stored secret
+    let tokenData = await attemptPasswordGrant(supabaseUrl, serviceKey, email, secretRow.secret);
+
+    // Attempt 2: if grant failed, auto-resync secret and retry
+    // This heals the mismatch caused by PIN reset setting a placeholder password
+    if (!tokenData) {
+      console.log("Password grant failed for salon", salon_id, "— auto-resyncing device secret");
+
+      const newSecret = randomSecret();
+
+      const { error: updateError } = await supabase.auth.admin.updateUserById(authUserRow.id, {
+        password: newSecret,
+      });
+
+      if (updateError) {
+        console.error("Auto-resync: updateUserById failed:", updateError);
+        return new Response(JSON.stringify({ error: "Could not establish device session. Please contact support." }),
+          { status: 500, headers: { ...CORS, "Content-Type": "application/json" } });
+      }
+
+      const { error: upsertError } = await supabase
+        .from("salon_device_secrets")
+        .upsert({ salon_id, secret: newSecret });
+
+      if (upsertError) {
+        console.error("Auto-resync: upsert failed:", upsertError);
+        return new Response(JSON.stringify({ error: "Could not establish device session. Please contact support." }),
+          { status: 500, headers: { ...CORS, "Content-Type": "application/json" } });
+      }
+
+      // Retry grant with new secret
+      tokenData = await attemptPasswordGrant(supabaseUrl, serviceKey, email, newSecret);
+
+      if (!tokenData) {
+        console.error("Auto-resync: retry grant still failed for salon", salon_id);
+        return new Response(JSON.stringify({ error: "Could not establish device session. Please contact support." }),
+          { status: 500, headers: { ...CORS, "Content-Type": "application/json" } });
+      }
+
+      console.log("Auto-resync successful for salon", salon_id);
     }
-
-    const tokenData = await tokenRes.json();
 
     return new Response(
       JSON.stringify({
