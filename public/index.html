@@ -4,7 +4,16 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0A0A0A" />
-    <title>Kimm's Beauty Parlour</title>
+
+    <!-- PWA: iOS reads these directly (does not use manifest.json the
+         same way Android/Chrome does). Manifest itself is injected
+         dynamically per-salon — see src/lib/pwaManifest.js -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Trimora POS" />
+
+    <title>Trimora POS</title>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

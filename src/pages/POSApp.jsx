@@ -19,6 +19,8 @@ import CampaignEditorCard from "../components/CampaignEditorCard.jsx";
 import { db, offlineQueue, syncOfflineQueue } from "../lib/db.js";
 import { fmt, todayStr, nowTime } from "../lib/utils.js";
 import { useSalon, fetchPublicSalonBranding } from "../lib/SalonContext";
+import { setPwaManifest, setLegacyPwaManifest } from "../lib/pwaManifest.js";
+import { registerServiceWorker } from "../lib/registerServiceWorker.js";
 import { getValidAccessToken } from "../lib/deviceAuth";
 import { lighten, darken } from "../lib/colorUtils";
 import {
@@ -53,6 +55,23 @@ export default function POSApp({ onLogout, userRole }) {
   }, [contextSalon]);
 
   var salon = contextSalon || legacyBranding;
+
+  // PWA: inject a per-salon manifest once we know which salon this is,
+  // so "Add to Home Screen" launches straight back into THIS salon's
+  // POS rather than the generic /pos route. See lib/pwaManifest.js.
+  useEffect(function() {
+    if (salon && salon.slug) {
+      setPwaManifest(salon);
+    } else if (salon) {
+      // Legacy /pos route — salon resolved but has no slug (Kimms fallback)
+      setLegacyPwaManifest();
+    }
+  }, [salon]);
+
+  // Register the app-shell service worker once, on first POS load.
+  useEffect(function() {
+    registerServiceWorker();
+  }, []);
 
   var primary    = (salon && salon.primary_color) || GOLD;
   var secondary  = (salon && salon.secondary_color) || DARK;
