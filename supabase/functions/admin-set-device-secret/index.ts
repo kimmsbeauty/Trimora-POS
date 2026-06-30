@@ -1,12 +1,18 @@
 // supabase/functions/admin-set-device-secret/index.ts
 //
-// ONE-TIME BACKFILL TOOL - run once per existing salon, then this can be
-// deleted. Generates a random secret, sets it as that salon's actual
-// Supabase Auth password (via Admin API - no human ever sees or needs
-// this value), and stores it in salon_device_secrets so
-// silent-device-login can use it later without anyone typing anything.
+// ADMIN-ONLY TOOL — requires the Supabase service role key as the
+// Authorization bearer token. Generates a random secret, sets it as
+// that salon's actual Supabase Auth password (via Admin API — no human
+// ever sees or needs this value), and stores it in salon_device_secrets
+// so silent-device-login can use it later without anyone typing anything.
+//
+// This function is no longer called from the frontend at all — the
+// silent-device-login function now auto-resyncs secrets internally
+// when needed. This endpoint remains only for manual/emergency use
+// via the Supabase dashboard or authenticated server-side tooling.
 //
 // Receives: { salon_id }
+// Requires: Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -27,6 +33,18 @@ serve(async (req) => {
     return new Response("ok", { headers: CORS });
   }
 
+  // ── AUTH GUARD ─────────────────────────────────────────────────
+  // Only the service role key may call this function. The public anon
+  // key (visible in every browser bundle) is explicitly rejected.
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const authHeader = req.headers.get("Authorization") || "";
+  const providedToken = authHeader.replace(/^Bearer\s+/i, "");
+
+  if (providedToken !== serviceKey) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }),
+      { status: 401, headers: { ...CORS, "Content-Type": "application/json" } });
+  }
+
   try {
     const { salon_id } = await req.json();
     if (!salon_id) {
@@ -36,7 +54,7 @@ serve(async (req) => {
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      serviceKey
     );
 
     const { data: authUserRow, error: authUserError } = await supabase
