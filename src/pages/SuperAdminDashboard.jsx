@@ -53,6 +53,11 @@ export default function SuperAdminDashboard({ onLogout }) {
   var [actionLoading,setActionLoading]= useState(false);
   var [suspendModal, setSuspendModal] = useState(null);
   var [suspendReason,setSuspendReason]= useState("");
+  var [resetPinModal, setResetPinModal] = useState(null);
+  var [resetPinRole, setResetPinRole] = useState("admin");
+  var [resetPinValue, setResetPinValue] = useState("");
+  var [resetPinConfirm, setResetPinConfirm] = useState("");
+  var [resetPinError, setResetPinError] = useState("");
   var [paymentHistory, setPaymentHistory] = useState([]);
   var [historyLoading, setHistoryLoading] = useState(false);
   var [paymentModal, setPaymentModal] = useState(null);
@@ -304,6 +309,44 @@ export default function SuperAdminDashboard({ onLogout }) {
     }
   }
 
+  async function resetSalonPin(salon, role, newPin) {
+    setResetPinError("");
+    if (!/^[0-9]{4,6}$/.test(newPin)) {
+      setResetPinError("PIN must be 4-6 digits.");
+      return;
+    }
+    if (newPin !== resetPinConfirm) {
+      setResetPinError("PINs do not match.");
+      return;
+    }
+    setActionLoading(true);
+    var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/super_admin_reset_salon_pin", {
+      method: "POST",
+      headers: {
+        apikey:         SUPABASE_KEY,
+        Authorization:  "Bearer " + token,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        p_salon_id: salon.id,
+        p_role:     role,
+        p_new_pin:  newPin,
+      }),
+    });
+    setActionLoading(false);
+    if (res.ok) {
+      setResetPinModal(null);
+      setResetPinValue("");
+      setResetPinConfirm("");
+      setResetPinError("");
+      alert((role === "admin" ? "Admin" : "Staff") + " PIN reset successfully for " + salon.name + ".");
+    } else {
+      var err = await res.json().catch(function() { return {}; });
+      setResetPinError(err.message || "Failed to reset PIN (status " + res.status + ")");
+    }
+  }
+
   function handleLogout() {
     superAdminLogout();
     onLogout();
@@ -451,6 +494,15 @@ export default function SuperAdminDashboard({ onLogout }) {
               );
             })}
           </div>
+
+          {/* Reset Admin/Staff PIN — last-resort recovery when owner
+              has lost their PIN AND lost access to their reset email */}
+          <button
+            onClick={function() { setResetPinModal(s); setResetPinRole("admin"); setResetPinValue(""); setResetPinConfirm(""); setResetPinError(""); }}
+            style={{ width: "100%", background: WHITE, color: DARK, border: "1.5px solid " + GOLD_DIM, borderRadius: 12, padding: "12px 0", fontWeight: 800, fontSize: 13, cursor: "pointer", marginBottom: 10 }}
+          >
+            🔑 Reset Admin/Staff PIN
+          </button>
 
           {/* Suspend / Reactivate */}
           {s.suspended ? (
@@ -799,6 +851,76 @@ export default function SuperAdminDashboard({ onLogout }) {
               </button>
               <button
                 onClick={function() { setSuspendModal(null); setSuspendReason(""); }}
+                style={{ width: "100%", background: WHITE, color: "#888", border: "1.5px solid #ddd", borderRadius: 12, padding: "12px 0", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset PIN modal — last-resort recovery for fully locked-out owners */}
+      {resetPinModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 2000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div style={{ background: WHITE, borderRadius: "20px 20px 0 0", padding: "24px 20px 32px", width: "100%", maxWidth: 480 }}>
+            <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 6 }}>🔑 Reset PIN</div>
+            <div style={{ fontSize: 13, color: "#555", marginBottom: 16 }}>
+              Set a new PIN for <b>{resetPinModal.name}</b>. Use this only when the owner cannot use the self-service reset (e.g. no access to their email).
+            </div>
+
+            <label style={{ fontSize: 11, fontWeight: 800, color: "#888", display: "block", marginBottom: 6, textTransform: "uppercase" }}>Which PIN?</label>
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              {[{ id: "admin", label: "Admin PIN" }, { id: "staff", label: "Staff PIN" }].map(function(r) {
+                return (
+                  <button
+                    key={r.id}
+                    onClick={function() { setResetPinRole(r.id); setResetPinError(""); }}
+                    style={{
+                      flex: 1, padding: "10px 0", borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: "pointer",
+                      border: "1.5px solid " + (resetPinRole === r.id ? GOLD : "#ddd"),
+                      background: resetPinRole === r.id ? GOLD : WHITE,
+                      color: resetPinRole === r.id ? BLACK : "#888",
+                    }}
+                  >
+                    {r.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <label style={{ fontSize: 11, fontWeight: 800, color: "#888", display: "block", marginBottom: 6, textTransform: "uppercase" }}>New PIN (4-6 digits)</label>
+            <input
+              type="password" inputMode="numeric" maxLength={6}
+              value={resetPinValue}
+              onChange={function(e) { setResetPinValue(e.target.value.replace(/\D/g, "")); setResetPinError(""); }}
+              placeholder="Enter new PIN"
+              style={{ width: "100%", borderRadius: 10, border: "1.5px solid #ddd", background: CREAM, padding: "11px 13px", fontSize: 18, letterSpacing: "0.3em", textAlign: "center", boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, marginBottom: 10 }}
+            />
+
+            <label style={{ fontSize: 11, fontWeight: 800, color: "#888", display: "block", marginBottom: 6, textTransform: "uppercase" }}>Confirm PIN</label>
+            <input
+              type="password" inputMode="numeric" maxLength={6}
+              value={resetPinConfirm}
+              onChange={function(e) { setResetPinConfirm(e.target.value.replace(/\D/g, "")); setResetPinError(""); }}
+              placeholder="Re-enter new PIN"
+              style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + (resetPinConfirm.length > 0 && resetPinConfirm !== resetPinValue ? "#FCA5A5" : "#ddd"), background: CREAM, padding: "11px 13px", fontSize: 18, letterSpacing: "0.3em", textAlign: "center", boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, marginBottom: 14 }}
+            />
+
+            {resetPinError && (
+              <div style={{ color: "#991B1B", fontSize: 12, marginBottom: 14, padding: "8px 12px", background: "#FEE2E2", borderRadius: 8 }}>{resetPinError}</div>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <button
+                onClick={function() { resetSalonPin(resetPinModal, resetPinRole, resetPinValue); }}
+                disabled={actionLoading || resetPinValue.length < 4}
+                style={{ width: "100%", background: GOLD, color: BLACK, border: "none", borderRadius: 12, padding: "14px 0", fontWeight: 900, fontSize: 14, cursor: "pointer", opacity: (actionLoading || resetPinValue.length < 4) ? 0.6 : 1 }}
+              >
+                {actionLoading ? "Resetting..." : "Confirm Reset PIN"}
+              </button>
+              <button
+                onClick={function() { setResetPinModal(null); setResetPinValue(""); setResetPinConfirm(""); setResetPinError(""); }}
                 style={{ width: "100%", background: WHITE, color: "#888", border: "1.5px solid #ddd", borderRadius: 12, padding: "12px 0", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
               >
                 Cancel
