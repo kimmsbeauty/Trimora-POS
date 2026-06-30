@@ -10,7 +10,6 @@
 
 const CACHE_NAME = "trimora-pos-shell-v1";
 const SHELL_ASSETS = [
-  "/",
   "/icon-192.png",
   "/icon-512.png",
 ];
@@ -50,12 +49,33 @@ self.addEventListener("fetch", function (event) {
   if (event.request.method !== "GET") return;
 
   // Network-first for navigation (so a fresh deploy is picked up
-  // quickly), falling back to cache only if the network is down.
+  // quickly), falling back to the cached app shell only if the
+  // network is genuinely down. We never cache "/" itself (that's
+  // RedirectToBooking, not the POS) — instead we fall back to
+  // whatever page was last successfully cached for THIS exact path,
+  // so a staff member who opens the installed app while offline
+  // lands back on their own salon's last-loaded screen instead of
+  // a dead redirect page with nowhere to go.
   if (event.request.mode === "navigate") {
     event.respondWith(
-      fetch(event.request).catch(function () {
-        return caches.match("/");
-      })
+      fetch(event.request)
+        .then(function (response) {
+          if (response && response.status === 200) {
+            var clone = response.clone();
+            caches.open(CACHE_NAME).then(function (cache) {
+              cache.put(event.request, clone);
+            });
+          }
+          return response;
+        })
+        .catch(function () {
+          return caches.match(event.request).then(function (cached) {
+            return cached || new Response(
+              "<!DOCTYPE html><html><body style='background:#0A0A0A;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;padding:20px'><div><h2>No connection</h2><p style=\"color:#999\">Reconnect to the internet and reopen the app.</p></div></body></html>",
+              { headers: { "Content-Type": "text/html" } }
+            );
+          });
+        })
     );
     return;
   }
