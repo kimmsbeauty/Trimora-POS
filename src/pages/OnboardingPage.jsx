@@ -203,17 +203,14 @@ export default function OnboardingPage() {
       // Fire-and-forget — a failure here must NOT block the salon from
       // getting their login link. If it silently fails, the auto-resync
       // in silent-device-login will recover it on first access anyway.
-      if (salonId_result) {
-        fetch(SUPABASE_URL + "/functions/v1/admin-set-device-secret", {
-          method: "POST",
-          headers: {
-            apikey: SUPABASE_KEY,
-            Authorization: "Bearer " + SUPABASE_KEY,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ salon_id: salonId_result }),
-        }).catch(function(e) { console.error("admin-set-device-secret failed silently:", e); });
-      }
+      // NOTE: admin-set-device-secret now requires the Supabase SERVICE
+      // ROLE key (hardened for security), which the browser never has
+      // access to. We deliberately do NOT call it from here anymore —
+      // calling it with the anon key would just get a 401 every time.
+      // This is safe to skip: silent-device-login auto-resyncs the
+      // device secret on the salon's very first /pos visit anyway, so
+      // the new owner's first login transparently sets it up with zero
+      // manual steps and zero broken state in between.
 
       // Step 4: Persist device session and redirect
       persistSession(signupData);
