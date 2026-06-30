@@ -13,7 +13,7 @@ import ForgotPinPage from "./pages/ForgotPinPage";
 import TermsPage from "./pages/TermsPage";
 import SuperAdminGate from "./pages/SuperAdminGate";
 import OnboardingPage from "./pages/OnboardingPage";
-import { getDeviceLoginStatus, silentDeviceLogin } from "./lib/deviceAuth";
+import { getDeviceLoginStatus, silentDeviceLogin, clearDeviceAuth } from "./lib/deviceAuth";
 import { SalonGate, fetchPublicSalonBranding } from "./lib/SalonContext";
 
 function RedirectToBooking() {
@@ -94,15 +94,8 @@ function DeviceGate({ children }) {
     var cancelled = false;
 
     async function check() {
-      var loginStatus = getDeviceLoginStatus();
-      if (loginStatus === "active") {
-        if (!cancelled) setStatus("ok");
-        return;
-      }
-
-      // No human-facing login screen anymore - resolve the salon from the
-      // URL slug (works even with no session yet, same public lookup the
-      // booking page uses) and silently establish a device session.
+      // Always resolve the salon from the URL first — needed both for the
+      // session ownership check and for the silent login call below.
       var salon = await fetchPublicSalonBranding(slug);
       if (cancelled) return;
 
@@ -110,6 +103,27 @@ function DeviceGate({ children }) {
         setStatus("error");
         setError("Could not find this salon. Please check the link and try again.");
         return;
+      }
+
+      var loginStatus = getDeviceLoginStatus();
+
+      // CRITICAL: even if a session exists, verify it belongs to THIS salon.
+      // Without this check, a device that previously accessed Salon A would
+      // silently serve Salon A's data when a user visits Salon B's URL,
+      // because localStorage holds only one session at a time and DeviceGate
+      // would find it "active" regardless of which salon it was minted for.
+      if (loginStatus === "active") {
+        var storedAuth = JSON.parse(localStorage.getItem("trimora_device_auth") || "{}");
+        if (!storedAuth.salon_id || storedAuth.salon_id !== salon.id) {
+          // Wrong salon's session or legacy session (no salon_id stored) —
+          // clear it and force a fresh silent login for this salon.
+          clearDeviceAuth();
+          loginStatus = "none";
+        } else {
+          // Session is valid and belongs to this salon.
+          if (!cancelled) setStatus("ok");
+          return;
+        }
       }
 
       var result = await silentDeviceLogin(salon.id);

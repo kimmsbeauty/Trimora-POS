@@ -52,12 +52,13 @@ export function getDeviceLoginStatus() {
 // below, and also by the onboarding flow (OnboardingPage.jsx) right after
 // a brand-new salon owner signs up — same storage, same shape, one place
 // that knows how to write it.
-export function persistSession(data) {
+export function persistSession(data, salonId) {
   writeAuth({
     access_token: data.access_token,
     refresh_token: data.refresh_token,
     expires_at: Date.now() + (data.expires_in || 3600) * 1000,
     login_at: Date.now(),
+    salon_id: salonId || null,
   });
 }
 
@@ -100,7 +101,7 @@ export async function silentDeviceLogin(salonId) {
       return { ok: false, error: (data && data.error) || "Could not connect to this salon. Please contact support." };
     }
 
-    persistSession(data);
+    persistSession(data, salonId);
 
     return { ok: true };
   } catch (e) {
