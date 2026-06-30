@@ -10,7 +10,6 @@ import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import ResetPinPage from "./pages/ResetPinPage";
 import ForgotPinPage from "./pages/ForgotPinPage";
-import DebugBackfillSecrets from "./pages/DebugBackfillSecrets";
 import TermsPage from "./pages/TermsPage";
 import SuperAdminGate from "./pages/SuperAdminGate";
 import OnboardingPage from "./pages/OnboardingPage";
@@ -172,7 +171,6 @@ export default function App() {
         <Route path="/forgot-password"        element={<ForgotPasswordPage />} />
         <Route path="/:slug/forgot-pin"       element={<ForgotPinPage />} />
         <Route path="/forgot-pin"             element={<ForgotPinPage />} />
-        <Route path="/debug-backfill-secrets" element={<DebugBackfillSecrets />} />
 
         <Route path="/:slug/booking" element={<SalonGate mode="public"><BookingPage /></SalonGate>} />
         <Route path="/:slug/rate/:token" element={<SalonGate mode="public"><RatingPage /></SalonGate>} />
