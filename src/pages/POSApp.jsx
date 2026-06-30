@@ -54,6 +54,13 @@ export default function POSApp({ onLogout, userRole }) {
 
   var salon = contextSalon || legacyBranding;
 
+  // Update browser tab title to match the actual salon.
+  useEffect(function() {
+    if (salon && salon.name) {
+      document.title = salon.name + " — Trimora POS";
+    }
+  }, [salon]);
+
   var primary    = (salon && salon.primary_color) || GOLD;
   var secondary  = (salon && salon.secondary_color) || DARK;
   var primaryLt  = lighten(primary, 14);

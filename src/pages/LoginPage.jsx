@@ -66,6 +66,16 @@ export default function LoginPage({ onLogin }) {
 
   var salon = contextSalon || (!isSlugRoute ? legacyBranding : null);
 
+  // Update browser tab title to match the actual salon — prevents the
+  // generic/stale title from showing in the tab while on a salon's page.
+  useEffect(function() {
+    if (salon && salon.name) {
+      document.title = salon.name + " — Trimora POS";
+    } else {
+      document.title = "Trimora POS";
+    }
+  }, [salon]);
+
   var primary   = (salon && salon.primary_color) || GOLD;
   var secondary = (salon && salon.secondary_color) || DARK;
   var primaryLt = lighten(primary, 14);
