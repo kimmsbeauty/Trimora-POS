@@ -279,7 +279,7 @@ export default function SuperAdminDashboard({ onLogout }) {
     });
     var rows = Object.keys(map).map(function(salonId) {
       var salon = salons.find(function(s) { return s.id === salonId; });
-      return { salonId: salonId, name: salon ? salon.name : "Unknown salon", value: map[salonId] };
+      return { salonId: salonId, name: salon ? salon.name : "Unknown salon", number: salon ? salon.salon_number : null, value: map[salonId] };
     });
     rows.sort(function(a, b) { return b.value - a.value; });
     return rows;
@@ -823,7 +823,13 @@ export default function SuperAdminDashboard({ onLogout }) {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
                     <div style={{ fontSize: 13, fontWeight: 800, color: DARK }}>
                       {meta.icon} {meta.label}
-                      {entry.salon_name && <span style={{ color: GOLD_DIM }}> · {entry.salon_name}</span>}
+                      {entry.salon_name && (
+                        <span style={{ color: GOLD_DIM }}>
+                          {" · "}
+                          {(function() { var s = salons.find(function(x) { return x.id === entry.salon_id; }); return s && s.salon_number ? "#" + String(s.salon_number).padStart(3,"0") + " " : ""; })()}
+                          {entry.salon_name}
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: 10, color: "#999", whiteSpace: "nowrap", marginLeft: 8 }}>
                       {new Date(entry.created_at).toLocaleString("en-KE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
@@ -876,7 +882,10 @@ export default function SuperAdminDashboard({ onLogout }) {
                   style={{ background: WHITE, borderRadius: 14, padding: 14, marginBottom: 10, border: "1.5px solid " + GOLD_DIM + "33", cursor: "pointer" }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: DARK }}>{s.name}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      {s.salon_number && <span style={{ fontSize: 10, fontWeight: 900, color: WHITE, background: GOLD_DIM, borderRadius: 6, padding: "2px 7px", letterSpacing: "0.03em" }}>#{String(s.salon_number).padStart(3, "0")}</span>}
+                      <div style={{ fontSize: 13, fontWeight: 800, color: DARK }}>{s.name}</div>
+                    </div>
                     <div style={{ fontSize: 10, color: "#999" }}>/{s.slug}</div>
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -977,7 +986,7 @@ export default function SuperAdminDashboard({ onLogout }) {
                       return (
                         <div key={r.salonId}>
                           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#666", marginBottom: 3 }}>
-                            <span>{r.name}</span>
+                            <span>{r.number ? "#" + String(r.number).padStart(3,"0") + " " : ""}{r.name}</span>
                             <span style={{ fontWeight: 800, color: DARK }}>{fmt(r.value)}</span>
                           </div>
                           <div style={{ background: CREAM, borderRadius: 6, height: 8, overflow: "hidden" }}>
@@ -1007,7 +1016,10 @@ export default function SuperAdminDashboard({ onLogout }) {
             ←
           </button>
           <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {s.salon_number && <span style={{ fontSize: 11, fontWeight: 900, color: GOLD_DIM, background: "rgba(201,168,76,0.15)", borderRadius: 8, padding: "3px 10px" }}>#{String(s.salon_number).padStart(3, "0")}</span>}
             <div style={{ fontSize: 14, fontWeight: 900, color: GOLD }}>{s.name}</div>
+          </div>
             <div style={{ fontSize: 11, color: GOLD_DIM }}>/{s.slug}</div>
           </div>
           {s.suspended
