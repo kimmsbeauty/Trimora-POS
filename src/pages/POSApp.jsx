@@ -62,11 +62,12 @@ export default function POSApp({ onLogout, userRole }) {
   var bookingHref = (salon && salon.slug) ? "/" + salon.slug + "/booking" : "/booking";
   var salonName  = (salon && salon.name) || "your salon";
 
-  var darkModeState = useState(function(){ return localStorage.getItem("kimms_dark") === "true"; });
+  var darkKey = "trimora_dark_" + ((contextSalon && contextSalon.id) || "default");
+  var darkModeState = useState(function(){ return localStorage.getItem(darkKey) === "true"; });
   var darkMode = darkModeState[0]; var setDarkMode = darkModeState[1];
 
   useEffect(function() {
-    localStorage.setItem("kimms_dark", darkMode);
+    localStorage.setItem(darkKey, darkMode);
     document.body.style.background = darkMode ? "#0A0A0A" : "#FDF8EE";
   }, [darkMode]);
 
