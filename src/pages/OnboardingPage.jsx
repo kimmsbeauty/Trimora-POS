@@ -166,19 +166,24 @@ export default function OnboardingPage() {
       // wraps as [{"complete_salon_onboarding":"(uuid,slug-value)"}]
       // Parse the composite string to extract the slug.
       var resultRow = Array.isArray(rpcData) ? rpcData[0] : rpcData;
-      var slug_result = null;
+      var slug_result  = null;
+      var salonId_result = null;
 
       if (resultRow) {
         // Try direct object first (in case it returns named columns)
         if (resultRow.slug) {
-          slug_result = resultRow.slug;
+          slug_result    = resultRow.slug;
+          salonId_result = resultRow.salon_id || null;
         } else if (resultRow.p_slug) {
           slug_result = resultRow.p_slug;
         } else {
           // Parse composite type string: "(uuid-value,slug-value)"
           var composite = resultRow.complete_salon_onboarding || Object.values(resultRow)[0] || "";
           var match = String(composite).match(/^\(([^,]+),(.+)\)$/);
-          if (match) slug_result = match[2].trim();
+          if (match) {
+            salonId_result = match[1].trim();
+            slug_result    = match[2].trim();
+          }
         }
       }
 
@@ -193,6 +198,22 @@ export default function OnboardingPage() {
         headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({ p_token: inviteToken }),
       });
+
+      // Step 3.5: Set up silent device login for this new salon.
+      // Fire-and-forget — a failure here must NOT block the salon from
+      // getting their login link. If it silently fails, the auto-resync
+      // in silent-device-login will recover it on first access anyway.
+      if (salonId_result) {
+        fetch(SUPABASE_URL + "/functions/v1/admin-set-device-secret", {
+          method: "POST",
+          headers: {
+            apikey: SUPABASE_KEY,
+            Authorization: "Bearer " + SUPABASE_KEY,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ salon_id: salonId_result }),
+        }).catch(function(e) { console.error("admin-set-device-secret failed silently:", e); });
+      }
 
       // Step 4: Persist device session and redirect
       persistSession(signupData);

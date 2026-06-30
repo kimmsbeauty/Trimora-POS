@@ -240,7 +240,7 @@ export default function ResetPasswordPage() {
         </div>
         {token && (
           <div style={{ fontSize: 11, color: "rgba(201,168,76,0.5)", marginBottom: 16, padding: "8px 10px", background: "rgba(201,168,76,0.06)", borderRadius: 8, border: "1px solid rgba(201,168,76,0.15)", lineHeight: 1.6 }}>
-            Trying to reset your admin PIN? <a href="/reset-pin" style={{ color: GOLD, fontWeight: 700, textDecoration: "none" }}>Click here instead →</a>
+            Trying to reset your admin PIN? <a href={"/reset-pin" + window.location.hash} style={{ color: GOLD, fontWeight: 700, textDecoration: "none" }}>Click here instead →</a>
           </div>
         )}
 
