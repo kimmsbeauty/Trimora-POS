@@ -36,12 +36,11 @@ async function verifyPin(role, pin) {
 export default function LoginPage({ onLogin }) {
   // This component also renders on the legacy unprefixed /pos route,
   // which is never wrapped in SalonGate — so contextSalon is genuinely
-  // null there, not just missing fields. Mirror the same fallback
-  // DeviceLoginPage uses: an independent, cosmetic-only lookup via
-  // fetchPublicSalonBranding(null), which resolves to KIMMS_SALON_ID
-  // internally. This never touches the real authenticated
-  // access-control path — it's purely so the legacy route doesn't lose
-  // its real branding and fall back to generic chrome.
+  // null there, not just missing fields. We do an independent,
+  // cosmetic-only lookup via fetchPublicSalonBranding(null), which
+  // resolves to KIMMS_SALON_ID internally. This never touches the real
+  // authenticated access-control path — it's purely so the legacy
+  // route doesn't lose its real branding and fall back to generic chrome.
   var contextSalon = useSalon();
 
   // On slugged routes (/:slug/pos), SalonGate is in the tree and will provide
