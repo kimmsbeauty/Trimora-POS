@@ -61,6 +61,10 @@ export default function SuperAdminDashboard({ onLogout }) {
   var [analyticsLoading, setAnalyticsLoading] = useState(false);
   var [allPayments, setAllPayments] = useState([]);
   var [analyticsLoaded, setAnalyticsLoaded] = useState(false);
+  var [editModal, setEditModal] = useState(null);
+  var [editFields, setEditFields] = useState({});
+  var [editSaving, setEditSaving] = useState(false);
+  var [editError, setEditError] = useState("");
   var [paymentHistory, setPaymentHistory] = useState([]);
   var [historyLoading, setHistoryLoading] = useState(false);
   var [paymentModal, setPaymentModal] = useState(null);
@@ -360,6 +364,69 @@ export default function SuperAdminDashboard({ onLogout }) {
     }
   }
 
+  function openEditModal(salon) {
+    setEditModal(salon);
+    setEditFields({
+      name:            salon.name || "",
+      tagline:         salon.tagline || "",
+      logo_url:        salon.logo_url || "",
+      primary_color:   salon.primary_color || "#C9A84C",
+      secondary_color: salon.secondary_color || "#1A1A1A",
+      contact_phone:   salon.contact_phone || "",
+      mpesa_till:      salon.mpesa_till || "",
+      mpesa_name:      salon.mpesa_name || "",
+    });
+    setEditError("");
+  }
+
+  async function saveSalonEdit() {
+    if (!editModal) return;
+    if (!editFields.name || !editFields.name.trim()) {
+      setEditError("Salon name cannot be empty.");
+      return;
+    }
+    setEditSaving(true);
+    setEditError("");
+
+    // Goes through a SECURITY DEFINER RPC (super_admin_update_salon),
+    // same pattern as every other Super Admin write (suspend, reactivate,
+    // PIN reset, record payment). A raw PATCH here would likely be
+    // rejected by RLS, since salon_settings/salons writes are normally
+    // scoped to the owning salon's own session, which Super Admin
+    // doesn't have. See supabase/sql/super_admin_update_salon.sql.
+    var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+
+    var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/super_admin_update_salon", {
+      method: "POST",
+      headers: {
+        apikey:         SUPABASE_KEY,
+        Authorization:  "Bearer " + token,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        p_salon_id:        editModal.id,
+        p_name:             editFields.name.trim(),
+        p_tagline:          editFields.tagline || null,
+        p_logo_url:         editFields.logo_url || null,
+        p_primary_color:    editFields.primary_color,
+        p_secondary_color:  editFields.secondary_color,
+        p_contact_phone:    editFields.contact_phone || null,
+        p_mpesa_till:       editFields.mpesa_till || null,
+        p_mpesa_name:       editFields.mpesa_name || null,
+      }),
+    });
+
+    setEditSaving(false);
+
+    if (res.ok) {
+      setEditModal(null);
+      await loadData();
+    } else {
+      var err = await res.json().catch(function() { return {}; });
+      setEditError(err.message || "Failed to save. Please try again.");
+    }
+  }
+
   async function resetSalonPin(salon, role, newPin) {
     setResetPinError("");
     if (!/^[0-9]{4,6}$/.test(newPin)) {
@@ -641,6 +708,15 @@ export default function SuperAdminDashboard({ onLogout }) {
               );
             })}
           </div>
+
+          {/* Edit Salon Details — branding/contact/M-Pesa, without
+              needing to log in as the salon owner */}
+          <button
+            onClick={function() { openEditModal(s); }}
+            style={{ width: "100%", background: WHITE, color: DARK, border: "1.5px solid " + GOLD_DIM, borderRadius: 12, padding: "12px 0", fontWeight: 800, fontSize: 13, cursor: "pointer", marginBottom: 10 }}
+          >
+            ✏️ Edit Salon Details
+          </button>
 
           {/* Reset Admin/Staff PIN — last-resort recovery when owner
               has lost their PIN AND lost access to their reset email */}
@@ -1004,6 +1080,113 @@ export default function SuperAdminDashboard({ onLogout }) {
               </button>
               <button
                 onClick={function() { setSuspendModal(null); setSuspendReason(""); }}
+                style={{ width: "100%", background: WHITE, color: "#888", border: "1.5px solid #ddd", borderRadius: 12, padding: "12px 0", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Salon Details modal */}
+      {editModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 2000, display: "flex", alignItems: "flex-end", justifyContent: "center", overflowY: "auto" }}>
+          <div style={{ background: WHITE, borderRadius: "20px 20px 0 0", padding: "24px 20px 32px", width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}>
+            <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 6 }}>✏️ Edit Salon Details</div>
+            <div style={{ fontSize: 13, color: "#555", marginBottom: 16 }}>
+              Editing <b>{editModal.name}</b>. Changes apply immediately.
+            </div>
+
+            <label style={{ fontSize: 11, fontWeight: 800, color: "#888", display: "block", marginBottom: 6, textTransform: "uppercase" }}>Salon Name</label>
+            <input
+              value={editFields.name || ""}
+              onChange={function(e) { setEditFields(Object.assign({}, editFields, { name: e.target.value })); }}
+              style={{ width: "100%", borderRadius: 10, border: "1.5px solid #ddd", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, marginBottom: 14 }}
+            />
+
+            <label style={{ fontSize: 11, fontWeight: 800, color: "#888", display: "block", marginBottom: 6, textTransform: "uppercase" }}>Tagline</label>
+            <input
+              value={editFields.tagline || ""}
+              onChange={function(e) { setEditFields(Object.assign({}, editFields, { tagline: e.target.value })); }}
+              placeholder="e.g. Beauty That Speaks Confidence"
+              style={{ width: "100%", borderRadius: 10, border: "1.5px solid #ddd", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, marginBottom: 14 }}
+            />
+
+            <label style={{ fontSize: 11, fontWeight: 800, color: "#888", display: "block", marginBottom: 6, textTransform: "uppercase" }}>Logo URL</label>
+            <input
+              value={editFields.logo_url || ""}
+              onChange={function(e) { setEditFields(Object.assign({}, editFields, { logo_url: e.target.value })); }}
+              placeholder="https://..."
+              style={{ width: "100%", borderRadius: 10, border: "1.5px solid #ddd", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, marginBottom: 14 }}
+            />
+
+            <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 11, fontWeight: 800, color: "#888", display: "block", marginBottom: 6, textTransform: "uppercase" }}>Primary Color</label>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input type="color" value={editFields.primary_color || "#C9A84C"}
+                    onChange={function(e) { setEditFields(Object.assign({}, editFields, { primary_color: e.target.value })); }}
+                    style={{ width: 38, height: 38, border: "1.5px solid #ddd", borderRadius: 8, cursor: "pointer", padding: 2 }} />
+                  <input value={editFields.primary_color || ""}
+                    onChange={function(e) { setEditFields(Object.assign({}, editFields, { primary_color: e.target.value })); }}
+                    style={{ flex: 1, borderRadius: 10, border: "1.5px solid #ddd", background: CREAM, padding: "9px 10px", fontSize: 12, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK }} />
+                </div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 11, fontWeight: 800, color: "#888", display: "block", marginBottom: 6, textTransform: "uppercase" }}>Secondary Color</label>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input type="color" value={editFields.secondary_color || "#1A1A1A"}
+                    onChange={function(e) { setEditFields(Object.assign({}, editFields, { secondary_color: e.target.value })); }}
+                    style={{ width: 38, height: 38, border: "1.5px solid #ddd", borderRadius: 8, cursor: "pointer", padding: 2 }} />
+                  <input value={editFields.secondary_color || ""}
+                    onChange={function(e) { setEditFields(Object.assign({}, editFields, { secondary_color: e.target.value })); }}
+                    style={{ flex: 1, borderRadius: 10, border: "1.5px solid #ddd", background: CREAM, padding: "9px 10px", fontSize: 12, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK }} />
+                </div>
+              </div>
+            </div>
+
+            <label style={{ fontSize: 11, fontWeight: 800, color: "#888", display: "block", marginBottom: 6, textTransform: "uppercase" }}>Contact Phone</label>
+            <input
+              value={editFields.contact_phone || ""}
+              onChange={function(e) { setEditFields(Object.assign({}, editFields, { contact_phone: e.target.value })); }}
+              placeholder="07xxxxxxxx"
+              style={{ width: "100%", borderRadius: 10, border: "1.5px solid #ddd", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, marginBottom: 14 }}
+            />
+
+            <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 11, fontWeight: 800, color: "#888", display: "block", marginBottom: 6, textTransform: "uppercase" }}>M-Pesa Till</label>
+                <input
+                  value={editFields.mpesa_till || ""}
+                  onChange={function(e) { setEditFields(Object.assign({}, editFields, { mpesa_till: e.target.value })); }}
+                  style={{ width: "100%", borderRadius: 10, border: "1.5px solid #ddd", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK }}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 11, fontWeight: 800, color: "#888", display: "block", marginBottom: 6, textTransform: "uppercase" }}>M-Pesa Name</label>
+                <input
+                  value={editFields.mpesa_name || ""}
+                  onChange={function(e) { setEditFields(Object.assign({}, editFields, { mpesa_name: e.target.value })); }}
+                  style={{ width: "100%", borderRadius: 10, border: "1.5px solid #ddd", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK }}
+                />
+              </div>
+            </div>
+
+            {editError && (
+              <div style={{ color: "#991B1B", fontSize: 12, marginBottom: 14, padding: "8px 12px", background: "#FEE2E2", borderRadius: 8 }}>{editError}</div>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <button
+                onClick={saveSalonEdit}
+                disabled={editSaving}
+                style={{ width: "100%", background: GOLD, color: BLACK, border: "none", borderRadius: 12, padding: "14px 0", fontWeight: 900, fontSize: 14, cursor: "pointer", opacity: editSaving ? 0.6 : 1 }}
+              >
+                {editSaving ? "Saving..." : "Save Changes"}
+              </button>
+              <button
+                onClick={function() { setEditModal(null); setEditError(""); }}
                 style={{ width: "100%", background: WHITE, color: "#888", border: "1.5px solid #ddd", borderRadius: 12, padding: "12px 0", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
               >
                 Cancel
