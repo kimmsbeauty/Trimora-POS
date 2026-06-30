@@ -151,6 +151,53 @@ export default function SuperAdminDashboard({ onLogout }) {
     return rows;
   }
 
+  // ── Health check — flags salons that likely need attention, using
+  //    only fields already present on salon_directory. No new RPC
+  //    or query needed. ──
+  function getHealthFlags(s) {
+    var flags = [];
+
+    if (s.suspended) {
+      flags.push({ severity: "high", label: "Suspended" });
+    }
+
+    if (s.subscription_expires_at && s.subscription_status !== "lifetime") {
+      var expiresAt = new Date(s.subscription_expires_at);
+      var daysLeft = Math.ceil((expiresAt - new Date()) / (1000 * 60 * 60 * 24));
+      if (daysLeft < 0) {
+        flags.push({ severity: "high", label: "Subscription expired" });
+      } else if (daysLeft <= 7) {
+        flags.push({ severity: "medium", label: "Expires in " + daysLeft + " day" + (daysLeft === 1 ? "" : "s") });
+      }
+    }
+
+    if ((s.sale_count || 0) === 0) {
+      flags.push({ severity: "medium", label: "Zero sales recorded" });
+    }
+
+    if ((s.staff_count || 0) === 0) {
+      flags.push({ severity: "low", label: "No staff added" });
+    }
+
+    if ((s.service_count || 0) === 0) {
+      flags.push({ severity: "low", label: "No services added" });
+    }
+
+    return flags;
+  }
+
+  function salonsNeedingAttention() {
+    return salons
+      .map(function(s) { return { salon: s, flags: getHealthFlags(s) }; })
+      .filter(function(item) { return item.flags.length > 0; })
+      .sort(function(a, b) {
+        var weight = { high: 3, medium: 2, low: 1 };
+        var aMax = Math.max.apply(null, a.flags.map(function(f) { return weight[f.severity]; }));
+        var bMax = Math.max.apply(null, b.flags.map(function(f) { return weight[f.severity]; }));
+        return bMax - aMax;
+      });
+  }
+
   var PLANS = {
     monthly:     { label: "Monthly",      price: 1200,  days: 30  },
     quarterly:   { label: "Quarterly",    price: 3300,  days: 90  },
@@ -484,6 +531,64 @@ export default function SuperAdminDashboard({ onLogout }) {
   });
 
   // ── DETAIL VIEW ──────────────────────────────────────────────────
+  // ── HEALTH VIEW ───────────────────────────────────────────────────
+  if (view === "health") {
+    var flaggedSalons = salonsNeedingAttention();
+    var severityColor = { high: RED, medium: AMBER, low: "#999" };
+    var severityBg    = { high: "#FEE2E2", medium: "#FEF3C7", low: "#F3F4F6" };
+
+    return (
+      <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
+        <div style={{ background: BLACK, padding: "16px 20px" }}>
+          <button onClick={function() { setView("salons"); }}
+            style={{ background: "none", border: "none", color: GOLD_DIM, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 8, padding: 0 }}>
+            ← Back
+          </button>
+          <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>🩺 Salon Health</div>
+          <div style={{ fontSize: 11, color: GOLD_DIM + "aa", marginTop: 2 }}>
+            {flaggedSalons.length === 0 ? "All salons look healthy." : flaggedSalons.length + " salon" + (flaggedSalons.length === 1 ? "" : "s") + " need" + (flaggedSalons.length === 1 ? "s" : "") + " attention"}
+          </div>
+        </div>
+
+        <div style={{ padding: 16 }}>
+          {flaggedSalons.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>
+              <div style={{ fontSize: 32, marginBottom: 10 }}>✅</div>
+              Nothing needs attention right now.
+            </div>
+          ) : (
+            flaggedSalons.map(function(item) {
+              var s = item.salon;
+              return (
+                <div key={s.id}
+                  onClick={function() { openSalonDetail(s); }}
+                  style={{ background: WHITE, borderRadius: 14, padding: 14, marginBottom: 10, border: "1.5px solid " + GOLD_DIM + "33", cursor: "pointer" }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: DARK }}>{s.name}</div>
+                    <div style={{ fontSize: 10, color: "#999" }}>/{s.slug}</div>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {item.flags.map(function(f, i) {
+                      return (
+                        <span key={i} style={{
+                          fontSize: 10, fontWeight: 800, padding: "4px 9px", borderRadius: 20,
+                          background: severityBg[f.severity], color: severityColor[f.severity],
+                        }}>
+                          {f.label}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // ── ANALYTICS VIEW ───────────────────────────────────────────────
   if (view === "analytics") {
     var revMonthly  = revenueByMonth();
@@ -766,7 +871,13 @@ export default function SuperAdminDashboard({ onLogout }) {
             <div style={{ fontSize: 16, fontWeight: 900, color: GOLD, letterSpacing: "0.1em" }}>TRIMORA</div>
             <div style={{ fontSize: 10, color: GOLD_DIM, letterSpacing: "0.15em" }}>SUPER ADMIN</div>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              onClick={function() { setView("health"); }}
+              style={{ background: "rgba(255,255,255,0.1)", border: "1px solid " + GOLD_DIM + "44", color: WHITE, borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer", fontWeight: 800 }}
+            >
+              🩺 Health
+            </button>
             <button
               onClick={function() { setView("analytics"); loadAnalytics(); }}
               style={{ background: "rgba(255,255,255,0.1)", border: "1px solid " + GOLD_DIM + "44", color: WHITE, borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer", fontWeight: 800 }}
