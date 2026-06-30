@@ -48,14 +48,14 @@ export default function TrimoraLandingPage() {
       <div style={{ width: 40, height: 2, background: GOLD_DIM, borderRadius: 2, marginBottom: 28, opacity: 0.4 }} />
 
       {/* Salon owner CTA */}
-      <div style={{ fontSize: 13, color: "rgba(255,255,255,0.4)", marginBottom: 8 }}>
-        Are you a salon owner?
+      <div style={{ fontSize: 14, fontWeight: 800, color: "rgba(255,255,255,0.6)", marginBottom: 8 }}>
+        Already a client?
       </div>
-      <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", lineHeight: 1.9, maxWidth: 280, marginBottom: 36 }}>
-        Log in using your salon's own link:<br />
-        <span style={{ color: GOLD_DIM, fontWeight: 700, fontFamily: "monospace", fontSize: 11 }}>
-          trimora-pos.vercel.app/<wbr />your-salon-name/pos
-        </span>
+      <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)", lineHeight: 1.9, maxWidth: 280, marginBottom: 10 }}>
+        Log in using your salon's unique portal.
+      </div>
+      <div style={{ fontSize: 12, color: GOLD_DIM, fontWeight: 700, marginBottom: 36 }}>
+        Need an account? Contact us for setup.
       </div>
 
       {/* Contact card */}
