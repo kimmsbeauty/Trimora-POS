@@ -71,7 +71,7 @@ function RedirectToBooking() {
       }
       return;
     }
-    window.location.href = "/booking";
+    // Not a recovery token — nothing to do, route renders correctly.
   }, []);
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#0A0A0A 0%,#1A1400 100%)", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
@@ -171,8 +171,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/"            element={<RedirectToBooking />} />
-        <Route path="/booking"     element={<BookingPage />} />
+        <Route path="/"            element={<TrimoraLandingPage />} />
+        <Route path="/booking"     element={<TrimoraLandingPage />} />
         <Route path="/pos"         element={<TrimoraLandingPage />} />
         <Route path="/rate/:token" element={<RatingPage />} />
         <Route path="/onboard"                element={<OnboardingPage />} />
@@ -191,7 +191,7 @@ export default function App() {
         <Route path="/:slug/rate/:token" element={<SalonGate mode="public"><RatingPage /></SalonGate>} />
         <Route path="/:slug/pos" element={<DeviceGate><SalonGate mode="authenticated"><StaffRoute /></SalonGate></DeviceGate>} />
 
-        <Route path="*"            element={<RedirectToBooking />} />
+        <Route path="*"            element={<TrimoraLandingPage />} />
       </Routes>
     </BrowserRouter>
   );
