@@ -65,6 +65,9 @@ export default function SuperAdminDashboard({ onLogout }) {
   var [editFields, setEditFields] = useState({});
   var [editSaving, setEditSaving] = useState(false);
   var [editError, setEditError] = useState("");
+  var [auditLog, setAuditLog] = useState([]);
+  var [auditLoading, setAuditLoading] = useState(false);
+  var [auditLoaded, setAuditLoaded] = useState(false);
   var [paymentHistory, setPaymentHistory] = useState([]);
   var [historyLoading, setHistoryLoading] = useState(false);
   var [paymentModal, setPaymentModal] = useState(null);
@@ -101,6 +104,55 @@ export default function SuperAdminDashboard({ onLogout }) {
     if (salonRows) setSalons(salonRows);
     if (statsRow && statsRow[0]) setStats(statsRow[0]);
     setLoading(false);
+  }
+
+  // Fire-and-forget audit log call — never blocks or fails the
+  // actual action it's logging. If logging itself fails (network
+  // blip, etc.) the underlying suspend/reset/edit/etc. has already
+  // succeeded and should not be rolled back or reported as an error
+  // to the admin over a logging hiccup.
+  async function logAction(action, salonId, salonName, details) {
+    try {
+      var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+      await fetch(SUPABASE_URL + "/rest/v1/rpc/log_admin_action", {
+        method: "POST",
+        headers: {
+          apikey:         SUPABASE_KEY,
+          Authorization:  "Bearer " + token,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          p_action:     action,
+          p_salon_id:   salonId || null,
+          p_salon_name: salonName || null,
+          p_details:    details || null,
+        }),
+      });
+    } catch (e) {
+      console.error("Audit log failed (non-fatal):", e);
+    }
+  }
+
+  // Loaded once, lazily, only when Audit Log is opened.
+  async function loadAuditLog() {
+    if (auditLoaded) return;
+    setAuditLoading(true);
+    var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/get_admin_audit_log", {
+      method: "POST",
+      headers: {
+        apikey:         SUPABASE_KEY,
+        Authorization:  "Bearer " + token,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ p_limit: 200 }),
+    });
+    if (res.ok) {
+      var rows = await res.json();
+      setAuditLog(rows || []);
+    }
+    setAuditLoaded(true);
+    setAuditLoading(false);
   }
 
   // Loaded once, lazily, only when Analytics is opened — avoids
@@ -225,6 +277,7 @@ export default function SuperAdminDashboard({ onLogout }) {
     });
     setPaymentSaving(false);
     if (res.ok) {
+      logAction("record_payment", salon.id, salon.name, plan + " — KSh " + amount + (notes ? " (" + notes + ")" : ""));
       setPaymentModal(null);
       setPayPlan("monthly");
       setPayAmount("");
@@ -318,6 +371,7 @@ export default function SuperAdminDashboard({ onLogout }) {
 
       setManualLoading(false);
       setManualDone("✅ " + manualName + " onboarded successfully! POS: /" + slug + "/pos");
+      logAction("manual_onboard", null, manualName.trim(), "Slug: " + slug + " · Email: " + manualEmail.trim());
       setManualName(""); setManualEmail(""); setManualPass("");
       setManualStaff(""); setManualAdmin("");
       await loadData();
@@ -349,6 +403,7 @@ export default function SuperAdminDashboard({ onLogout }) {
       var inviteToken = await res.json();
       var link = window.location.origin + "/onboard?token=" + inviteToken;
       setInviteLink(link);
+      logAction("generate_invite", null, inviteName || null, inviteEmail ? "Pre-filled for: " + inviteEmail : null);
     } else {
       alert("Failed to generate invite link.");
     }
@@ -381,6 +436,7 @@ export default function SuperAdminDashboard({ onLogout }) {
     });
     setActionLoading(false);
     if (res.ok) {
+      logAction("suspend_salon", salon.id, salon.name, reason || "No reason given");
       setSuspendModal(null);
       setSuspendReason("");
       await loadData();
@@ -404,6 +460,7 @@ export default function SuperAdminDashboard({ onLogout }) {
     });
     setActionLoading(false);
     if (res.ok) {
+      logAction("reactivate_salon", salon.id, salon.name, null);
       await loadData();
     } else {
       var err = await res.json().catch(function() { return {}; });
@@ -466,6 +523,7 @@ export default function SuperAdminDashboard({ onLogout }) {
     setEditSaving(false);
 
     if (res.ok) {
+      logAction("edit_salon_details", editModal.id, editFields.name.trim(), null);
       setEditModal(null);
       await loadData();
     } else {
@@ -501,6 +559,10 @@ export default function SuperAdminDashboard({ onLogout }) {
     });
     setActionLoading(false);
     if (res.ok) {
+      // Deliberately NOT logging the new PIN value itself — only that
+      // a reset happened, by whom (via admin_email on the log row),
+      // and which role. The PIN itself stays out of any log forever.
+      logAction("reset_pin", salon.id, salon.name, role + " PIN reset");
       setResetPinModal(null);
       setResetPinValue("");
       setResetPinConfirm("");
@@ -531,6 +593,61 @@ export default function SuperAdminDashboard({ onLogout }) {
   });
 
   // ── DETAIL VIEW ──────────────────────────────────────────────────
+  // ── AUDIT LOG VIEW ───────────────────────────────────────────────
+  if (view === "audit") {
+    var actionLabels = {
+      suspend_salon:        { icon: "⛔", label: "Suspended salon" },
+      reactivate_salon:     { icon: "✓",  label: "Reactivated salon" },
+      record_payment:       { icon: "💰", label: "Recorded payment" },
+      reset_pin:            { icon: "🔑", label: "Reset PIN" },
+      edit_salon_details:   { icon: "✏️", label: "Edited salon details" },
+      manual_onboard:       { icon: "🏪", label: "Manually onboarded salon" },
+      generate_invite:      { icon: "📨", label: "Generated invite link" },
+    };
+
+    return (
+      <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
+        <div style={{ background: BLACK, padding: "16px 20px" }}>
+          <button onClick={function() { setView("salons"); }}
+            style={{ background: "none", border: "none", color: GOLD_DIM, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 8, padding: 0 }}>
+            ← Back
+          </button>
+          <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>📋 Audit Log</div>
+          <div style={{ fontSize: 11, color: GOLD_DIM + "aa", marginTop: 2 }}>Most recent 200 actions</div>
+        </div>
+
+        <div style={{ padding: 16 }}>
+          {auditLoading ? (
+            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>Loading...</div>
+          ) : auditLog.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>No actions logged yet.</div>
+          ) : (
+            auditLog.map(function(entry) {
+              var meta = actionLabels[entry.action] || { icon: "•", label: entry.action };
+              return (
+                <div key={entry.id} style={{ background: WHITE, borderRadius: 12, padding: 14, marginBottom: 8, border: "1.5px solid " + GOLD_DIM + "33" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: DARK }}>
+                      {meta.icon} {meta.label}
+                      {entry.salon_name && <span style={{ color: GOLD_DIM }}> · {entry.salon_name}</span>}
+                    </div>
+                    <div style={{ fontSize: 10, color: "#999", whiteSpace: "nowrap", marginLeft: 8 }}>
+                      {new Date(entry.created_at).toLocaleString("en-KE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    </div>
+                  </div>
+                  {entry.details && (
+                    <div style={{ fontSize: 12, color: "#666", marginBottom: 4 }}>{entry.details}</div>
+                  )}
+                  <div style={{ fontSize: 10, color: "#aaa" }}>by {entry.admin_email || "unknown"}</div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // ── HEALTH VIEW ───────────────────────────────────────────────────
   if (view === "health") {
     var flaggedSalons = salonsNeedingAttention();
@@ -872,6 +989,12 @@ export default function SuperAdminDashboard({ onLogout }) {
             <div style={{ fontSize: 10, color: GOLD_DIM, letterSpacing: "0.15em" }}>SUPER ADMIN</div>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              onClick={function() { setView("audit"); loadAuditLog(); }}
+              style={{ background: "rgba(255,255,255,0.1)", border: "1px solid " + GOLD_DIM + "44", color: WHITE, borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer", fontWeight: 800 }}
+            >
+              📋 Audit Log
+            </button>
             <button
               onClick={function() { setView("health"); }}
               style={{ background: "rgba(255,255,255,0.1)", border: "1px solid " + GOLD_DIM + "44", color: WHITE, borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer", fontWeight: 800 }}
