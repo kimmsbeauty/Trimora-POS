@@ -58,6 +58,9 @@ export default function SuperAdminDashboard({ onLogout }) {
   var [resetPinValue, setResetPinValue] = useState("");
   var [resetPinConfirm, setResetPinConfirm] = useState("");
   var [resetPinError, setResetPinError] = useState("");
+  var [analyticsLoading, setAnalyticsLoading] = useState(false);
+  var [allPayments, setAllPayments] = useState([]);
+  var [analyticsLoaded, setAnalyticsLoaded] = useState(false);
   var [paymentHistory, setPaymentHistory] = useState([]);
   var [historyLoading, setHistoryLoading] = useState(false);
   var [paymentModal, setPaymentModal] = useState(null);
@@ -94,6 +97,54 @@ export default function SuperAdminDashboard({ onLogout }) {
     if (salonRows) setSalons(salonRows);
     if (statsRow && statsRow[0]) setStats(statsRow[0]);
     setLoading(false);
+  }
+
+  // Loaded once, lazily, only when Analytics is opened — avoids
+  // pulling the full payment history on every dashboard visit.
+  async function loadAnalytics() {
+    if (analyticsLoaded) return;
+    setAnalyticsLoading(true);
+    var rows = await saFetch("GET", "salon_subscription_payments", "?order=payment_date.asc");
+    if (rows) setAllPayments(rows);
+    setAnalyticsLoaded(true);
+    setAnalyticsLoading(false);
+  }
+
+  // ── Client-side aggregation — no new views/RPCs needed, just
+  //    groups the raw payment rows we already have access to. ──
+
+  function revenueByMonth() {
+    var map = {};
+    allPayments.forEach(function(p) {
+      var d = new Date(p.payment_date);
+      var key = d.toLocaleDateString("en-KE", { month: "short", year: "numeric" });
+      map[key] = (map[key] || 0) + Number(p.amount || 0);
+    });
+    return Object.keys(map).map(function(k) { return { label: k, value: map[k] }; });
+  }
+
+  function salonsByMonth() {
+    var map = {};
+    salons.forEach(function(s) {
+      if (!s.created_at) return;
+      var d = new Date(s.created_at);
+      var key = d.toLocaleDateString("en-KE", { month: "short", year: "numeric" });
+      map[key] = (map[key] || 0) + 1;
+    });
+    return Object.keys(map).map(function(k) { return { label: k, value: map[k] }; });
+  }
+
+  function revenueBySalon() {
+    var map = {};
+    allPayments.forEach(function(p) {
+      map[p.salon_id] = (map[p.salon_id] || 0) + Number(p.amount || 0);
+    });
+    var rows = Object.keys(map).map(function(salonId) {
+      var salon = salons.find(function(s) { return s.id === salonId; });
+      return { salonId: salonId, name: salon ? salon.name : "Unknown salon", value: map[salonId] };
+    });
+    rows.sort(function(a, b) { return b.value - a.value; });
+    return rows;
   }
 
   var PLANS = {
@@ -366,6 +417,102 @@ export default function SuperAdminDashboard({ onLogout }) {
   });
 
   // ── DETAIL VIEW ──────────────────────────────────────────────────
+  // ── ANALYTICS VIEW ───────────────────────────────────────────────
+  if (view === "analytics") {
+    var revMonthly  = revenueByMonth();
+    var salonMonthly = salonsByMonth();
+    var revBySalon  = revenueBySalon();
+    var maxRev      = Math.max.apply(null, revMonthly.map(function(r) { return r.value; }).concat([1]));
+    var maxSalonRev = Math.max.apply(null, revBySalon.map(function(r) { return r.value; }).concat([1]));
+
+    return (
+      <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
+        <div style={{ background: BLACK, padding: "16px 20px" }}>
+          <button onClick={function() { setView("salons"); }}
+            style={{ background: "none", border: "none", color: GOLD_DIM, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 8, padding: 0 }}>
+            ← Back
+          </button>
+          <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>📊 Platform Analytics</div>
+        </div>
+
+        <div style={{ padding: 16 }}>
+          {analyticsLoading ? (
+            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>Loading...</div>
+          ) : (
+            <div>
+              {/* Revenue by month */}
+              <div style={{ background: WHITE, borderRadius: 14, padding: 16, marginBottom: 14, border: "1.5px solid " + GOLD_DIM + "33" }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: DARK, marginBottom: 12 }}>Revenue by Month</div>
+                {revMonthly.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "#999" }}>No payments recorded yet.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {revMonthly.map(function(r) {
+                      return (
+                        <div key={r.label}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#666", marginBottom: 3 }}>
+                            <span>{r.label}</span>
+                            <span style={{ fontWeight: 800, color: DARK }}>{fmt(r.value)}</span>
+                          </div>
+                          <div style={{ background: CREAM, borderRadius: 6, height: 8, overflow: "hidden" }}>
+                            <div style={{ background: GOLD, height: "100%", width: (r.value / maxRev * 100) + "%", borderRadius: 6 }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Salon growth by month */}
+              <div style={{ background: WHITE, borderRadius: 14, padding: 16, marginBottom: 14, border: "1.5px solid " + GOLD_DIM + "33" }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: DARK, marginBottom: 12 }}>New Salons by Month</div>
+                {salonMonthly.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "#999" }}>No salons yet.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {salonMonthly.map(function(r) {
+                      return (
+                        <div key={r.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, padding: "4px 0" }}>
+                          <span style={{ color: "#666" }}>{r.label}</span>
+                          <span style={{ fontWeight: 800, color: DARK }}>{r.value} {r.value === 1 ? "salon" : "salons"}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Revenue by salon — top payers */}
+              <div style={{ background: WHITE, borderRadius: 14, padding: 16, border: "1.5px solid " + GOLD_DIM + "33" }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: DARK, marginBottom: 12 }}>Revenue by Salon</div>
+                {revBySalon.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "#999" }}>No payments recorded yet.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {revBySalon.map(function(r) {
+                      return (
+                        <div key={r.salonId}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#666", marginBottom: 3 }}>
+                            <span>{r.name}</span>
+                            <span style={{ fontWeight: 800, color: DARK }}>{fmt(r.value)}</span>
+                          </div>
+                          <div style={{ background: CREAM, borderRadius: 6, height: 8, overflow: "hidden" }}>
+                            <div style={{ background: GOLD_DIM, height: "100%", width: (r.value / maxSalonRev * 100) + "%", borderRadius: 6 }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (view === "detail" && selectedSalon) {
     var s = selectedSalon;
     return (
@@ -544,6 +691,12 @@ export default function SuperAdminDashboard({ onLogout }) {
             <div style={{ fontSize: 10, color: GOLD_DIM, letterSpacing: "0.15em" }}>SUPER ADMIN</div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={function() { setView("analytics"); loadAnalytics(); }}
+              style={{ background: "rgba(255,255,255,0.1)", border: "1px solid " + GOLD_DIM + "44", color: WHITE, borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer", fontWeight: 800 }}
+            >
+              📊 Analytics
+            </button>
             <button
               onClick={function() { setManualModal(true); setManualDone(""); }}
               style={{ background: "rgba(255,255,255,0.1)", border: "1px solid " + GOLD_DIM + "44", color: WHITE, borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer", fontWeight: 800 }}
