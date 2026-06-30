@@ -93,6 +93,10 @@ export default function SuperAdminDashboard({ onLogout }) {
 
   var session = getSuperAdminSession();
 
+  // Show a session-expired warning inside the dashboard rather than
+  // letting cryptic JWT errors surface from individual action calls.
+  var sessionExpired = !session;
+
   useEffect(function() { loadData(); }, []);
 
   async function loadData() {
@@ -114,6 +118,7 @@ export default function SuperAdminDashboard({ onLogout }) {
   async function logAction(action, salonId, salonName, details) {
     try {
       var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+      if (!token) return; // session expired, skip logging silently
       await fetch(SUPABASE_URL + "/rest/v1/rpc/log_admin_action", {
         method: "POST",
         headers: {
@@ -138,6 +143,7 @@ export default function SuperAdminDashboard({ onLogout }) {
     if (auditLoaded) return;
     setAuditLoading(true);
     var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    if (!token) { setAuditLoading(false); return; }
     var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/get_admin_audit_log", {
       method: "POST",
       headers: {
@@ -261,6 +267,7 @@ export default function SuperAdminDashboard({ onLogout }) {
   async function recordPayment(salon, plan, amount, notes) {
     setPaymentSaving(true);
     var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    if (!token) { setPaymentSaving(false); alert("Session expired. Please sign out and sign in again."); return; }
     var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/record_subscription_payment", {
       method: "POST",
       headers: {
@@ -386,6 +393,7 @@ export default function SuperAdminDashboard({ onLogout }) {
     setInviteLoading(true);
     setInviteLink("");
     var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    if (!token) { setInviteLoading(false); alert("Session expired. Please sign out and sign in again."); return; }
     var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/create_invite", {
       method: "POST",
       headers: {
@@ -422,6 +430,7 @@ export default function SuperAdminDashboard({ onLogout }) {
   async function suspendSalon(salon, reason) {
     setActionLoading(true);
     var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    if (!token) { setActionLoading(false); alert("Session expired. Please sign out and sign in again."); return; }
     var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/suspend_salon", {
       method: "POST",
       headers: {
@@ -449,6 +458,7 @@ export default function SuperAdminDashboard({ onLogout }) {
   async function reactivateSalon(salon) {
     setActionLoading(true);
     var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    if (!token) { setActionLoading(false); alert("Session expired. Please sign out and sign in again."); return; }
     var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/reactivate_salon", {
       method: "POST",
       headers: {
@@ -499,6 +509,7 @@ export default function SuperAdminDashboard({ onLogout }) {
     // scoped to the owning salon's own session, which Super Admin
     // doesn't have. See supabase/sql/super_admin_update_salon.sql.
     var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    if (!token) { setEditSaving(false); setEditError("Session expired. Please sign out and sign in again."); return; }
 
     var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/super_admin_update_salon", {
       method: "POST",
@@ -544,6 +555,11 @@ export default function SuperAdminDashboard({ onLogout }) {
     }
     setActionLoading(true);
     var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    if (!token) {
+      setActionLoading(false);
+      setResetPinError("Your session has expired. Please sign out and log back in to Super Admin.");
+      return;
+    }
     var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/super_admin_reset_salon_pin", {
       method: "POST",
       headers: {
@@ -1029,6 +1045,23 @@ export default function SuperAdminDashboard({ onLogout }) {
         </div>
         {session && <div style={{ fontSize: 10, color: GOLD_DIM + "88", marginTop: 4 }}>{session.email}</div>}
       </div>
+
+      {/* Session expired banner — shows inline rather than letting
+          cryptic JWT errors surface from individual action calls */}
+      {sessionExpired && (
+        <div style={{ background: "#FEF3C7", borderBottom: "1.5px solid #F59E0B", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#92400E" }}>
+            ⚠️ Your session has expired. Sign out and sign in again to make changes.
+          </div>
+          <button
+            onClick={handleLogout}
+            style={{ background: "#92400E", color: WHITE, border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}
+          >
+            Sign Out
+          </button>
+        </div>
+      )}
+
 
       <div style={{ padding: "16px 16px 0" }}>
 

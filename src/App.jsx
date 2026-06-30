@@ -12,6 +12,7 @@ import ResetPinPage from "./pages/ResetPinPage";
 import ForgotPinPage from "./pages/ForgotPinPage";
 import TermsPage from "./pages/TermsPage";
 import SuperAdminGate from "./pages/SuperAdminGate";
+import TrimoraLandingPage from "./pages/TrimoraLandingPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import { getDeviceLoginStatus, silentDeviceLogin, clearDeviceAuth } from "./lib/deviceAuth";
 import { SalonGate, fetchPublicSalonBranding } from "./lib/SalonContext";
@@ -172,7 +173,7 @@ export default function App() {
       <Routes>
         <Route path="/"            element={<RedirectToBooking />} />
         <Route path="/booking"     element={<BookingPage />} />
-        <Route path="/pos"         element={<DeviceGate><StaffRoute /></DeviceGate>} />
+        <Route path="/pos"         element={<TrimoraLandingPage />} />
         <Route path="/rate/:token" element={<RatingPage />} />
         <Route path="/onboard"                element={<OnboardingPage />} />
         <Route path="/terms"                  element={<TermsPage />} />
