@@ -36,9 +36,19 @@ export default function BookingPage() {
   const primaryDim = darken(primary, 18);
   const bgStop3    = lighten(secondary, 3.5);
   const salonName  = (salon && salon.name) || "your salon";
-  const mpesaTill  = (salon && salon.mpesa_till)    || null;
-  const mpesaName  = (salon && salon.mpesa_name)    || salonName;
-  const contactPhone = (salon && salon.contact_phone) || null;
+  const mpesaTill        = (salon && salon.mpesa_till)               || null;
+  const mpesaName        = (salon && salon.mpesa_name)               || salonName;
+  const mpesaPaybill     = (salon && salon.mpesa_paybill)            || null;
+  const mpesaAccount     = (salon && salon.mpesa_account)            || null;
+  const mpesaSendMoney   = (salon && salon.mpesa_send_money_phone)   || null;
+  const enabledMethods   = (salon && salon.enabled_payment_methods)  || ["Cash", "Till"];
+  const contactPhone     = (salon && salon.contact_phone)            || null;
+
+  // Derive which payment methods are actually configured for this salon
+  const hasTill      = enabledMethods.includes("Till")      && !!mpesaTill;
+  const hasPaybill   = enabledMethods.includes("Paybill")   && !!mpesaPaybill;
+  const hasSendMoney = enabledMethods.includes("SendMoney") && !!mpesaSendMoney;
+  const hasCash      = enabledMethods.includes("Cash");
 
   const [step, setStep]             = useState(1);
   const [sel, setSel]               = useState({ service: null, stylist: null, date: "", time: "", name: "", phone: "" });
@@ -258,9 +268,44 @@ export default function BookingPage() {
             <input placeholder="Phone number (e.g. 0712345678)" value={sel.phone} onChange={e => setSel(p => ({ ...p, phone: e.target.value }))}
               style={{ width: "100%", borderRadius: 10, border: `1.5px solid ${primaryDim}`, background: "rgba(255,255,255,0.06)", padding: "11px 14px", fontSize: 14, boxSizing: "border-box", marginBottom: 16, fontFamily: "inherit", outline: "none", color: WHITE }} />
             <div style={{ background: "rgba(76,175,80,0.1)", border: "1.5px solid #4ADE80", borderRadius: 12, padding: "12px 14px", marginBottom: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 800, color: "#4ADE80", marginBottom: 4 }}>💳 Payment Options</div>
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", marginBottom: 2 }}>📱 <b>Lipa na M-Pesa</b> — Pay upfront or at the salon</div>
-              {mpesaTill && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Till: <b style={{ color: MPESA_GREEN }}>{mpesaTill}</b> · {mpesaName}</div>}
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#4ADE80", marginBottom: 8 }}>💳 Payment Options</div>
+
+              {/* Buy Goods (Till) — existing flow, preserved exactly */}
+              {hasTill && (
+                <div style={{ marginBottom: 6 }}>
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", fontWeight: 700 }}>📱 Lipa na M-Pesa — Buy Goods</div>
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Till: <b style={{ color: MPESA_GREEN }}>{mpesaTill}</b> · {mpesaName}</div>
+                </div>
+              )}
+
+              {/* Paybill */}
+              {hasPaybill && (
+                <div style={{ marginBottom: 6 }}>
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", fontWeight: 700 }}>📱 Lipa na M-Pesa — Paybill</div>
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>
+                    Paybill: <b style={{ color: MPESA_GREEN }}>{mpesaPaybill}</b>
+                    {mpesaAccount && <span> · Account: <b style={{ color: MPESA_GREEN }}>{mpesaAccount}</b></span>}
+                  </div>
+                </div>
+              )}
+
+              {/* Send Money */}
+              {hasSendMoney && (
+                <div style={{ marginBottom: 6 }}>
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", fontWeight: 700 }}>📲 Send Money (Person to Person)</div>
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Send to: <b style={{ color: MPESA_GREEN }}>{mpesaSendMoney}</b></div>
+                </div>
+              )}
+
+              {/* Cash */}
+              {hasCash && (
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>💵 Cash — Pay at the salon</div>
+              )}
+
+              {/* Fallback if nothing configured */}
+              {!hasTill && !hasPaybill && !hasSendMoney && !hasCash && (
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Pay at the salon</div>
+              )}
             </div>
             <GoldBtn onClick={confirm} disabled={saving} style={{ width: "100%" }}>{saving ? "Saving..." : "Confirm Booking 👑"}</GoldBtn>
             <button onClick={() => setStep(3)} style={{ background: "none", border: "none", color: primaryLt, fontSize: 13, cursor: "pointer", marginTop: 8, display: "block" }}>← Back</button>

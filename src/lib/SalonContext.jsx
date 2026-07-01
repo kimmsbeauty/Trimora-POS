@@ -55,7 +55,9 @@ export function SalonGate({ mode, children }) {
       if (cancelled) return;
 
       if (rows && rows.length > 0) {
-        var resolvedSalon = rows[0];
+        var resolvedSalon = Object.assign({}, rows[0], {
+          enabled_payment_methods: rows[0].enabled_payment_methods || ["Cash", "Till"],
+        });
 
         // Block suspended salons — show suspended screen regardless of mode
         if (resolvedSalon.suspended) {
