@@ -20,7 +20,7 @@ export default function MpesaPaymentModal({ salon, booking, onPaid, onPayLater }
     variant = "Till";
   } else if (enabledMethods.includes("Paybill") && salon && salon.mpesa_paybill) {
     variant = "Paybill";
-  } else if (enabledMethods.includes("SendMoney") && salon && salon.mpesa_send_money_phone) {
+  } else if (enabledMethods.includes("Send Money") && salon && salon.mpesa_send_money_phone) {
     variant = "Send Money";
   }
 

@@ -47,7 +47,7 @@ export default function BookingPage() {
   // Derive which payment methods are actually configured for this salon
   const hasTill      = enabledMethods.includes("Till")      && !!mpesaTill;
   const hasPaybill   = enabledMethods.includes("Paybill")   && !!mpesaPaybill;
-  const hasSendMoney = enabledMethods.includes("SendMoney") && !!mpesaSendMoney;
+  const hasSendMoney = enabledMethods.includes("Send Money") && !!mpesaSendMoney;
   const hasCash      = enabledMethods.includes("Cash");
 
   const [step, setStep]             = useState(1);
