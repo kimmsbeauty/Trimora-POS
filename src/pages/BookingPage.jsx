@@ -134,10 +134,12 @@ export default function BookingPage() {
             📅 {sel.date} at {sel.time}<br />
             💰 KES {sel.service?.price?.toLocaleString()}
           </div>
-          {paymentStatus === "pay_later" && (
+          {paymentStatus === "pay_later" && (hasTill || hasPaybill || hasSendMoney) && (
             <div style={{ background: "rgba(76,175,80,0.1)", border: "1.5px solid #4ADE80", borderRadius: 12, padding: "14px", marginBottom: 16 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#4ADE80", marginBottom: 8 }}>Want to pay now?</div>
-              {mpesaTill && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginBottom: 10 }}>Till: <b style={{ color: MPESA_GREEN }}>{mpesaTill}</b> · {fmt(sel.service?.price)}</div>}
+              {hasTill && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginBottom: 10 }}>Till: <b style={{ color: MPESA_GREEN }}>{mpesaTill}</b> · {fmt(sel.service?.price)}</div>}
+              {hasPaybill && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginBottom: 10 }}>Paybill: <b style={{ color: MPESA_GREEN }}>{mpesaPaybill}</b>{mpesaAccount ? " · Account: " + mpesaAccount : ""} · {fmt(sel.service?.price)}</div>}
+              {hasSendMoney && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginBottom: 10 }}>Send to: <b style={{ color: MPESA_GREEN }}>{mpesaSendMoney}</b> · {fmt(sel.service?.price)}</div>}
               <button onClick={() => setShowMpesa(true)} style={{ width: "100%", background: MPESA_GREEN, color: WHITE, border: "none", borderRadius: 10, padding: "10px 0", fontWeight: 800, fontSize: 13, cursor: "pointer" }}>📱 Pay via M-Pesa</button>
             </div>
           )}
