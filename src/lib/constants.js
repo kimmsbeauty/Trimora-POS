@@ -8,9 +8,6 @@ export const KIMMS_SALON_ID = "c96d71d0-e496-4fd6-ae1c-70c89431fd3d";
 export const MPESA_TILL  = "5927571";
 export const MPESA_NAME  = "Kimm's Beauty Parlour";
 export const MPESA_GREEN = "#4CAF50";
-export const STAFF_PIN   = "1234";
-export const ADMIN_PIN   = "9999";
-
 export const BLACK    = "#0A0A0A";
 export const GOLD     = "#C9A84C";
 export const GOLD_LT  = "#F0CC6E";

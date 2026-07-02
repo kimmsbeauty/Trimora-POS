@@ -161,7 +161,6 @@ export default function LoginPage({ onLogin }) {
       }
     } else {
       // Network error — fall back to hardcoded check for offline resilience
-      // (pins are still not exposed in source since we remove STAFF_PIN/ADMIN_PIN from constants)
       setPin("");
       setError("Could not reach server. Check your connection.");
       triggerShake();
