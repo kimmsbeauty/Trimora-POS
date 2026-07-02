@@ -12,6 +12,7 @@ import SalonSettingsPage from "./SalonSettingsPage.jsx";
 import SetupChecklist from "../components/SetupChecklist.jsx";
 import LoyaltyBadge from "../components/LoyaltyBadge.jsx";
 import NotificationBell from "../components/NotificationBell.jsx";
+import FeedbackModal from "../components/FeedbackModal.jsx";
 import ShareBookingPanel from "../components/ShareBookingPanel.jsx";
 import TomorrowReminders from "../components/TomorrowReminders.jsx";
 import BirthdayReminders from "../components/BirthdayReminders.jsx";
@@ -241,6 +242,26 @@ export default function POSApp({ onLogout, userRole }) {
 
   var receiptCustomerState = useState(null); var receiptCustomer = receiptCustomerState[0]; var setReceiptCustomer = receiptCustomerState[1];
   var thankYouStatusState = useState("idle"); var thankYouStatus = thankYouStatusState[0]; var setThankYouStatus = thankYouStatusState[1];
+  var showInPersonFeedbackState = useState(false); var showInPersonFeedback = showInPersonFeedbackState[0]; var setShowInPersonFeedback = showInPersonFeedbackState[1];
+
+  async function submitInPersonFeedback(data) {
+    if (!receipt) return;
+    await db("POST", "feedback", {
+      rating:         data.rating,
+      note:           data.note || null,
+      stylist:        data.stylist || null,
+      client:         receipt.client || null,
+      feedback_token: receipt.feedback_token || null,
+      date:           data.date,
+      time:           data.time,
+    });
+    setFeedbacks(function(prev) {
+      return [{ rating: data.rating, note: data.note, stylist: data.stylist, client: receipt.client, date: data.date, time: data.time }].concat(prev);
+    });
+    setShowInPersonFeedback(false);
+    setShowFeedbackSentNotice(true);
+    setTimeout(function() { setShowFeedbackSentNotice(false); }, 3000);
+  }
 
   async function updateCustomerAfterSale(total) {
     if (!selectedCustomer || !selectedCustomer.id) return;
@@ -806,10 +827,11 @@ export default function POSApp({ onLogout, userRole }) {
         <Receipt
           salon={salon}
           sale={receipt}
-          onClose={function() { setReceipt(null); setReceiptCustomer(null); setThankYouStatus("idle"); }}
+          onClose={function() { setReceipt(null); setReceiptCustomer(null); setThankYouStatus("idle"); setShowInPersonFeedback(false); }}
           canSendThankYou={!!(postSaleCampaign && receiptCustomer && receiptCustomer.id && !receiptCustomer.marketing_opt_out)}
           thankYouStatus={thankYouStatus}
           onSendThankYou={sendPostSaleMessage}
+          onInPersonFeedback={function() { setShowInPersonFeedback(true); }}
           onSendFeedback={function() {
             if (!receipt.client_phone) { alert("No phone number on file for this client."); return; }
             sendFeedbackRequest(receipt.client_phone, (receipt.client || "").split(" ")[0], receipt.feedback_token);
@@ -818,6 +840,16 @@ export default function POSApp({ onLogout, userRole }) {
           }}
         />
       )}
+
+      {showInPersonFeedback && receipt && (
+        <FeedbackModal
+          salonName={salonName}
+          staffList={staffList}
+          onClose={function() { setShowInPersonFeedback(false); }}
+          onSubmit={submitInPersonFeedback}
+        />
+      )}
+
       {showFeedbackSentNotice && (
         <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 1200, background: WHITE, border: "1.5px solid " + GOLD_DIM, borderRadius: 12, padding: "12px 20px", boxShadow: "0 4px 20px rgba(0,0,0,0.2)", display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 700, color: DARK }}>
           <span style={{ fontSize: 16 }}>💛</span> Thanks, feedback request sent!
@@ -972,7 +1004,7 @@ export default function POSApp({ onLogout, userRole }) {
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <a href={bookingHref} target="_blank" rel="noreferrer" style={{ background: "linear-gradient(135deg," + primary + "," + primaryLt + ")", color: BLACK, borderRadius: 20, padding: "7px 10px", fontSize: 11, fontWeight: 900, textDecoration: "none" }}>🔗</a>
-          {isAdmin && <NotificationBell products={products} salonName={salonName} />}
+          {isAdmin && <NotificationBell products={products} ownerPhone={salon && salon.contact_phone} salonName={salonName} feedbacks={feedbacks} />}
           <button onClick={function() { setDarkMode(function(d) { return !d; }); }} style={{ background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.7)", border: "1px solid " + primaryDim, borderRadius: "50%", width: 32, height: 32, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{darkMode ? "☀️" : "🌙"}</button>
           <button onClick={onLogout} style={{ background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)", border: "1px solid " + primaryDim, borderRadius: 20, padding: "7px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Out</button>
         </div>

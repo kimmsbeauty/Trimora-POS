@@ -7,7 +7,7 @@ import { WHITE, DARK, GOLD, CREAM } from "../lib/constants.js";
 import { darken } from "../lib/colorUtils";
 import { fmt } from "../lib/utils.js";
 
-export default function Receipt({ salon, sale, onClose, onSendFeedback, canSendThankYou, thankYouStatus, onSendThankYou }) {
+export default function Receipt({ salon, sale, onClose, onSendFeedback, canSendThankYou, thankYouStatus, onSendThankYou, onInPersonFeedback }) {
   var items        = Array.isArray(sale.items) ? sale.items : [];
   var serviceItems = items.filter(function(i){ return i && i.type === "service"; });
   var productItems = items.filter(function(i){ return i && i.type === "product"; });
@@ -144,6 +144,15 @@ export default function Receipt({ salon, sale, onClose, onSendFeedback, canSendT
             style={{ width: "100%", background: "#25D366", color: WHITE, border: "none", borderRadius: 10, padding: "12px 0", fontWeight: 800, fontSize: 13, cursor: "pointer", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
           >
             <span style={{ fontSize: 16 }}>📱</span> Send Feedback Link via WhatsApp
+          </button>
+        )}
+
+        {onInPersonFeedback && (
+          <button
+            onClick={onInPersonFeedback}
+            style={{ width: "100%", background: "#FEF9EC", color: "#92400E", border: "1.5px solid #FCD34D", borderRadius: 10, padding: "12px 0", fontWeight: 800, fontSize: 13, cursor: "pointer", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+          >
+            <span style={{ fontSize: 16 }}>⭐</span> Collect In-Person Feedback
           </button>
         )}
 

@@ -345,6 +345,40 @@ export default function Dashboard({ sales, customers, staffList, products, feedb
         </div>
       </Card>
 
+      {feedbacks.length > 0 && (
+        <div style={{ background: CARD, borderRadius: 14, padding: 16, border: "1px solid " + BORDER, marginTop: 8 }}>
+          <div style={{ fontWeight: 800, fontSize: 13, color: TEXT, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+            ⭐ Customer Reviews
+            <span style={{ fontSize: 11, fontWeight: 600, color: SUBTEXT }}>({feedbacks.length} total · avg {avgRating}★)</span>
+          </div>
+          {feedbacks.map(function(f) {
+            return (
+              <div key={f.id || f.feedback_token} style={{ borderBottom: "1px solid " + BORDER, paddingBottom: 12, marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+                  <div style={{ display: "flex", gap: 2 }}>
+                    {[1,2,3,4,5].map(function(s) {
+                      return (
+                        <span key={s} style={{ fontSize: 14, opacity: f.rating >= s ? 1 : 0.2 }}>⭐</span>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontSize: 11, color: SUBTEXT }}>{f.date || ""}</div>
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: TEXT, marginBottom: 2 }}>
+                  {f.client || "Anonymous"}
+                  {f.stylist ? <span style={{ fontWeight: 400, color: SUBTEXT }}> · {f.stylist}</span> : null}
+                </div>
+                {f.note ? (
+                  <div style={{ fontSize: 12, color: SUBTEXT, fontStyle: "italic" }}>"{f.note}"</div>
+                ) : (
+                  <div style={{ fontSize: 11, color: SUBTEXT }}>No comment</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
     </div>
   );
 }
