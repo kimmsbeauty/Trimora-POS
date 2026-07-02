@@ -7,6 +7,13 @@
 import { useState, useEffect } from "react";
 import { saFetch, superAdminLogout, getSuperAdminSession } from "../lib/superAdminAuth";
 import { SUPABASE_URL, SUPABASE_KEY, GOLD, GOLD_DIM, BLACK, WHITE, DARK, GREEN, RED, AMBER, CREAM } from "../lib/constants";
+import {
+  getHealthFlags as getHealthFlagsLib,
+  salonsNeedingAttention as salonsNeedingAttentionLib,
+  revenueByMonth as revenueByMonthLib,
+  salonsByMonth as salonsByMonthLib,
+  revenueBySalon as revenueBySalonLib,
+} from "../lib/salonHealth.js";
 
 var GOLD_LT = "#F5E6B8";
 
@@ -249,87 +256,31 @@ export default function SuperAdminDashboard({ onLogout }) {
   }
 
   // ── Client-side aggregation — no new views/RPCs needed, just
-  //    groups the raw payment rows we already have access to. ──
+  //    groups the raw payment rows we already have access to.
+  //    Extracted to src/lib/salonHealth.js (with test coverage); these
+  //    are thin wrappers so every call site below is unchanged. ──
 
   function revenueByMonth() {
-    var map = {};
-    allPayments.forEach(function(p) {
-      var d = new Date(p.payment_date);
-      var key = d.toLocaleDateString("en-KE", { month: "short", year: "numeric" });
-      map[key] = (map[key] || 0) + Number(p.amount || 0);
-    });
-    return Object.keys(map).map(function(k) { return { label: k, value: map[k] }; });
+    return revenueByMonthLib(allPayments);
   }
 
   function salonsByMonth() {
-    var map = {};
-    salons.forEach(function(s) {
-      if (!s.created_at) return;
-      var d = new Date(s.created_at);
-      var key = d.toLocaleDateString("en-KE", { month: "short", year: "numeric" });
-      map[key] = (map[key] || 0) + 1;
-    });
-    return Object.keys(map).map(function(k) { return { label: k, value: map[k] }; });
+    return salonsByMonthLib(salons);
   }
 
   function revenueBySalon() {
-    var map = {};
-    allPayments.forEach(function(p) {
-      map[p.salon_id] = (map[p.salon_id] || 0) + Number(p.amount || 0);
-    });
-    var rows = Object.keys(map).map(function(salonId) {
-      var salon = salons.find(function(s) { return s.id === salonId; });
-      return { salonId: salonId, name: salon ? salon.name : "Unknown salon", number: salon ? salon.salon_number : null, value: map[salonId] };
-    });
-    rows.sort(function(a, b) { return b.value - a.value; });
-    return rows;
+    return revenueBySalonLib(allPayments, salons);
   }
 
   // ── Health check — flags salons that likely need attention, using
   //    only fields already present on salon_directory. No new RPC
   //    or query needed. ──
   function getHealthFlags(s) {
-    var flags = [];
-
-    if (s.suspended) {
-      flags.push({ severity: "high", label: "Suspended" });
-    }
-
-    if (s.subscription_expires_at && s.subscription_status !== "lifetime") {
-      var expiresAt = new Date(s.subscription_expires_at);
-      var daysLeft = Math.ceil((expiresAt - new Date()) / (1000 * 60 * 60 * 24));
-      if (daysLeft < 0) {
-        flags.push({ severity: "high", label: "Subscription expired" });
-      } else if (daysLeft <= 7) {
-        flags.push({ severity: "medium", label: "Expires in " + daysLeft + " day" + (daysLeft === 1 ? "" : "s") });
-      }
-    }
-
-    if ((s.sale_count || 0) === 0) {
-      flags.push({ severity: "medium", label: "Zero sales recorded" });
-    }
-
-    if ((s.staff_count || 0) === 0) {
-      flags.push({ severity: "low", label: "No staff added" });
-    }
-
-    if ((s.service_count || 0) === 0) {
-      flags.push({ severity: "low", label: "No services added" });
-    }
-
-    return flags;
+    return getHealthFlagsLib(s);
   }
 
   function salonsNeedingAttention() {
-    return salons
-      .map(function(s) { return { salon: s, flags: getHealthFlags(s) }; })
-      .filter(function(item) { return item.flags.length > 0; })
-      .sort(function(a, b) {
-        var weight = { high: 3, medium: 2, low: 1 };
-        var aMax = Math.max.apply(null, a.flags.map(function(f) { return weight[f.severity]; }));
-        var bMax = Math.max.apply(null, b.flags.map(function(f) { return weight[f.severity]; }));
-        return bMax - aMax;
-      });
+    return salonsNeedingAttentionLib(salons);
   }
 
   // PLANS is built from the database-fetched plans array (loaded lazily
