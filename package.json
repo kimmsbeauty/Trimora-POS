@@ -12,7 +12,8 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build"
+    "build": "react-scripts build",
+    "test": "react-scripts test"
   },
   "browserslist": {
     "production": [
@@ -26,5 +27,8 @@
   },
   "engines": {
     "node": ">=16.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1"
   }
 }
