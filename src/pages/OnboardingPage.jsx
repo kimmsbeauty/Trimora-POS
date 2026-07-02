@@ -152,6 +152,7 @@ export default function OnboardingPage() {
           p_slug:       slug,
           p_staff_pin:  staffPin,
           p_admin_pin:  adminPin,
+          p_token:      inviteToken,
         }),
       });
 
@@ -192,14 +193,10 @@ export default function OnboardingPage() {
         return setError("Salon was created but redirect failed. Your salon is active — contact support to get your login link. Raw: " + JSON.stringify(rpcData));
       }
 
-      // Step 3: Mark invite as used
-      await fetch(SUPABASE_URL + "/rest/v1/rpc/consume_invite", {
-        method: "POST",
-        headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({ p_token: inviteToken }),
-      });
+      // Invite is now claimed atomically inside complete_salon_onboarding
+      // itself (Step 2) — no separate consume_invite call needed.
 
-      // Step 3.5: Set up silent device login for this new salon.
+      // Step 3: Set up silent device login for this new salon.
       // Fire-and-forget — a failure here must NOT block the salon from
       // getting their login link. If it silently fails, the auto-resync
       // in silent-device-login will recover it on first access anyway.
