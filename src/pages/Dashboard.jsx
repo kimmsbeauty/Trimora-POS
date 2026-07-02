@@ -62,7 +62,7 @@ function filterByRange(items, range, dateField) {
   });
 }
 
-export default function Dashboard({ sales, customers, staffList, products, feedbacks, expenses, darkMode, salonName }) {
+export default function Dashboard({ sales, customers, staffList, products, feedbacks, expenses, darkMode, salonName, onNavigate }) {
   expenses = expenses || [];
 
   var presetState = useState("today"); var preset = presetState[0]; var setPreset = presetState[1];
@@ -346,36 +346,16 @@ export default function Dashboard({ sales, customers, staffList, products, feedb
       </Card>
 
       {feedbacks.length > 0 && (
-        <div style={{ background: CARD, borderRadius: 14, padding: 16, border: "1px solid " + BORDER, marginTop: 8 }}>
-          <div style={{ fontWeight: 800, fontSize: 13, color: TEXT, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-            ⭐ Customer Reviews
-            <span style={{ fontSize: 11, fontWeight: 600, color: SUBTEXT }}>({feedbacks.length} total · avg {avgRating}★)</span>
+        <div style={{ background: CARD, borderRadius: 14, padding: 16, border: "1px solid " + BORDER, marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 13, color: TEXT, marginBottom: 4 }}>⭐ Customer Reviews</div>
+            <div style={{ fontSize: 12, color: SUBTEXT }}>{avgRating}★ average · {feedbacks.length} recent review{feedbacks.length !== 1 ? "s" : ""}</div>
           </div>
-          {feedbacks.map(function(f) {
-            return (
-              <div key={f.id || f.feedback_token} style={{ borderBottom: "1px solid " + BORDER, paddingBottom: 12, marginBottom: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
-                  <div style={{ display: "flex", gap: 2 }}>
-                    {[1,2,3,4,5].map(function(s) {
-                      return (
-                        <span key={s} style={{ fontSize: 14, opacity: f.rating >= s ? 1 : 0.2 }}>⭐</span>
-                      );
-                    })}
-                  </div>
-                  <div style={{ fontSize: 11, color: SUBTEXT }}>{f.date || ""}</div>
-                </div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: TEXT, marginBottom: 2 }}>
-                  {f.client || "Anonymous"}
-                  {f.stylist ? <span style={{ fontWeight: 400, color: SUBTEXT }}> · {f.stylist}</span> : null}
-                </div>
-                {f.note ? (
-                  <div style={{ fontSize: 12, color: SUBTEXT, fontStyle: "italic" }}>"{f.note}"</div>
-                ) : (
-                  <div style={{ fontSize: 11, color: SUBTEXT }}>No comment</div>
-                )}
-              </div>
-            );
-          })}
+          {onNavigate && (
+            <button onClick={function() { onNavigate("reviews"); }} style={{ background: "none", border: "2px solid " + BORDER, borderRadius: 20, padding: "8px 16px", fontSize: 12, fontWeight: 700, color: TEXT, cursor: "pointer" }}>
+              View all →
+            </button>
+          )}
         </div>
       )}
 

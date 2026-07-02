@@ -13,6 +13,7 @@ import SetupChecklist from "../components/SetupChecklist.jsx";
 import LoyaltyBadge from "../components/LoyaltyBadge.jsx";
 import NotificationBell from "../components/NotificationBell.jsx";
 import FeedbackModal from "../components/FeedbackModal.jsx";
+import ReviewsPage from "./ReviewsPage.jsx";
 import ShareBookingPanel from "../components/ShareBookingPanel.jsx";
 import TomorrowReminders from "../components/TomorrowReminders.jsx";
 import BirthdayReminders from "../components/BirthdayReminders.jsx";
@@ -816,6 +817,7 @@ export default function POSApp({ onLogout, userRole }) {
     { id: "appointments", label: "Bookings",  icon: "📅", adminOnly: false, badge: pendingCount },
     { id: "customers",    label: "Clients",   icon: "👤", adminOnly: true },
     { id: "dashboard",    label: "Overview",  icon: "📊", adminOnly: true },
+    { id: "reviews",      label: "Reviews",   icon: "⭐", adminOnly: true },
     { id: "staff",        label: "Staff",     icon: "👥", adminOnly: true },
     { id: "services",     label: "Services",  icon: "✂",  adminOnly: true },
     { id: "inventory",    label: "Stock",     icon: "📦", adminOnly: true },
@@ -1528,7 +1530,11 @@ export default function POSApp({ onLogout, userRole }) {
         )}
 
         {/* ── DASHBOARD ── */}
-        {page === "dashboard" && <Dashboard sales={sales} customers={customers} staffList={staffList} products={products} feedbacks={feedbacks} expenses={expenses} darkMode={darkMode} salonName={salonName} />}
+        {page === "dashboard" && <Dashboard sales={sales} customers={customers} staffList={staffList} products={products} feedbacks={feedbacks} expenses={expenses} darkMode={darkMode} salonName={salonName} onNavigate={function(tab) { setPage(tab); }} />}
+
+        {page === "reviews" && (
+          <ReviewsPage darkMode={darkMode} />
+        )}
 
         {/* ── STAFF ── */}
         {page === "staff" && (
