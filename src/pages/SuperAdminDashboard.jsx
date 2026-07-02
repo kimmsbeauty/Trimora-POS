@@ -1148,8 +1148,16 @@ export default function SuperAdminDashboard({ onLogout }) {
           {session && <div style={{ fontSize: 10, color: GOLD_DIM + "88" }}>{session.email}</div>}
         </div>
 
-        {/* Horizontally scrollable button row — no wrapping on mobile */}
-        <div style={{ display: "flex", gap: 8, overflowX: "auto", WebkitOverflowScrolling: "touch", scrollbarWidth: "none", msOverflowStyle: "none", paddingBottom: 2 }}>
+        {/* Horizontally scrollable button row on phones; spreads evenly
+            across the width on tablets/laptops via the media query below
+            (>=900px). Base behavior (scroll, no wrap) is unchanged for
+            narrow screens -- this only adds a wider-screen layout. */}
+        <style>{`
+          @media (min-width: 900px) {
+            .sa-nav-row { justify-content: space-between; overflow-x: visible; }
+          }
+        `}</style>
+        <div className="sa-nav-row" style={{ display: "flex", gap: 8, overflowX: "auto", WebkitOverflowScrolling: "touch", scrollbarWidth: "none", msOverflowStyle: "none", paddingBottom: 2 }}>
           {[
             { label: "💲 Plans",      onClick: function() { setView("plans"); loadPlans(); } },
             { label: "📋 Audit Log",  onClick: function() { setView("audit"); loadAuditLog(); } },
