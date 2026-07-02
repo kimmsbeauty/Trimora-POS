@@ -16,6 +16,13 @@ import LoyaltyBadge from "../components/LoyaltyBadge.jsx";
 import NotificationBell from "../components/NotificationBell.jsx";
 import FeedbackModal from "../components/FeedbackModal.jsx";
 import ReviewsPage from "./ReviewsPage.jsx";
+import {
+  calculateCartTotals,
+  calculateCommission,
+  calculateCommissionByStylist,
+  distinctStylistsInCart,
+  rateForStylistName as rateForStylistNameLib,
+} from "../lib/cartMath.js";
 import ShareBookingPanel from "../components/ShareBookingPanel.jsx";
 import TomorrowReminders from "../components/TomorrowReminders.jsx";
 import BirthdayReminders from "../components/BirthdayReminders.jsx";
@@ -409,57 +416,40 @@ export default function POSApp({ onLogout, userRole }) {
   }
 
   // ── Cart calculations with discount + per-item stylist ────────────────────
-  var serviceItems  = cart.filter(function(i) { return i.type === "service"; });
-  var productItems  = cart.filter(function(i) { return i.type === "product"; });
-  var serviceTotal  = serviceItems.reduce(function(s, i) { return s + i.price * (i.qty || 1); }, 0);
-  var productTotal  = productItems.reduce(function(s, i) { return s + i.price * (i.qty || 1); }, 0);
-
-  // Calculate discount amount (on services only)
-  var discountAmt = 0;
-  var discountNum = parseFloat(discountValue) || 0;
-  if (showDiscount && discountNum > 0 && serviceTotal > 0) {
-    if (discountType === "pct") {
-      discountAmt = Math.min(serviceTotal, serviceTotal * (discountNum / 100));
-    } else {
-      discountAmt = Math.min(serviceTotal, discountNum);
-    }
-  }
-
-  var discountedServiceTotal = serviceTotal - discountAmt;
-  var cartTotal = discountedServiceTotal + productTotal;
+  // Extracted to src/lib/cartMath.js (with test coverage) -- this block just
+  // wires the component's own state into that pure module. See that file
+  // for the actual logic; nothing here should compute anything itself.
+  var cartTotals = calculateCartTotals(cart, {
+    showDiscount: showDiscount, discountType: discountType, discountValue: discountValue,
+  });
+  var serviceItems           = cartTotals.serviceItems;
+  var productItems           = cartTotals.productItems;
+  var serviceTotal           = cartTotals.serviceTotal;
+  var productTotal           = cartTotals.productTotal;
+  var discountNum            = cartTotals.discountNum;
+  var discountAmt            = cartTotals.discountAmt;
+  var discountedServiceTotal = cartTotals.discountedServiceTotal;
+  var cartTotal               = cartTotals.cartTotal;
 
   function rateForStylistName(name) {
-    var member = staffList.find(function(s) { return s.name === name; });
-    return ((member && member.commission_pct != null ? member.commission_pct : 40)) / 100;
+    return rateForStylistNameLib(name, staffList);
   }
 
   // Per-item commission, using each item's OWN assigned stylist (falls back
   // to the default "selStaff" if an item has no stylist of its own yet —
   // this keeps single-stylist sales working exactly as before).
-  var commission = serviceItems.reduce(function(sum, item) {
-    var itemStylist = item.stylist || selStaff;
-    var rate = item.commission_override != null ? item.commission_override / 100 : rateForStylistName(itemStylist);
-    var itemTotal      = item.price * (item.qty || 1);
-    var itemDiscounted = serviceTotal > 0 ? itemTotal * (discountedServiceTotal / serviceTotal) : itemTotal;
-    return sum + itemDiscounted * rate;
-  }, 0);
+  var commission = calculateCommission(serviceItems, {
+    staffList: staffList, selStaff: selStaff, serviceTotal: serviceTotal, discountedServiceTotal: discountedServiceTotal,
+  });
 
   // Per-stylist commission breakdown for this cart (used in the cart summary
   // and saved on the sale record so staff stats stay accurate per-person).
-  var commissionByStylist = {};
-  serviceItems.forEach(function(item) {
-    var itemStylist = item.stylist || selStaff;
-    if (!itemStylist) return;
-    var rate = item.commission_override != null ? item.commission_override / 100 : rateForStylistName(itemStylist);
-    var itemTotal      = item.price * (item.qty || 1);
-    var itemDiscounted = serviceTotal > 0 ? itemTotal * (discountedServiceTotal / serviceTotal) : itemTotal;
-    commissionByStylist[itemStylist] = (commissionByStylist[itemStylist] || 0) + itemDiscounted * rate;
+  var commissionByStylist = calculateCommissionByStylist(serviceItems, {
+    staffList: staffList, selStaff: selStaff, serviceTotal: serviceTotal, discountedServiceTotal: discountedServiceTotal,
   });
 
   // Distinct stylists involved in this cart (for the "multi-stylist" UI cue)
-  var stylistsInCart = Array.from(new Set(
-    serviceItems.map(function(i) { return i.stylist || selStaff; }).filter(Boolean)
-  ));
+  var stylistsInCart = distinctStylistsInCart(serviceItems, selStaff);
 
   function addToCart(item, type) {
     setCart(function(prev) {
