@@ -388,7 +388,31 @@ export default function SuperAdminDashboard({ onLogout }) {
       var base = manualName.toLowerCase().replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-");
       var slug = base;
 
-      // Step 3: Call complete_salon_onboarding
+      // Step 3: Generate and immediately consume an invite under the hood.
+      // complete_salon_onboarding now requires a valid invite token for
+      // every caller, including admin-initiated signups — this keeps a
+      // single enforced path instead of a separate admin bypass.
+      var manualInviteRes = await fetch(SUPABASE_URL + "/rest/v1/rpc/create_invite", {
+        method: "POST",
+        headers: {
+          apikey:          SUPABASE_KEY,
+          Authorization:   "Bearer " + token,
+          "Content-Type":  "application/json",
+        },
+        body: JSON.stringify({
+          p_email:      manualEmail.trim(),
+          p_salon_name: manualName.trim(),
+        }),
+      });
+
+      if (!manualInviteRes.ok) {
+        setManualLoading(false);
+        return alert("Could not prepare onboarding. Please try again.");
+      }
+
+      var manualInviteToken = await manualInviteRes.json();
+
+      // Step 4: Call complete_salon_onboarding
       var rpcRes = await fetch(SUPABASE_URL + "/rest/v1/rpc/complete_salon_onboarding", {
         method: "POST",
         headers: {
@@ -401,6 +425,7 @@ export default function SuperAdminDashboard({ onLogout }) {
           p_slug:       slug,
           p_staff_pin:  manualStaff,
           p_admin_pin:  manualAdmin,
+          p_token:      manualInviteToken,
         }),
       });
 
