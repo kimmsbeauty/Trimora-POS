@@ -1,21 +1,36 @@
 // src/App.jsx
 import { BrowserRouter, Routes, Route, useParams } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import BookingPage from "./pages/BookingPage";
 import POSApp from "./pages/POSApp";
 import SalonBrandmark from "./components/SalonBrandmark";
 import LoginPage from "./pages/LoginPage";
 import RatingPage from "./pages/RatingPage";
-import ForgotPasswordPage from "./pages/ForgotPasswordPage";
-import ResetPasswordPage from "./pages/ResetPasswordPage";
-import ResetPinPage from "./pages/ResetPinPage";
-import ForgotPinPage from "./pages/ForgotPinPage";
-import TermsPage from "./pages/TermsPage";
-import SuperAdminGate from "./pages/SuperAdminGate";
 import TrimoraLandingPage from "./pages/TrimoraLandingPage";
-import OnboardingPage from "./pages/OnboardingPage";
 import { getDeviceLoginStatus, silentDeviceLogin, clearDeviceAuth } from "./lib/deviceAuth";
 import { SalonGate, fetchPublicSalonBranding } from "./lib/SalonContext";
+
+// Lazily loaded: each of these is visited far less often than booking/POS
+// (recovery flows, one-time onboarding, terms, and the super admin console
+// — which alone pulls in a ~90KB dashboard). Splitting them out keeps that
+// code out of the bundle every ordinary booking/POS visitor downloads;
+// React shows the fallback below only for the brief moment their chunk is
+// fetched, same UI either way.
+var ForgotPasswordPage = lazy(function() { return import("./pages/ForgotPasswordPage"); });
+var ResetPasswordPage  = lazy(function() { return import("./pages/ResetPasswordPage"); });
+var ResetPinPage       = lazy(function() { return import("./pages/ResetPinPage"); });
+var ForgotPinPage      = lazy(function() { return import("./pages/ForgotPinPage"); });
+var TermsPage          = lazy(function() { return import("./pages/TermsPage"); });
+var SuperAdminGate     = lazy(function() { return import("./pages/SuperAdminGate"); });
+var OnboardingPage     = lazy(function() { return import("./pages/OnboardingPage"); });
+
+function RouteFallback() {
+  return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#0A0A0A 0%,#1A1400 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <SalonBrandmark salon={null} size="md" />
+    </div>
+  );
+}
 
 function RedirectToBooking() {
   useEffect(function() {
@@ -170,6 +185,7 @@ function StaffRoute() {
 export default function App() {
   return (
     <BrowserRouter>
+      <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/"            element={<TrimoraLandingPage />} />
         <Route path="/booking"     element={<TrimoraLandingPage />} />
@@ -193,6 +209,7 @@ export default function App() {
 
         <Route path="*"            element={<TrimoraLandingPage />} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }
