@@ -1,6 +1,8 @@
 // src/pages/POSApp.jsx
 
 import { useState, useEffect } from "react";
+import { setPwaManifest, setLegacyPwaManifest } from "../lib/pwaManifest.js";
+import { registerServiceWorker } from "../lib/registerServiceWorker.js";
 import SalonBrandmark from "../components/SalonBrandmark";
 import GoldBtn from "../components/GoldBtn";
 import MpesaInstructions from "../components/MpesaInstructions";
@@ -62,6 +64,21 @@ export default function POSApp({ onLogout, userRole }) {
       document.title = salon.name + " — Trimora POS";
     }
   }, [salon]);
+
+  // PWA: inject a per-salon manifest so each salon's "Add to Home Screen"
+  // opens straight to their own /:slug/pos, not a generic route.
+  useEffect(function() {
+    if (salon && salon.slug) {
+      setPwaManifest(salon);
+    } else if (salon) {
+      setLegacyPwaManifest();
+    }
+  }, [salon]);
+
+  // Register the app-shell service worker once on first POS load.
+  useEffect(function() {
+    registerServiceWorker();
+  }, []);
 
   var primary    = (salon && salon.primary_color) || GOLD;
   var secondary  = (salon && salon.secondary_color) || DARK;
