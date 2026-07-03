@@ -2,7 +2,9 @@
 //
 // Handles super admin authentication separately from salon device auth.
 // Super admin logs in with email/password via Supabase Auth.
-// Access is gated on the is_super_admin flag in user_metadata.
+// Access is gated on the is_super_admin flag in app_metadata (not
+// user_metadata — that field is self-editable by any authenticated
+// user via the client SDK, so it can't be trusted as an admin gate).
 // Session stored in sessionStorage (not localStorage) — expires when
 // browser tab is closed, which is appropriate for an admin console.
 
@@ -27,10 +29,11 @@ export async function superAdminLogin(email, password) {
       return { ok: false, error: data.error_description || data.msg || "Login failed" };
     }
 
-    // Verify the is_super_admin flag in user metadata
+    // Verify the is_super_admin flag in app metadata (service-role-only,
+    // not self-editable — see comment above)
     var isSuperAdmin = data.user &&
-      data.user.user_metadata &&
-      data.user.user_metadata.is_super_admin === true;
+      data.user.app_metadata &&
+      data.user.app_metadata.is_super_admin === true;
 
     if (!isSuperAdmin) {
       return { ok: false, error: "Access denied. This account is not a super admin." };
