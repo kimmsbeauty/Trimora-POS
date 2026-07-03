@@ -47,7 +47,62 @@ export function summarizeRevenue(salesRows, options) {
   };
 }
 
+export function summarizeCustomers(salesRows, newCustomerRows, options) {
+  options = options || {};
+  var sales = salesRows || [];
+  var newCustomers = newCustomerRows || [];
+
+  var seenVisitors = {};
+  sales.forEach(function (row) {
+    var key = row.client_phone || row.client;
+    if (key) {
+      seenVisitors[key] = true;
+    }
+  });
+
+  return {
+    provider: "local",
+    dateFrom: options.dateFrom || null,
+    dateTo: options.dateTo || null,
+    visitorCount: Object.keys(seenVisitors).length,
+    newCustomerCount: newCustomers.length,
+  };
+}
+
+export function summarizeTopItems(salesRows, options) {
+  options = options || {};
+  var rows = salesRows || [];
+  var limit = options.limit || 5;
+
+  var counts = {};
+  rows.forEach(function (row) {
+    if (!Array.isArray(row.items)) return;
+    row.items.forEach(function (item) {
+      if (!item || !item.name) return;
+      var key = item.type + ":" + item.name;
+      if (!counts[key]) {
+        counts[key] = { name: item.name, type: item.type || "item", qty: 0 };
+      }
+      counts[key].qty += Number(item.qty || 1);
+    });
+  });
+
+  var items = Object.keys(counts)
+    .map(function (key) { return counts[key]; })
+    .sort(function (a, b) { return b.qty - a.qty; })
+    .slice(0, limit);
+
+  return {
+    provider: "local",
+    dateFrom: options.dateFrom || null,
+    dateTo: options.dateTo || null,
+    items: items,
+  };
+}
+
 export default {
   name: "local",
   summarizeRevenue: summarizeRevenue,
+  summarizeCustomers: summarizeCustomers,
+  summarizeTopItems: summarizeTopItems,
 };

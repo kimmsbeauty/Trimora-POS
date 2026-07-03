@@ -1,7 +1,7 @@
 jest.mock("../db", () => ({ db: jest.fn() }));
 
 import { db } from "../db";
-import { getRevenueSummary } from "./AIService";
+import { getRevenueSummary, getCustomerSummary, getTopItems } from "./AIService";
 
 describe("AIService.getRevenueSummary", () => {
   beforeEach(() => {
@@ -57,5 +57,64 @@ describe("AIService.getRevenueSummary", () => {
     expect(result.saleCount).toBe(1);
     expect(errorSpy).toHaveBeenCalledTimes(1);
     errorSpy.mockRestore();
+  });
+});
+
+describe("AIService.getCustomerSummary", () => {
+  beforeEach(() => {
+    db.mockReset();
+  });
+
+  test("fetches sales and new-customer rows for the range and delegates to the provider", async () => {
+    db.mockImplementation((method, table) => {
+      if (table === "sales") {
+        return Promise.resolve([
+          { client: "Jane", client_phone: "0700111111", date: "2026-07-01" },
+          { client: "Jane", client_phone: "0700111111", date: "2026-07-01" },
+        ]);
+      }
+      if (table === "customers") {
+        return Promise.resolve([{ id: "1" }]);
+      }
+      return Promise.resolve(null);
+    });
+
+    var result = await getCustomerSummary({ dateFrom: "2026-07-01", dateTo: "2026-07-01" });
+
+    expect(db).toHaveBeenCalledWith("GET", "customers", null, "?created_at=gte.2026-07-01T00:00:00&created_at=lte.2026-07-01T23:59:59");
+    expect(result.visitorCount).toBe(1);
+    expect(result.newCustomerCount).toBe(1);
+  });
+
+  test("returns null if the customers fetch fails", async () => {
+    db.mockImplementation((method, table) => {
+      if (table === "sales") return Promise.resolve([]);
+      if (table === "customers") return Promise.resolve(null);
+      return Promise.resolve(null);
+    });
+    var result = await getCustomerSummary({ dateFrom: "2026-07-01", dateTo: "2026-07-01" });
+    expect(result).toBeNull();
+  });
+});
+
+describe("AIService.getTopItems", () => {
+  beforeEach(() => {
+    db.mockReset();
+  });
+
+  test("fetches sales for the range and returns top items from the provider", async () => {
+    db.mockResolvedValue([
+      { date: "2026-07-01", items: [{ name: "Haircut", type: "service", qty: 2 }] },
+    ]);
+    var result = await getTopItems({ dateFrom: "2026-07-01", dateTo: "2026-07-01" });
+    expect(result.items).toEqual([{ name: "Haircut", type: "service", qty: 2 }]);
+  });
+
+  test("passes the limit option through to the provider", async () => {
+    db.mockResolvedValue([
+      { date: "2026-07-01", items: [{ name: "A", type: "service", qty: 1 }, { name: "B", type: "service", qty: 1 }] },
+    ]);
+    var result = await getTopItems({ dateFrom: "2026-07-01", dateTo: "2026-07-01", limit: 1 });
+    expect(result.items.length).toBe(1);
   });
 });

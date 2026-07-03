@@ -17,5 +17,7 @@ export function createDisabledProvider(name) {
   return {
     name: name,
     summarizeRevenue: refuse,
+    summarizeCustomers: refuse,
+    summarizeTopItems: refuse,
   };
 }

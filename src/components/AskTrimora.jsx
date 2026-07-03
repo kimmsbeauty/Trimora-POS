@@ -1,21 +1,20 @@
 // src/components/AskTrimora.jsx
 //
-// A minimal natural-language entry point into AIService. This is
-// deliberately small: it recognizes a handful of revenue-related
-// phrasings ("today", "this week", "this month") and answers using
-// AIService.getRevenueSummary -- the same Local Intelligence capability
-// built in TIP Phase 1, with the same automatic tenant scoping.
+// A minimal natural-language entry point into AIService. Recognizes a
+// handful of phrasings across three capabilities -- revenue, customers/
+// visitors, and best-selling items -- plus a few range phrasings
+// ("today", "this week", "this month", "yesterday").
 //
-// This does NOT replace the Dashboard's existing filter buttons, which
-// already show this data faster (no round trip, data's already loaded
-// in memory). What this proves out is the *interaction pattern* from
-// the AI architecture doc -- typing a question instead of clicking a
-// filter -- which is the seed of the real Ask-Your-Data feature once a
-// paid provider is enabled and can understand open-ended questions,
-// not just a few recognized phrases.
+// This does NOT replace the Dashboard's existing filter buttons/cards,
+// which already show most of this data faster (no round trip, data's
+// already loaded in memory). What this proves out is the *interaction
+// pattern* from the AI architecture doc -- typing a question instead of
+// clicking a filter -- which is the seed of the real Ask-Your-Data
+// feature once a paid provider is enabled and can understand
+// open-ended questions, not just a set of recognized phrases.
 
 import { useState } from "react";
-import { getRevenueSummary } from "../lib/ai/AIService";
+import { getRevenueSummary, getCustomerSummary, getTopItems } from "../lib/ai/AIService";
 import { fmt } from "../lib/utils.js";
 import { GOLD, GOLD_LT, GOLD_DIM, WHITE, BLACK } from "../lib/constants.js";
 
@@ -26,7 +25,7 @@ function toKEDateStr(d) {
   return yyyy + "-" + mm + "-" + dd;
 }
 
-function resolveRange(question) {
+export function resolveRange(question) {
   var q = question.toLowerCase();
   var today = new Date();
 
@@ -49,10 +48,38 @@ function resolveRange(question) {
   return { dateFrom: toKEDateStr(today), dateTo: toKEDateStr(today), label: "today" };
 }
 
-function isRevenueQuestion(question) {
+// AIService now has three capabilities: revenue, customers, and top
+// items. Route each question to the right one by keyword, and only
+// fall back to "unsupported" for topics none of the three cover yet
+// (staff performance, bookings, stock, reviews). Anything left over
+// defaults to revenue, since that's the broadest/most common ask and
+// failing open beats failing closed on a phrasing we didn't predict.
+var TOP_ITEMS_KEYWORDS = [
+  "item", "best seller", "bestseller", "best-selling", "best selling",
+  "most sold", "sold the most", "top product", "top service", "popular",
+  "which product", "which service",
+];
+var CUSTOMER_KEYWORDS = [
+  "customer", "client", "visitor", "visited", "walk-in", "walkin",
+];
+var UNSUPPORTED_KEYWORDS = [
+  "staff", "stylist", "employee", "commission",
+  "booking", "appointment", "schedule", "calendar",
+  "churn", "at risk", "birthday",
+  "stock", "inventory", "reorder",
+  "review", "rating", "feedback",
+];
+
+function matchesAny(q, keywords) {
+  return keywords.some(function (kw) { return q.indexOf(kw) !== -1; });
+}
+
+export function classifyQuestion(question) {
   var q = question.toLowerCase();
-  return ["revenue", "sales", "made", "earn", "how am i doing", "how are we doing"]
-    .some(function (kw) { return q.indexOf(kw) !== -1; });
+  if (matchesAny(q, TOP_ITEMS_KEYWORDS)) return "topItems";
+  if (matchesAny(q, UNSUPPORTED_KEYWORDS)) return "unsupported";
+  if (matchesAny(q, CUSTOMER_KEYWORDS)) return "customers";
+  return "revenue";
 }
 
 export default function AskTrimora({ darkMode }) {
@@ -79,31 +106,53 @@ export default function AskTrimora({ darkMode }) {
     setLoading(true);
     setAnswer(null);
 
-    if (!isRevenueQuestion(question)) {
+    var kind = classifyQuestion(question);
+
+    if (kind === "unsupported") {
       setAnswer({
-        text: "Right now I can only answer questions about revenue/sales — try asking about today, this week, or this month.",
+        text: "Right now I can answer questions about revenue, customers/visitors, and best-selling items — try asking about today, this week, or this month.",
       });
       setLoading(false);
       return;
     }
 
     var range = resolveRange(question);
-    var summary = await getRevenueSummary({ dateFrom: range.dateFrom, dateTo: range.dateTo });
+    var text;
 
-    if (!summary) {
-      setAnswer({ text: "I couldn't fetch that right now — please try again." });
-      setLoading(false);
-      return;
+    if (kind === "customers") {
+      var customerSummary = await getCustomerSummary({ dateFrom: range.dateFrom, dateTo: range.dateTo });
+      if (!customerSummary) {
+        text = "I couldn't fetch that right now — please try again.";
+      } else {
+        text = customerSummary.visitorCount + " customer" + (customerSummary.visitorCount === 1 ? "" : "s") +
+          " visited " + range.label + ", " + customerSummary.newCustomerCount +
+          " of them new.";
+      }
+    } else if (kind === "topItems") {
+      var topItemsResult = await getTopItems({ dateFrom: range.dateFrom, dateTo: range.dateTo, limit: 3 });
+      if (!topItemsResult) {
+        text = "I couldn't fetch that right now — please try again.";
+      } else if (topItemsResult.items.length === 0) {
+        text = "Nothing sold for " + range.label + " yet.";
+      } else {
+        text = "Best sellers for " + range.label + ": " +
+          topItemsResult.items.map(function (i) { return i.name + " (" + i.qty + ")"; }).join(", ") + ".";
+      }
+    } else {
+      var summary = await getRevenueSummary({ dateFrom: range.dateFrom, dateTo: range.dateTo });
+      if (!summary) {
+        text = "I couldn't fetch that right now — please try again.";
+      } else if (summary.saleCount === 0) {
+        text = "No sales recorded for " + range.label + " yet.";
+      } else {
+        var topMethod = summary.byPaymentMethod[0];
+        text = "You made " + fmt(summary.totalRevenue) + " across " + summary.saleCount +
+          (summary.saleCount === 1 ? " sale" : " sales") + " for " + range.label +
+          (topMethod ? ", mostly via " + topMethod.method + " (" + fmt(topMethod.total) + ")" : "") + ".";
+      }
     }
 
-    var topMethod = summary.byPaymentMethod[0];
-    var text = summary.saleCount === 0
-      ? "No sales recorded for " + range.label + " yet."
-      : "You made " + fmt(summary.totalRevenue) + " across " + summary.saleCount +
-        (summary.saleCount === 1 ? " sale" : " sales") + " for " + range.label +
-        (topMethod ? ", mostly via " + topMethod.method + " (" + fmt(topMethod.total) + ")" : "") + ".";
-
-    setAnswer({ text: text, summary: summary });
+    setAnswer({ text: text });
     setLoading(false);
   }
 
@@ -115,7 +164,7 @@ export default function AskTrimora({ darkMode }) {
           type="text"
           value={question}
           onChange={function (e) { setQuestion(e.target.value); }}
-          placeholder="e.g. how much did I make today?"
+          placeholder="e.g. how many customers visited today?"
           style={{
             flex: 1, borderRadius: 8, border: "1.5px solid " + GOLD_DIM, padding: "9px 12px",
             fontSize: 13, fontFamily: "inherit", outline: "none", background: darkMode ? "#2C1F00" : "#F5F0E8", color: TEXT,
@@ -138,7 +187,7 @@ export default function AskTrimora({ darkMode }) {
       )}
       {!answer && (
         <div style={{ marginTop: 10, fontSize: 11, color: SUBTEXT }}>
-          Try: "how much did I make today?" or "revenue this week"
+          Try: "how much did I make today?", "how many new customers this week?", or "what sold most this month?"
         </div>
       )}
     </div>
