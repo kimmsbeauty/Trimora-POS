@@ -10,8 +10,8 @@ describe("AIService.getRevenueSummary", () => {
 
   test("fetches sales for the given date range and delegates to the active provider", async () => {
     db.mockResolvedValue([
-      { total: 1000, payment: "Cash" },
-      { total: 2000, payment: "Till" },
+      { total: 1000, payment: "Cash", date: "2026-07-01" },
+      { total: 2000, payment: "Till", date: "2026-07-02" },
     ]);
 
     var result = await getRevenueSummary({ dateFrom: "2026-07-01", dateTo: "2026-07-02" });
@@ -42,5 +42,20 @@ describe("AIService.getRevenueSummary", () => {
     db.mockResolvedValue(null);
     var result = await getRevenueSummary({ dateFrom: "2026-07-01", dateTo: "2026-07-01" });
     expect(result).toBeNull();
+  });
+
+  test("excludes rows with a non-ISO date and logs a warning instead of skewing the total", async () => {
+    var errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    db.mockResolvedValue([
+      { total: 1000, payment: "Cash", date: "2026-07-01" },
+      { total: 9999, payment: "Cash", date: "01/07/2026" },
+    ]);
+
+    var result = await getRevenueSummary({ dateFrom: "2026-07-01", dateTo: "2026-07-01" });
+
+    expect(result.totalRevenue).toBe(1000);
+    expect(result.saleCount).toBe(1);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    errorSpy.mockRestore();
   });
 });

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import ExportButton from "../components/ExportButton.jsx";
 import EndOfDaySummary from "../components/EndOfDaySummary.jsx";
+import AskTrimora from "../components/AskTrimora.jsx";
 import {
   BLACK, GOLD, GOLD_LT, GOLD_DIM, CREAM, WHITE,
   GREEN, RED, AMBER,
@@ -169,6 +170,9 @@ export default function Dashboard({ sales, customers, staffList, products, feedb
           {filteredSales.length>0?" · "+filteredSales.length+" sale"+(filteredSales.length!==1?"s":""):" · No sales in this period"}
         </div>
       </div>
+
+      {/* ── Ask Trimora (TIP Phase 2) ── */}
+      <AskTrimora darkMode={darkMode} />
 
       {/* ── Profit Headline ── */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:12 }}>

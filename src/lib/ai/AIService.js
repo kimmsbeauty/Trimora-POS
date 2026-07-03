@@ -16,6 +16,20 @@ import { db } from "../db";
 import { todayStr } from "../utils";
 import { getActiveProvider } from "./ProviderManager";
 
+// Sales rows are written with an ISO ("YYYY-MM-DD") date string as of
+// the todayStr() fix, and the live DB currently has zero rows in the
+// older "DD/MM/YYYY" format -- but `date` is a text column compared
+// lexically by the Postgrest range filter below, so a stray non-ISO
+// row (e.g. from a restored backup) would silently sort wrong and
+// throw off a total rather than erroring. Guard against that here:
+// drop any row that doesn't match ISO before summarizing, and log
+// loudly if it happens, so a future regression is visible instead of
+// silently wrong -- same pattern already used for the KIMMS_SALON_ID
+// fallback guard in db.js.
+function isIsoDate(value) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
 // Capability: revenue summary for a date range (defaults to today).
 // Tenant scoping is automatic -- db() applies the caller's own
 // salon_id under the hood, the same way every other query in the app
@@ -31,8 +45,18 @@ export async function getRevenueSummary(options) {
     return null;
   }
 
+  var validRows = rows.filter(function (row) { return isIsoDate(row.date); });
+  var skipped = rows.length - validRows.length;
+  if (skipped > 0) {
+    console.error(
+      "[AIService] DATA: " + skipped + " sale row(s) had a non-ISO date and were " +
+      "excluded from this revenue summary to avoid a wrong total. This should never " +
+      "happen post-migration -- investigate where the row came from."
+    );
+  }
+
   var provider = getActiveProvider();
-  return provider.summarizeRevenue(rows, { dateFrom: dateFrom, dateTo: dateTo });
+  return provider.summarizeRevenue(validRows, { dateFrom: dateFrom, dateTo: dateTo });
 }
 
 export default {
