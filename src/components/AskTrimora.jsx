@@ -1,20 +1,23 @@
 // src/components/AskTrimora.jsx
 //
-// A minimal natural-language entry point into AIService. Recognizes a
-// handful of phrasings across three capabilities -- revenue, customers/
-// visitors, and best-selling items -- plus a few range phrasings
-// ("today", "this week", "this month", "yesterday").
+// A natural-language entry point into AIService. Classification of the
+// typed question (which capability it's asking about, and what date
+// range) now goes through AIService.classifyQuestion, which tries
+// Gemini's free tier first and automatically falls back to the local
+// keyword classifier if Gemini is unavailable, unconfigured, or slow
+// -- so this component doesn't need to know or care which one actually
+// answered. Gemini only ever sees the raw question text; all the real
+// data (revenue, customers, items) is still fetched and computed
+// entirely locally, exactly as before.
 //
 // This does NOT replace the Dashboard's existing filter buttons/cards,
 // which already show most of this data faster (no round trip, data's
 // already loaded in memory). What this proves out is the *interaction
 // pattern* from the AI architecture doc -- typing a question instead of
-// clicking a filter -- which is the seed of the real Ask-Your-Data
-// feature once a paid provider is enabled and can understand
-// open-ended questions, not just a set of recognized phrases.
+// clicking a filter.
 
 import { useState } from "react";
-import { getRevenueSummary, getCustomerSummary, getTopItems } from "../lib/ai/AIService";
+import { getRevenueSummary, getCustomerSummary, getTopItems, classifyQuestion } from "../lib/ai/AIService";
 import { fmt } from "../lib/utils.js";
 import { GOLD, GOLD_LT, GOLD_DIM, WHITE, BLACK } from "../lib/constants.js";
 
@@ -25,61 +28,28 @@ function toKEDateStr(d) {
   return yyyy + "-" + mm + "-" + dd;
 }
 
-export function resolveRange(question) {
-  var q = question.toLowerCase();
+// Turns a range keyword ("today" | "week" | "month" | "yesterday", as
+// returned by AIService.classifyQuestion) into actual date bounds plus
+// a human-readable label for the answer text.
+export function rangeKeywordToDates(range) {
   var today = new Date();
 
-  if (q.indexOf("this week") !== -1 || q.indexOf("week") !== -1) {
+  if (range === "week") {
     var weekAgo = new Date(today);
     weekAgo.setDate(weekAgo.getDate() - 6);
     return { dateFrom: toKEDateStr(weekAgo), dateTo: toKEDateStr(today), label: "the last 7 days" };
   }
-  if (q.indexOf("this month") !== -1 || q.indexOf("month") !== -1) {
+  if (range === "month") {
     var monthAgo = new Date(today);
     monthAgo.setDate(monthAgo.getDate() - 29);
     return { dateFrom: toKEDateStr(monthAgo), dateTo: toKEDateStr(today), label: "the last 30 days" };
   }
-  if (q.indexOf("yesterday") !== -1) {
+  if (range === "yesterday") {
     var y = new Date(today);
     y.setDate(y.getDate() - 1);
     return { dateFrom: toKEDateStr(y), dateTo: toKEDateStr(y), label: "yesterday" };
   }
-  // Default: today. Covers "today", "how am I doing", etc.
   return { dateFrom: toKEDateStr(today), dateTo: toKEDateStr(today), label: "today" };
-}
-
-// AIService now has three capabilities: revenue, customers, and top
-// items. Route each question to the right one by keyword, and only
-// fall back to "unsupported" for topics none of the three cover yet
-// (staff performance, bookings, stock, reviews). Anything left over
-// defaults to revenue, since that's the broadest/most common ask and
-// failing open beats failing closed on a phrasing we didn't predict.
-var TOP_ITEMS_KEYWORDS = [
-  "item", "best seller", "bestseller", "best-selling", "best selling",
-  "most sold", "sold the most", "top product", "top service", "popular",
-  "which product", "which service",
-];
-var CUSTOMER_KEYWORDS = [
-  "customer", "client", "visitor", "visited", "walk-in", "walkin",
-];
-var UNSUPPORTED_KEYWORDS = [
-  "staff", "stylist", "employee", "commission",
-  "booking", "appointment", "schedule", "calendar",
-  "churn", "at risk", "birthday",
-  "stock", "inventory", "reorder",
-  "review", "rating", "feedback",
-];
-
-function matchesAny(q, keywords) {
-  return keywords.some(function (kw) { return q.indexOf(kw) !== -1; });
-}
-
-export function classifyQuestion(question) {
-  var q = question.toLowerCase();
-  if (matchesAny(q, TOP_ITEMS_KEYWORDS)) return "topItems";
-  if (matchesAny(q, UNSUPPORTED_KEYWORDS)) return "unsupported";
-  if (matchesAny(q, CUSTOMER_KEYWORDS)) return "customers";
-  return "revenue";
 }
 
 export default function AskTrimora({ darkMode }) {
@@ -106,7 +76,8 @@ export default function AskTrimora({ darkMode }) {
     setLoading(true);
     setAnswer(null);
 
-    var kind = classifyQuestion(question);
+    var classification = await classifyQuestion(question);
+    var kind = classification.capability;
 
     if (kind === "unsupported") {
       setAnswer({
@@ -116,7 +87,7 @@ export default function AskTrimora({ darkMode }) {
       return;
     }
 
-    var range = resolveRange(question);
+    var range = rangeKeywordToDates(classification.range);
     var text;
 
     if (kind === "customers") {

@@ -14,7 +14,8 @@
 
 import { db } from "../db";
 import { todayStr } from "../utils";
-import { getActiveProvider } from "./ProviderManager";
+import { getActiveProvider, getProvider } from "./ProviderManager";
+import { CLASSIFIER_PROVIDER } from "./config";
 
 // Sales rows are written with an ISO ("YYYY-MM-DD") date string as of
 // the todayStr() fix, and the live DB currently has zero rows in the
@@ -109,8 +110,32 @@ export async function getTopItems(options) {
   return provider.summarizeTopItems(salesRows, { dateFrom: dateFrom, dateTo: dateTo, limit: limit });
 }
 
+// Capability: turn a free-text question into {capability, range}.
+// Uses CLASSIFIER_PROVIDER (see config.js) -- note this is a SEPARATE
+// switch from AI_PROVIDER above, and deliberately so: this is the only
+// place in AIService that ever sends anything to an external provider,
+// and all it ever sends is the raw question text, never salon data.
+// If the configured classifier throws (not configured, network error,
+// timeout, malformed response), this falls back to Local Intelligence's
+// own classifier so Ask Trimora never breaks or hangs on this.
+export async function classifyQuestion(question) {
+  if (CLASSIFIER_PROVIDER && CLASSIFIER_PROVIDER !== "local") {
+    try {
+      var provider = getProvider(CLASSIFIER_PROVIDER);
+      return await provider.classifyQuestion(question);
+    } catch (e) {
+      console.warn(
+        "[AIService] '" + CLASSIFIER_PROVIDER + "' classification failed, falling back to local: " +
+        (e && e.message ? e.message : e)
+      );
+    }
+  }
+  return getProvider("local").classifyQuestion(question);
+}
+
 export default {
   getRevenueSummary: getRevenueSummary,
   getCustomerSummary: getCustomerSummary,
   getTopItems: getTopItems,
+  classifyQuestion: classifyQuestion,
 };

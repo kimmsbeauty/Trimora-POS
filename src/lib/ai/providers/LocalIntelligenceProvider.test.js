@@ -1,4 +1,4 @@
-import { summarizeRevenue, summarizeCustomers, summarizeTopItems } from "./LocalIntelligenceProvider";
+import { summarizeRevenue, summarizeCustomers, summarizeTopItems, classifyQuestion } from "./LocalIntelligenceProvider";
 
 describe("LocalIntelligenceProvider.summarizeRevenue", () => {
   test("returns zeroed summary for no sales", () => {
@@ -116,5 +116,49 @@ describe("LocalIntelligenceProvider.summarizeTopItems", () => {
   test("ignores malformed rows without throwing", () => {
     var sales = [{ items: null }, { items: [null, { qty: 1 }] }, {}];
     expect(() => summarizeTopItems(sales, {})).not.toThrow();
+  });
+});
+
+describe("LocalIntelligenceProvider.classifyQuestion (local fallback classifier)", () => {
+  test("regression: accepts the phrasing that was rejected in production before the fix", () => {
+    expect(classifyQuestion("how much did we generate this week?")).toEqual({
+      capability: "revenue",
+      range: "week",
+    });
+  });
+
+  test("routes revenue phrasings to revenue, defaulting to today", () => {
+    expect(classifyQuestion("how much did I make today?")).toEqual({
+      capability: "revenue",
+      range: "today",
+    });
+  });
+
+  test("routes customer/visitor phrasings to customers", () => {
+    expect(classifyQuestion("how many new customers this week?")).toEqual({
+      capability: "customers",
+      range: "week",
+    });
+  });
+
+  test("routes best-seller phrasings to topItems", () => {
+    expect(classifyQuestion("what items sold most this month?")).toEqual({
+      capability: "topItems",
+      range: "month",
+    });
+  });
+
+  test("declines topics none of the three capabilities cover", () => {
+    expect(classifyQuestion("which clients are at risk").capability).toBe("unsupported");
+    expect(classifyQuestion("what's low on stock").capability).toBe("unsupported");
+  });
+
+  test("recognizes yesterday", () => {
+    expect(classifyQuestion("what did we make yesterday").range).toBe("yesterday");
+  });
+
+  test("handles empty/undefined input without throwing", () => {
+    expect(() => classifyQuestion("")).not.toThrow();
+    expect(() => classifyQuestion(undefined)).not.toThrow();
   });
 });

@@ -1,7 +1,7 @@
 jest.mock("../db", () => ({ db: jest.fn() }));
 
 import { db } from "../db";
-import { getRevenueSummary, getCustomerSummary, getTopItems } from "./AIService";
+import { getRevenueSummary, getCustomerSummary, getTopItems, classifyQuestion } from "./AIService";
 
 describe("AIService.getRevenueSummary", () => {
   beforeEach(() => {
@@ -116,5 +116,54 @@ describe("AIService.getTopItems", () => {
     ]);
     var result = await getTopItems({ dateFrom: "2026-07-01", dateTo: "2026-07-01", limit: 1 });
     expect(result.items.length).toBe(1);
+  });
+});
+
+describe("AIService.classifyQuestion (Gemini-first, local fallback)", () => {
+  beforeEach(() => {
+    global.fetch = jest.fn();
+  });
+
+  test("uses Gemini's classification when the edge function succeeds", async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ capability: "topItems", range: "month" }),
+    });
+
+    var result = await classifyQuestion("what sold best recently");
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ capability: "topItems", range: "month" });
+  });
+
+  test("falls back to the local classifier if Gemini is not configured (e.g. 503)", async () => {
+    var warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    global.fetch.mockResolvedValue({ ok: false, status: 503 });
+
+    var result = await classifyQuestion("how much did we generate this week?");
+
+    expect(result).toEqual({ capability: "revenue", range: "week" });
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
+  });
+
+  test("falls back to the local classifier if the network call fails entirely", async () => {
+    var warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    global.fetch.mockRejectedValue(new Error("network down"));
+
+    var result = await classifyQuestion("how many customers visited today?");
+
+    expect(result.capability).toBe("customers");
+    warnSpy.mockRestore();
+  });
+
+  test("falls back to the local classifier if Gemini returns malformed data", async () => {
+    var warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    global.fetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+
+    var result = await classifyQuestion("what items sold most this month?");
+
+    expect(result).toEqual({ capability: "topItems", range: "month" });
+    warnSpy.mockRestore();
   });
 });

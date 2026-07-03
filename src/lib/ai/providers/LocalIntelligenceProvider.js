@@ -100,9 +100,56 @@ export function summarizeTopItems(salesRows, options) {
   };
 }
 
+// Question classification -- turns free text into {capability, range}.
+// This is the same keyword logic that lived in AskTrimora.jsx, moved
+// here so it's reachable through the same provider interface Gemini's
+// classifier uses, and so AIService can fall back to it uniformly.
+//
+// Fails open to "revenue" for anything not clearly about a different,
+// unsupported topic -- a fixed keyword list will never predict every
+// real phrasing, so refusing by default would reject valid questions
+// more often than it protects against invalid ones.
+var TOP_ITEMS_KEYWORDS = [
+  "item", "best seller", "bestseller", "best-selling", "best selling",
+  "most sold", "sold the most", "top product", "top service", "popular",
+  "which product", "which service",
+];
+var CUSTOMER_KEYWORDS = [
+  "customer", "client", "visitor", "visited", "walk-in", "walkin",
+];
+var UNSUPPORTED_KEYWORDS = [
+  "staff", "stylist", "employee", "commission",
+  "booking", "appointment", "schedule", "calendar",
+  "churn", "at risk", "birthday",
+  "stock", "inventory", "reorder",
+  "review", "rating", "feedback",
+];
+
+function matchesAny(q, keywords) {
+  return keywords.some(function (kw) { return q.indexOf(kw) !== -1; });
+}
+
+export function classifyQuestion(question) {
+  var q = (question || "").toLowerCase();
+
+  var capability;
+  if (matchesAny(q, TOP_ITEMS_KEYWORDS)) capability = "topItems";
+  else if (matchesAny(q, UNSUPPORTED_KEYWORDS)) capability = "unsupported";
+  else if (matchesAny(q, CUSTOMER_KEYWORDS)) capability = "customers";
+  else capability = "revenue";
+
+  var range = "today";
+  if (q.indexOf("week") !== -1) range = "week";
+  else if (q.indexOf("month") !== -1) range = "month";
+  else if (q.indexOf("yesterday") !== -1) range = "yesterday";
+
+  return { capability: capability, range: range };
+}
+
 export default {
   name: "local",
   summarizeRevenue: summarizeRevenue,
   summarizeCustomers: summarizeCustomers,
   summarizeTopItems: summarizeTopItems,
+  classifyQuestion: classifyQuestion,
 };
