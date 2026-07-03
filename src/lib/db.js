@@ -102,6 +102,35 @@ async function dbDirect(method, table, data = null, filters = "") {
   }
 }
 
+// Calls a Postgres RPC function (POST /rest/v1/rpc/<name>) rather than a
+// table. Used for narrow, server-defined lookups (e.g. public_customer_lookup)
+// where a direct table SELECT would be too permissive for an unauthenticated
+// caller. Returns the parsed JSON array/object on success, or null on any
+// failure — callers should treat null the same as "not found", not a crash.
+export async function dbRpc(functionName, args = {}) {
+  const url = `${SUPABASE_URL}/rest/v1/rpc/${functionName}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(args),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    return res.json();
+  } catch (e) {
+    clearTimeout(timeout);
+    return null;
+  }
+}
+
 export async function syncOfflineQueue() {
   if (isSyncing || offlineQueue.length === 0 || !navigator.onLine) return;
   isSyncing = true;

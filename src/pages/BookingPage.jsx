@@ -4,13 +4,14 @@ import { useState, useEffect } from "react";
 import SalonBrandmark from "../components/SalonBrandmark";
 import GoldBtn from "../components/GoldBtn";
 import MpesaPaymentModal from "../components/MpesaPaymentModal";
-import { db } from "../lib/db";
+import { db, dbRpc } from "../lib/db";
 import { fmt, todayStr, nowTime } from "../lib/utils";
 import { useSalon, fetchPublicSalonBranding } from "../lib/SalonContext";
 import { lighten, darken } from "../lib/colorUtils";
 import {
   CATS,
   BLACK, GOLD, DARK, WHITE, GREEN, MPESA_GREEN,
+  KIMMS_SALON_ID,
 } from "../lib/constants";
 
 export default function BookingPage() {
@@ -86,8 +87,15 @@ export default function BookingPage() {
       date: sel.date, time: sel.time,
       status: "pending", payment_status: "pending",
     });
-    const existing = await db("GET", "customers", null, `?phone=eq.${sel.phone}&limit=1`);
-    if (existing && existing.length === 0) {
+    // Uses the public_customer_lookup RPC rather than a direct table SELECT —
+    // the booking page is unauthenticated (no staff login), so there's no
+    // session for RLS to scope by. The RPC does the same one-phone lookup
+    // this flow always needed, without exposing the whole customers table
+    // to anyone holding the public anon key. Falls back to KIMMS_SALON_ID
+    // on the legacy unprefixed /booking route, same convention db.js uses.
+    const lookupSalonId = salon?.id || KIMMS_SALON_ID;
+    const existing = await dbRpc("public_customer_lookup", { p_salon_id: lookupSalonId, p_phone: sel.phone });
+    if (Array.isArray(existing) && existing.length === 0) {
       await db("POST", "customers", { name: sel.name, phone: sel.phone, visit_count: 0, total_spend: 0, last_visit: sel.date });
     }
     setSaving(false);
