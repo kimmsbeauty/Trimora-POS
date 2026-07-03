@@ -34,7 +34,7 @@ export default function TrimoraLandingPage() {
           TRIMORA
         </div>
         <div style={{ fontSize: 13, fontWeight: 700, color: GOLD_DIM, letterSpacing: "0.3em", textTransform: "uppercase", marginTop: 4 }}>
-          POS
+          SYSTEMS
         </div>
       </div>
 
