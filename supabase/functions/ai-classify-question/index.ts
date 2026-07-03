@@ -66,13 +66,21 @@ serve(async (req) => {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
 
+    // Auth via header, not the older ?key= query param: Google's newer
+    // "Auth key" format (keys starting with "AQ.", issued going forward
+    // from mid-2026) requires x-goog-api-key -- the header form also
+    // works with older "AIzaSy..." keys, so this is the more compatible
+    // choice either way.
     let geminiRes;
     try {
       geminiRes = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + apiKey,
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
           body: JSON.stringify({
             system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
             contents: [{ role: "user", parts: [{ text: question }] }],
