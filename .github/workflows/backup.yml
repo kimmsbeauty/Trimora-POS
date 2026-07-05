@@ -1,0 +1,78 @@
+name: Manual database backup (free-tier stopgap)
+
+# Both Supabase projects (POS and website) are on the free plan, which
+# does not include automated daily backups or point-in-time recovery
+# (verified against Supabase's own documentation, 2026-07-05). This is a
+# stopgap until a decision is made to upgrade to a paid plan -- it is
+# NOT equivalent to Supabase's own backup/PITR: no automatic restore UI,
+# no guaranteed testing of the dump's restorability, and retention here
+# is capped by GitHub's artifact limits, not a dedicated backup service.
+#
+# The dump is uploaded as a GitHub Actions artifact, NOT committed to
+# the repository. Committing a raw database dump to git history would
+# put real customer PII (names, phone numbers, appointments, sales)
+# into permanent, hard-to-purge history -- worse than not backing up at
+# all from a data-protection standpoint. Artifacts are private to this
+# repo and expire automatically (see retention-days below).
+#
+# The dump is also GPG-encrypted before upload, so a repo-access leak
+# alone isn't enough to read customer data out of a backup artifact.
+#
+# Required repo secrets (Settings > Secrets and variables > Actions):
+#   SUPABASE_DB_URL              -- Postgres connection string from
+#     Supabase Dashboard > Project Settings > Database > Connection
+#     string > URI. Use the DIRECT connection (not the pooler/pgbouncer
+#     one) -- pg_dump can have compatibility issues against pooled
+#     connections in transaction mode.
+#   BACKUP_ENCRYPTION_PASSPHRASE  -- any strong random passphrase, used
+#     symmetrically to encrypt the dump. Store this passphrase somewhere
+#     safe outside GitHub too (e.g. a password manager) -- if it's lost,
+#     the backups become unrecoverable.
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # 03:00 UTC daily
+  workflow_dispatch: {} # allows manually triggering a backup on demand
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install PostgreSQL 17 client tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl ca-certificates gnupg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
+          echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+
+      - name: Dump database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "SUPABASE_DB_URL secret is not set -- see this workflow's own comments for what's needed."
+            exit 1
+          fi
+          pg_dump "$SUPABASE_DB_URL" --format=custom --no-owner --no-privileges -f trimora-pos-backup.dump
+
+      - name: Encrypt the dump
+        env:
+          BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.BACKUP_ENCRYPTION_PASSPHRASE }}
+        run: |
+          if [ -z "$BACKUP_ENCRYPTION_PASSPHRASE" ]; then
+            echo "BACKUP_ENCRYPTION_PASSPHRASE secret is not set -- see this workflow's own comments for what's needed."
+            exit 1
+          fi
+          gpg --batch --yes --symmetric --cipher-algo AES256 \
+            --passphrase "$BACKUP_ENCRYPTION_PASSPHRASE" \
+            trimora-pos-backup.dump
+          rm trimora-pos-backup.dump
+
+      - name: Upload encrypted backup as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trimora-pos-backup-${{ github.run_id }}
+          path: trimora-pos-backup.dump.gpg
+          retention-days: 35 # overlapping coverage in case one run is missed or corrupt
