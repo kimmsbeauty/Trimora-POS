@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from "react";
 import { saFetch, superAdminLogout, getSuperAdminSession } from "../lib/superAdminAuth";
-import { SUPABASE_URL, SUPABASE_KEY, GOLD, GOLD_DIM, BLACK, WHITE, DARK, GREEN, RED, AMBER, CREAM } from "../lib/constants";
+import { SUPABASE_URL, SUPABASE_KEY, GOLD, GOLD_DIM, BLACK, WHITE, DARK, GREEN, RED, AMBER, CREAM, GRAY } from "../lib/constants";
 import {
   getHealthFlags as getHealthFlagsLib,
   salonsNeedingAttention as salonsNeedingAttentionLib,
@@ -104,6 +104,18 @@ export default function SuperAdminDashboard({ onLogout }) {
   var [manualDone,   setManualDone]   = useState("");
   var [search,       setSearch]       = useState("");
   var [filter,       setFilter]       = useState("all"); // "all" | "active" | "suspended"
+  var [onboardingRequests, setOnboardingRequests] = useState([]);
+  var [requestsLoading, setRequestsLoading] = useState(false);
+  var [requestsLoaded, setRequestsLoaded] = useState(false);
+  var [rejectModal,  setRejectModal]  = useState(null); // request row being rejected
+  var [rejectReason, setRejectReason] = useState("");
+  var [approvingId,  setApprovingId]  = useState(null);
+  var [addRepModal,  setAddRepModal]  = useState(false);
+  var [addRepEmail,  setAddRepEmail]  = useState("");
+  var [addRepPass,   setAddRepPass]   = useState("");
+  var [addRepLoading,setAddRepLoading]= useState(false);
+  var [addRepError,  setAddRepError]  = useState("");
+  var [addRepDone,   setAddRepDone]   = useState(false);
 
   var session = getSuperAdminSession();
 
@@ -173,6 +185,136 @@ export default function SuperAdminDashboard({ onLogout }) {
     }
     setAuditLoaded(true);
     setAuditLoading(false);
+  }
+
+  // Loaded once, lazily, only when Onboarding Requests is opened.
+  async function loadOnboardingRequests() {
+    setRequestsLoading(true);
+    var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    if (!token) { setRequestsLoading(false); return; }
+    var res = await fetch(SUPABASE_URL + "/rest/v1/salon_onboarding_requests?order=created_at.desc", {
+      method: "GET",
+      headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + token },
+    });
+    if (res.ok) {
+      var rows = await res.json();
+      setOnboardingRequests(rows || []);
+    }
+    setRequestsLoaded(true);
+    setRequestsLoading(false);
+  }
+
+  // Approving reuses the EXISTING create_invite RPC -- no parallel path
+  // to salon creation. The resulting token is stored on the request row
+  // so the submitting rep can see it too (see SalesRepDashboard.jsx).
+  async function approveRequest(request) {
+    setApprovingId(request.id);
+    var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    if (!token) { setApprovingId(null); alert("Session expired. Please sign out and sign in again."); return; }
+
+    var inviteRes = await fetch(SUPABASE_URL + "/rest/v1/rpc/create_invite", {
+      method: "POST",
+      headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ p_email: request.owner_email || null, p_salon_name: request.salon_name }),
+    });
+
+    if (!inviteRes.ok) {
+      setApprovingId(null);
+      alert("Failed to generate invite for this request.");
+      return;
+    }
+
+    var inviteToken = await inviteRes.json();
+
+    var updateRes = await fetch(SUPABASE_URL + "/rest/v1/salon_onboarding_requests?id=eq." + request.id, {
+      method: "PATCH",
+      headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({
+        status: "approved",
+        reviewed_by: session.uid,
+        reviewed_at: new Date().toISOString(),
+        resulting_invite_token: inviteToken,
+      }),
+    });
+
+    setApprovingId(null);
+
+    if (!updateRes.ok) {
+      alert("Invite was created but updating the request record failed. Invite token: " + inviteToken);
+      return;
+    }
+
+    logAction("generate_invite", null, request.salon_name, "Approved onboarding request from rep, id " + request.id);
+    setOnboardingRequests(function(prev) {
+      return prev.map(function(r) {
+        return r.id === request.id
+          ? Object.assign({}, r, { status: "approved", resulting_invite_token: inviteToken })
+          : r;
+      });
+    });
+  }
+
+  async function rejectRequest() {
+    if (!rejectModal) return;
+    var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    if (!token) { alert("Session expired. Please sign out and sign in again."); return; }
+
+    var res = await fetch(SUPABASE_URL + "/rest/v1/salon_onboarding_requests?id=eq." + rejectModal.id, {
+      method: "PATCH",
+      headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({
+        status: "rejected",
+        rejection_reason: rejectReason.trim() || null,
+        reviewed_by: session.uid,
+        reviewed_at: new Date().toISOString(),
+      }),
+    });
+
+    if (!res.ok) { alert("Failed to reject request."); return; }
+
+    var rejectedId = rejectModal.id;
+    setOnboardingRequests(function(prev) {
+      return prev.map(function(r) {
+        return r.id === rejectedId
+          ? Object.assign({}, r, { status: "rejected", rejection_reason: rejectReason.trim() || null })
+          : r;
+      });
+    });
+    setRejectModal(null);
+    setRejectReason("");
+  }
+
+  // Creates a new sales rep account. Requires a genuine service-role
+  // action (setting app_metadata isn't possible via the normal client
+  // SDK, by design -- see superAdminAuth.js/salesRepAuth.js comments on
+  // why app_metadata specifically, not user_metadata, is the trusted
+  // gate). The admin-create-sales-rep function verifies the CALLER is a
+  // superadmin itself before doing anything privileged.
+  async function addSalesRep() {
+    if (!addRepEmail.trim() || !addRepPass.trim()) { setAddRepError("Email and password are required."); return; }
+    setAddRepLoading(true);
+    setAddRepError("");
+    var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    if (!token) { setAddRepLoading(false); setAddRepError("Session expired. Please sign out and sign in again."); return; }
+
+    var res = await fetch(SUPABASE_URL + "/functions/v1/admin-create-sales-rep", {
+      method: "POST",
+      headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ email: addRepEmail.trim(), password: addRepPass }),
+    });
+
+    var data = await res.json();
+    setAddRepLoading(false);
+
+    if (!res.ok) {
+      setAddRepError(data.error || "Failed to create sales rep account.");
+      return;
+    }
+
+    logAction("manual_onboard", null, null, "Created sales rep account: " + addRepEmail.trim());
+    setAddRepEmail(""); setAddRepPass("");
+    setAddRepDone(true);
+    setTimeout(function() { setAddRepDone(false); setAddRepModal(false); }, 2000);
   }
 
   // Loaded once on first open — plans rarely change.
@@ -824,6 +966,170 @@ export default function SuperAdminDashboard({ onLogout }) {
     );
   }
 
+  // ── ONBOARDING REQUESTS VIEW ────────────────────────────────────────
+  // Requests submitted by sales reps from the field. Approving reuses
+  // the existing create_invite RPC -- see approveRequest() above. Salon
+  // creation itself is untouched by this; a request only ever produces
+  // an invite link, exactly like the "+ Invite" button already does.
+  if (view === "requests") {
+    return (
+      <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
+        <div style={{ background: BLACK, padding: "16px 20px" }}>
+          <button onClick={function() { setView("salons"); }}
+            style={{ background: "none", border: "none", color: GOLD_DIM, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 8, padding: 0 }}>
+            ← Back
+          </button>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>🧑‍💼 Onboarding Requests</div>
+              <div style={{ fontSize: 11, color: GOLD_DIM + "aa", marginTop: 2 }}>Submitted by sales reps from the field</div>
+            </div>
+            <button onClick={function() { setAddRepModal(true); setAddRepEmail(""); setAddRepPass(""); setAddRepError(""); }}
+              style={{ background: "none", border: "1px solid " + GOLD_DIM + "66", color: GOLD, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+              + Add Sales Rep
+            </button>
+          </div>
+        </div>
+
+        <div style={{ padding: 16 }}>
+          {requestsLoading ? (
+            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>Loading...</div>
+          ) : onboardingRequests.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>No onboarding requests yet.</div>
+          ) : (
+            onboardingRequests.map(function(r) {
+              var statusMeta = {
+                pending:  { bg: "#FEF3C7", fg: "#92400E", label: "🕓 Pending" },
+                approved: { bg: "#D1FAE5", fg: "#065F46", label: "✅ Approved" },
+                rejected: { bg: "#FEE2E2", fg: "#991B1B", label: "❌ Rejected" },
+              }[r.status] || { bg: "#F5F0E8", fg: "#666", label: r.status };
+
+              return (
+                <div key={r.id} style={{ background: WHITE, borderRadius: 12, padding: 14, marginBottom: 10, border: "1.5px solid " + GOLD_DIM + "33" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: DARK }}>{r.salon_name}</div>
+                    <div style={{ padding: "3px 10px", borderRadius: 20, fontSize: 10, fontWeight: 800, background: statusMeta.bg, color: statusMeta.fg }}>
+                      {statusMeta.label}
+                    </div>
+                  </div>
+
+                  {(r.owner_name || r.owner_email || r.owner_phone) && (
+                    <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>
+                      {r.owner_name}{r.owner_name && (r.owner_email || r.owner_phone) ? " · " : ""}
+                      {r.owner_email}{r.owner_email && r.owner_phone ? " · " : ""}{r.owner_phone}
+                    </div>
+                  )}
+
+                  {r.notes && <div style={{ fontSize: 12, color: "#666", marginBottom: 8, fontStyle: "italic" }}>{r.notes}</div>}
+
+                  <div style={{ fontSize: 10, color: "#aaa", marginBottom: r.status === "pending" ? 10 : 0 }}>
+                    {new Date(r.created_at).toLocaleString("en-KE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  </div>
+
+                  {r.status === "pending" && (
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={function() { approveRequest(r); }} disabled={approvingId === r.id}
+                        style={{ flex: 1, background: "linear-gradient(135deg," + GOLD + "," + GOLD + ")", color: BLACK, border: "none", borderRadius: 8, padding: "9px 0", fontWeight: 900, fontSize: 12, cursor: approvingId === r.id ? "not-allowed" : "pointer", opacity: approvingId === r.id ? 0.6 : 1 }}>
+                        {approvingId === r.id ? "Approving..." : "✅ Approve"}
+                      </button>
+                      <button onClick={function() { setRejectModal(r); setRejectReason(""); }}
+                        style={{ flex: 1, background: "#FEE2E2", color: "#991B1B", border: "none", borderRadius: 8, padding: "9px 0", fontWeight: 900, fontSize: 12, cursor: "pointer" }}>
+                        ❌ Reject
+                      </button>
+                    </div>
+                  )}
+
+                  {r.status === "approved" && r.resulting_invite_token && (
+                    <div style={{ background: "#F0FDF4", border: "1px solid " + GREEN + "55", borderRadius: 8, padding: 10, marginTop: 8 }}>
+                      <div style={{ fontSize: 10, color: "#065F46", fontWeight: 700, marginBottom: 4 }}>Invite link:</div>
+                      <div style={{ fontSize: 10, color: DARK, wordBreak: "break-all", fontFamily: "monospace" }}>
+                        {window.location.origin + "/onboard?token=" + r.resulting_invite_token}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Reject reason modal */}
+        {rejectModal && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 100 }}>
+            <div style={{ background: WHITE, borderRadius: 16, padding: 24, maxWidth: 380, width: "100%" }}>
+              <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 4 }}>Reject Request</div>
+              <div style={{ fontSize: 12, color: "#888", marginBottom: 14 }}>{rejectModal.salon_name}</div>
+              <textarea
+                placeholder="Reason (optional, visible to the rep)"
+                value={rejectReason}
+                onChange={function(e) { setRejectReason(e.target.value); }}
+                rows={3}
+                style={{ width: "100%", borderRadius: 8, border: "1.5px solid " + GOLD_DIM + "33", padding: "10px 12px", fontSize: 13, boxSizing: "border-box", marginBottom: 14, fontFamily: "inherit", resize: "vertical" }}
+              />
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={function() { setRejectModal(null); setRejectReason(""); }}
+                  style={{ flex: 1, background: GRAY, color: DARK, border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                  Cancel
+                </button>
+                <button onClick={rejectRequest}
+                  style={{ flex: 1, background: "#EF4444", color: WHITE, border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 900, fontSize: 13, cursor: "pointer" }}>
+                  Confirm Reject
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add sales rep modal */}
+        {addRepModal && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 100 }}>
+            <div style={{ background: WHITE, borderRadius: 16, padding: 24, maxWidth: 380, width: "100%" }}>
+              <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 4 }}>Add Sales Rep</div>
+              <div style={{ fontSize: 12, color: "#888", marginBottom: 14 }}>They'll sign in at /sales with these credentials.</div>
+
+              <input
+                placeholder="Email"
+                type="email"
+                value={addRepEmail}
+                onChange={function(e) { setAddRepEmail(e.target.value); setAddRepError(""); }}
+                style={{ width: "100%", borderRadius: 8, border: "1.5px solid " + GOLD_DIM + "33", padding: "10px 12px", fontSize: 13, boxSizing: "border-box", marginBottom: 8, fontFamily: "inherit" }}
+              />
+              <input
+                placeholder="Temporary password"
+                type="text"
+                value={addRepPass}
+                onChange={function(e) { setAddRepPass(e.target.value); setAddRepError(""); }}
+                style={{ width: "100%", borderRadius: 8, border: "1.5px solid " + GOLD_DIM + "33", padding: "10px 12px", fontSize: 13, boxSizing: "border-box", marginBottom: 10, fontFamily: "inherit" }}
+              />
+
+              {addRepError && (
+                <div style={{ color: "#EF4444", fontSize: 12, marginBottom: 10, padding: "8px 12px", background: "rgba(239,68,68,0.08)", borderRadius: 8 }}>
+                  {addRepError}
+                </div>
+              )}
+              {addRepDone && (
+                <div style={{ color: "#065F46", fontSize: 12, marginBottom: 10, padding: "8px 12px", background: "#D1FAE5", borderRadius: 8, fontWeight: 700 }}>
+                  ✅ Sales rep account created
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={function() { setAddRepModal(false); }}
+                  style={{ flex: 1, background: GRAY, color: DARK, border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                  Cancel
+                </button>
+                <button onClick={addSalesRep} disabled={addRepLoading}
+                  style={{ flex: 1, background: GOLD, color: BLACK, border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 900, fontSize: 13, cursor: addRepLoading ? "not-allowed" : "pointer", opacity: addRepLoading ? 0.7 : 1 }}>
+                  {addRepLoading ? "Creating..." : "Create Account"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // ── HEALTH VIEW ───────────────────────────────────────────────────
   if (view === "health") {
     var flaggedSalons = salonsNeedingAttention();
@@ -1186,6 +1492,7 @@ export default function SuperAdminDashboard({ onLogout }) {
           {[
             { label: "💲 Plans",      onClick: function() { setView("plans"); loadPlans(); } },
             { label: "📋 Audit Log",  onClick: function() { setView("audit"); loadAuditLog(); } },
+            { label: "🧑‍💼 Requests", onClick: function() { setView("requests"); loadOnboardingRequests(); } },
             { label: "🩺 Health",     onClick: function() { setView("health"); } },
             { label: "📊 Analytics",  onClick: function() { setView("analytics"); loadAnalytics(); } },
             { label: "+ Manual",      onClick: function() { setManualModal(true); setManualDone(""); } },
