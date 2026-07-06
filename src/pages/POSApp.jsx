@@ -394,6 +394,18 @@ export default function POSApp({ onLogout, userRole }) {
     try { await db("PATCH", "bookings", { status: "cancelled" }, "?id=eq." + id); setAppointments(function(p) { return p.map(function(a) { return a.id === id ? Object.assign({}, a, { status: "cancelled" }) : a; }); }); showToast("Booking cancelled", "info"); }
     catch (e) { showToast("Update failed", "error"); }
   }
+  // Staff-confirmed payment step: a customer's "I've Paid" click on the
+  // public booking page only sets payment_status to "awaiting_confirmation"
+  // (an honor-system claim, not a verified transaction -- see
+  // BookingPage.jsx's handlePaid() comment). This is the actual
+  // confirmation step -- staff check their own M-Pesa SMS/app for the
+  // matching payment, then confirm it here. Uses the same authenticated,
+  // salon-scoped update path as markDone/markCancelled -- no special
+  // permission beyond what staff already have on their own salon's bookings.
+  async function confirmPayment(id) {
+    try { await db("PATCH", "bookings", { payment_status: "paid_upfront" }, "?id=eq." + id); setAppointments(function(p) { return p.map(function(a) { return a.id === id ? Object.assign({}, a, { payment_status: "paid_upfront" }) : a; }); }); showToast("Payment confirmed ✅"); }
+    catch (e) { showToast("Update failed", "error"); }
+  }
 
   async function convertToSale(a) {
     try {
@@ -1420,8 +1432,8 @@ export default function POSApp({ onLogout, userRole }) {
                           <div style={{ padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 800, background: a.status === "pending" ? "#FEF3C7" : a.status === "done" ? "#D1FAE5" : "#FEE2E2", color: a.status === "pending" ? "#92400E" : a.status === "done" ? "#065F46" : "#991B1B" }}>
                             {a.status === "pending" ? "⏳ Pending" : a.status === "done" ? "✅ Done" : "❌ Cancelled"}
                           </div>
-                          <div style={{ padding: "3px 8px", borderRadius: 20, fontSize: 10, fontWeight: 800, background: a.payment_status === "paid_upfront" ? "#D1FAE5" : "#FEF3C7", color: a.payment_status === "paid_upfront" ? "#065F46" : "#92400E" }}>
-                            {a.payment_status === "paid_upfront" ? "💚 Paid" : "🕐 Pay at Salon"}
+                          <div style={{ padding: "3px 8px", borderRadius: 20, fontSize: 10, fontWeight: 800, background: a.payment_status === "paid_upfront" ? "#D1FAE5" : a.payment_status === "awaiting_confirmation" ? "#FEF9C3" : "#FEF3C7", color: a.payment_status === "paid_upfront" ? "#065F46" : a.payment_status === "awaiting_confirmation" ? "#854D0E" : "#92400E" }}>
+                            {a.payment_status === "paid_upfront" ? "💚 Paid" : a.payment_status === "awaiting_confirmation" ? "🕓 Confirm Payment" : "🕐 Pay at Salon"}
                           </div>
                         </div>
                       </div>
@@ -1430,6 +1442,9 @@ export default function POSApp({ onLogout, userRole }) {
                       <div style={{ fontSize: 12, color: "#888", marginBottom: 10 }}>📅 {a.date} at {a.time}</div>
                       {a.status === "pending" && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {a.payment_status === "awaiting_confirmation" && (
+                            <button onClick={function() { confirmPayment(a.id); }} style={{ width: "100%", background: "#FEF9C3", color: "#854D0E", border: "1.5px solid #EAB308", borderRadius: 8, padding: "10px 0", fontWeight: 900, fontSize: 13, cursor: "pointer" }}>🕓 Confirm Payment Received (check your M-Pesa)</button>
+                          )}
                           <button onClick={function() { convertToSale(a); }} style={{ width: "100%", background: "linear-gradient(135deg," + GOLD + "," + GOLD_LT + ")", color: BLACK, border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 900, fontSize: 13, cursor: "pointer" }}>🛒 Client Arrived — Convert to Sale</button>
                           <div style={{ display: "flex", gap: 8 }}>
                             <button onClick={function() { markDone(a.id); }} style={{ flex: 1, background: "#D1FAE5", color: "#065F46", border: "none", borderRadius: 8, padding: "8px 0", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>✅ Mark Done</button>

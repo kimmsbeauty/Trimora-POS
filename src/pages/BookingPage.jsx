@@ -104,8 +104,19 @@ export default function BookingPage() {
   }
 
   async function handlePaid() {
-    if (savedBooking?.id) await db("PATCH", "bookings", { payment_status: "paid_upfront" }, `?id=eq.${savedBooking.id}`);
-    setPaymentStatus("paid");
+    // This no longer directly confirms payment -- it records the customer's
+    // CLAIM that they paid, timestamped, and staff confirm it from the POS
+    // app after checking their own M-Pesa SMS/app (see POSApp.jsx's
+    // confirmPayment()). The anon RLS policy on bookings only allows this
+    // exact transition (pending -> awaiting_confirmation), never straight
+    // to paid_upfront -- that requires an authenticated staff action now.
+    if (savedBooking?.id) {
+      await db("PATCH", "bookings", {
+        payment_status: "awaiting_confirmation",
+        payment_claimed_at: new Date().toISOString(),
+      }, `?id=eq.${savedBooking.id}`);
+    }
+    setPaymentStatus("awaiting_confirmation");
     setShowMpesa(false);
     setDone(true);
   }
@@ -123,23 +134,23 @@ export default function BookingPage() {
 
   if (done) {
     const waMessage = encodeURIComponent(
-      `✂ ${salonName}\n\nHi ${sel.name}! Your booking is confirmed 💕\n\nService: ${sel.service?.name}\nStylist: ${sel.stylist || "Any available"}\nDate: ${sel.date}\nTime: ${sel.time}\nPrice: KES ${sel.service?.price?.toLocaleString()}\nPayment: ${paymentStatus === "paid" ? "✅ Paid via M-Pesa" : "Pay at salon"}\n\nWe look forward to seeing you!`
+      `✂ ${salonName}\n\nHi ${sel.name}! Your booking is confirmed 💕\n\nService: ${sel.service?.name}\nStylist: ${sel.stylist || "Any available"}\nDate: ${sel.date}\nTime: ${sel.time}\nPrice: KES ${sel.service?.price?.toLocaleString()}\nPayment: ${paymentStatus === "awaiting_confirmation" ? "🕓 Confirming your M-Pesa payment" : "Pay at salon"}\n\nWe look forward to seeing you!`
     );
 
     // Owner notification message — sent TO the salon
     const ownerMessage = encodeURIComponent(
-      `📅 New Booking — ${salonName}\n\nClient: ${sel.name}${sel.phone ? " (" + sel.phone + ")" : ""}\nService: ${sel.service?.name}\nStylist: ${sel.stylist || "Any available"}\nDate: ${sel.date} at ${sel.time}\nPrice: KES ${sel.service?.price?.toLocaleString()}\nPayment: ${paymentStatus === "paid" ? "✅ Paid via M-Pesa" : "Pay at salon"}`
+      `📅 New Booking — ${salonName}\n\nClient: ${sel.name}${sel.phone ? " (" + sel.phone + ")" : ""}\nService: ${sel.service?.name}\nStylist: ${sel.stylist || "Any available"}\nDate: ${sel.date} at ${sel.time}\nPrice: KES ${sel.service?.price?.toLocaleString()}\nPayment: ${paymentStatus === "awaiting_confirmation" ? "🕓 Customer claims paid via M-Pesa — please confirm and mark it in the app" : "Pay at salon"}`
     );
 
     return (
       <div style={{ minHeight: "100vh", background: `linear-gradient(160deg,${BLACK} 0%,${secondary} 100%)`, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
         <div style={{ background: "rgba(255,255,255,0.05)", border: `1.5px solid ${primaryDim}`, borderRadius: 20, padding: 36, maxWidth: 380, width: "100%", textAlign: "center" }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>{paymentStatus === "paid" ? "💚" : "👑"}</div>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>{paymentStatus === "awaiting_confirmation" ? "🕓" : "👑"}</div>
           <div style={{ fontSize: 22, fontWeight: 900, color: primaryLt, fontFamily: "Georgia,serif", fontStyle: "italic", marginBottom: 8 }}>
-            {paymentStatus === "paid" ? "Booked & Paid!" : "You're booked!"}
+            {paymentStatus === "awaiting_confirmation" ? "You're booked — confirming payment" : "You're booked!"}
           </div>
-          <div style={{ display: "inline-block", padding: "6px 16px", borderRadius: 20, fontSize: 12, fontWeight: 800, marginBottom: 16, background: paymentStatus === "paid" ? "#D1FAE5" : `rgba(201,168,76,0.15)`, color: paymentStatus === "paid" ? "#065F46" : primaryLt }}>
-            {paymentStatus === "paid" ? "✅ Paid via M-Pesa" : "🕐 Pay at Salon"}
+          <div style={{ display: "inline-block", padding: "6px 16px", borderRadius: 20, fontSize: 12, fontWeight: 800, marginBottom: 16, background: paymentStatus === "awaiting_confirmation" ? "rgba(234,179,8,0.15)" : `rgba(201,168,76,0.15)`, color: paymentStatus === "awaiting_confirmation" ? "#CA8A04" : primaryLt }}>
+            {paymentStatus === "awaiting_confirmation" ? "🕓 Confirming your payment" : "🕐 Pay at Salon"}
           </div>
           <div style={{ fontSize: 14, color: "rgba(255,255,255,0.7)", lineHeight: 1.8, marginBottom: 20 }}>
             <b style={{ color: WHITE }}>{sel.service?.name}</b> with <b style={{ color: WHITE }}>{sel.stylist || "any available stylist"}</b><br />
