@@ -33,10 +33,28 @@ function RouteFallback() {
 }
 
 function RedirectToBooking() {
+  // Checked synchronously on first render (not in an effect) so a normal
+  // visit to "/" never flashes a loading state -- this only ever shows
+  // anything other than the real landing page when there's an actual
+  // recovery token to process.
+  var isRecoveryState = useState(function () {
+    var hash = window.location.hash || "";
+    var search = window.location.search || "";
+    var hashParams = new URLSearchParams(hash.replace(/^#/, ""));
+    var searchParams = new URLSearchParams(search.replace(/^\?/, ""));
+    return !!(
+      (hashParams.get("type") === "recovery" && hashParams.get("access_token")) ||
+      (searchParams.get("type") === "recovery" && searchParams.get("access_token"))
+    );
+  });
+  var isRecovery = isRecoveryState[0];
+
   useEffect(function() {
     // Supabase always lands recovery emails on the site root regardless of redirectTo.
     // The token can arrive in the hash (most cases) OR as query params (some email
     // clients strip the hash before following the link). Check both.
+    if (!isRecovery) return;
+
     var hash   = window.location.hash || "";
     var search = window.location.search || "";
 
@@ -45,49 +63,43 @@ function RedirectToBooking() {
     // Parse token from query string: ?access_token=xxx&type=recovery
     var searchParams = new URLSearchParams(search.replace(/^\?/, ""));
 
-    var isRecovery = (
-      (hashParams.get("type") === "recovery" && hashParams.get("access_token")) ||
-      (searchParams.get("type") === "recovery" && searchParams.get("access_token"))
-    );
+    // Primary signal: localStorage marker set by ForgotPinPage/ForgotPasswordPage
+    // in the same browser session before sending the email.
+    var pinSlug = window.localStorage.getItem("trimora_pin_reset_slug");
+    var pwSlug  = window.localStorage.getItem("trimora_password_reset_slug");
 
-    if (isRecovery) {
-      // Primary signal: localStorage marker set by ForgotPinPage/ForgotPasswordPage
-      // in the same browser session before sending the email.
-      var pinSlug = window.localStorage.getItem("trimora_pin_reset_slug");
-      var pwSlug  = window.localStorage.getItem("trimora_password_reset_slug");
+    // Secondary signal: the redirectTo path Supabase received.
+    // Supabase sometimes preserves it as the "redirect_to" param in the hash.
+    var redirectTo = hashParams.get("redirect_to") || searchParams.get("redirect_to") || "";
+    var isRedirectToPin = redirectTo.includes("/reset-pin");
 
-      // Secondary signal: the redirectTo path Supabase received.
-      // Supabase sometimes preserves it as the "redirect_to" param in the hash.
-      var redirectTo = hashParams.get("redirect_to") || searchParams.get("redirect_to") || "";
-      var isRedirectToPin = redirectTo.includes("/reset-pin");
+    function validSlug(s) { return !!(s && /^[a-z0-9][a-z0-9-]{2,}$/.test(s)); }
 
-      function validSlug(s) { return !!(s && /^[a-z0-9][a-z0-9-]{2,}$/.test(s)); }
-
-      if (pinSlug || isRedirectToPin) {
-        // PIN reset flow
-        var slug = validSlug(pinSlug) ? pinSlug : "";
-        // Try to extract slug from redirectTo path e.g. /reset-pin/urban-streets-beauty
-        if (!slug && isRedirectToPin) {
-          var match = redirectTo.match(/\/reset-pin\/([a-z0-9][a-z0-9-]{2,})/);
-          if (match) slug = match[1];
-        }
-        var pinPath = slug ? "/reset-pin/" + slug : "/reset-pin";
-        window.location.href = pinPath + hash;
-      } else {
-        // Password reset flow
-        var validPwSlug = validSlug(pwSlug) ? pwSlug : "";
-        // Try to extract slug from redirectTo path e.g. /reset-password/urban-streets-beauty
-        if (!validPwSlug && redirectTo.includes("/reset-password")) {
-          var pwMatch = redirectTo.match(/\/reset-password\/([a-z0-9][a-z0-9-]{2,})/);
-          if (pwMatch) validPwSlug = pwMatch[1];
-        }
-        var pwPath = validPwSlug ? "/reset-password/" + validPwSlug : "/reset-password";
-        window.location.href = pwPath + hash;
+    if (pinSlug || isRedirectToPin) {
+      // PIN reset flow
+      var slug = validSlug(pinSlug) ? pinSlug : "";
+      // Try to extract slug from redirectTo path e.g. /reset-pin/urban-streets-beauty
+      if (!slug && isRedirectToPin) {
+        var match = redirectTo.match(/\/reset-pin\/([a-z0-9][a-z0-9-]{2,})/);
+        if (match) slug = match[1];
       }
-      return;
+      var pinPath = slug ? "/reset-pin/" + slug : "/reset-pin";
+      window.location.href = pinPath + hash;
+    } else {
+      // Password reset flow
+      var validPwSlug = validSlug(pwSlug) ? pwSlug : "";
+      // Try to extract slug from redirectTo path e.g. /reset-password/urban-streets-beauty
+      if (!validPwSlug && redirectTo.includes("/reset-password")) {
+        var pwMatch = redirectTo.match(/\/reset-password\/([a-z0-9][a-z0-9-]{2,})/);
+        if (pwMatch) validPwSlug = pwMatch[1];
+      }
+      var pwPath = validPwSlug ? "/reset-password/" + validPwSlug : "/reset-password";
+      window.location.href = pwPath + hash;
     }
-    // Not a recovery token — nothing to do, route renders correctly.
-  }, []);
+  }, [isRecovery]);
+
+  if (!isRecovery) return <TrimoraLandingPage />;
+
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#0A0A0A 0%,#1A1400 100%)", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
       <SalonBrandmark salon={null} size="md" />
@@ -187,7 +199,7 @@ export default function App() {
     <BrowserRouter>
       <Suspense fallback={<RouteFallback />}>
       <Routes>
-        <Route path="/"            element={<TrimoraLandingPage />} />
+        <Route path="/"            element={<RedirectToBooking />} />
         <Route path="/booking"     element={<TrimoraLandingPage />} />
         <Route path="/pos"         element={<TrimoraLandingPage />} />
         <Route path="/rate/:token" element={<RatingPage />} />
