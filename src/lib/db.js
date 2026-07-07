@@ -1,6 +1,6 @@
 // src/lib/db.js
 
-import { SUPABASE_URL, SUPABASE_KEY, KIMMS_SALON_ID } from "./constants";
+import { SUPABASE_URL, SUPABASE_KEY } from "./constants";
 import { getValidAccessToken } from "./deviceAuth";
 import { getCurrentSalonId } from "./currentSalon";
 
@@ -41,26 +41,30 @@ if (typeof window !== "undefined") {
 }
 
 async function dbDirect(method, table, data = null, filters = "") {
-  // Resolved by SalonGate for slug-prefixed routes; falls back to
-  // Kimms' fixed ID ONLY on the legacy unprefixed routes (/pos, /booking),
-  // where no SalonGate exists and no slug is ever resolved — this is the
-  // one deliberate exception, confirmed safe because SalonGate fully
-  // blocks rendering of its children until currentSalonId is set, so a
-  // slugged route can never reach this fallback for tenant-scoped tables.
-  //
-  // If this fallback is ever hit for a tenant-scoped table while a slug
-  // IS present in the URL, that indicates a real bug upstream (SalonGate
-  // rendered children before resolving) — log loudly rather than silently
-  // serving Kimms' data to the wrong salon.
+  // Previously fell back to Kimms' fixed salon ID whenever no tenant was
+  // resolved, on the theory that only the (now-confirmed-dead)
+  // unprefixed /pos and /booking routes ever hit this. That was wrong in
+  // one live case: POSApp.jsx's feedback rating link falls back to an
+  // unprefixed /rate/:token URL if `salon.slug` is ever falsy, and that
+  // route has no SalonGate -- so a customer of any OTHER salon hitting
+  // that edge case would have had their feedback silently written with
+  // salon_id = Kimms' ID. Removed entirely: no salon should ever be
+  // guessed. This returns null (matching this function's existing
+  // never-throws contract -- see db()'s offline-queue handling below,
+  // which every other write failure already funnels through) rather
+  // than throwing, so a genuine future SalonGate timing bug degrades
+  // the same way any other write failure does, instead of crashing the
+  // live POS screen for a real member of staff mid-transaction.
   const resolvedId = getCurrentSalonId();
-  if (!resolvedId && TENANT_TABLES.has(table) && window.location.pathname.split("/").length > 2) {
+  if (!resolvedId && TENANT_TABLES.has(table)) {
     console.error(
-      "[db.js] SECURITY: tenant-scoped query for '" + table + "' had no resolved salon id " +
-      "on a slugged route (" + window.location.pathname + "). Falling back to KIMMS_SALON_ID " +
-      "to avoid a hard crash, but this should never happen — investigate SalonGate timing."
+      "[db.js] SECURITY: no resolved salon id for tenant-scoped table '" + table + "' " +
+      "on route '" + window.location.pathname + "'. Refusing to guess which salon this " +
+      "belongs to -- returning null rather than substituting another salon's data."
     );
+    return null;
   }
-  const activeSalonId = resolvedId || KIMMS_SALON_ID;
+  const activeSalonId = resolvedId;
 
   let body = data;
   if (data && (method === "POST" || method === "PATCH") && TENANT_TABLES.has(table)) {

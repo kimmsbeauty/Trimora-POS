@@ -508,8 +508,26 @@ export default function POSApp({ onLogout, userRole }) {
   // API instead — nothing else in the app needs to change.
   function sendFeedbackRequest(phone, clientFirstName, token) {
     if (!phone) return;
+    // Previously fell back to an unprefixed /rate/:token link whenever
+    // salon.slug was falsy. That link has no SalonGate, so a customer
+    // submitting feedback through it would hit db.js with no resolved
+    // tenant -- db.js now refuses that (returns null, logs loudly)
+    // rather than guessing, so a link built this way would only ever
+    // show the customer a generic "something went wrong" on submit.
+    // Better to refuse to send it at all and surface the real problem
+    // (missing slug on an already-loaded salon, which should never
+    // happen in practice -- every live salon has one) than to hand a
+    // customer a link that's silently guaranteed to fail.
+    if (!salon || !salon.slug) {
+      console.error(
+        "[POSApp] Refusing to send a feedback rating link: salon or salon.slug is " +
+        "missing. This should never happen for a loaded salon -- investigate before " +
+        "retrying, rather than sending an unprefixed link that will fail on submit."
+      );
+      return;
+    }
     var cleanPhone = phone.replace(/^0/, "254").replace(/\D/g, "");
-    var ratingPath = (salon && salon.slug) ? "/" + salon.slug + "/rate/" + token : "/rate/" + token;
+    var ratingPath = "/" + salon.slug + "/rate/" + token;
     var ratingUrl = window.location.origin + ratingPath;
     var message = "Hi " + clientFirstName + "! 👋 Thank you for visiting " + salonName + " 💛\n\n" +
       "We'd love to hear how your visit went — it only takes a few seconds:\n" + ratingUrl + "\n\n" +
