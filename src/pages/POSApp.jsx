@@ -149,6 +149,12 @@ export default function POSApp({ onLogout, userRole }) {
   var customersState = useState([]); var customers = customersState[0]; var setCustomers = customersState[1];
   var staffListState = useState([]); var staffList = staffListState[0]; var setStaffList = staffListState[1];
   var servicesListState = useState([]); var servicesList = servicesListState[0]; var setServicesList = servicesListState[1];
+  // Defaults to the same 5 names constants.js's CATS always had -- so
+  // if the fetch below is ever empty/slow/fails, behavior is identical
+  // to before this table existed. Real per-salon list (currently
+  // seeded with these same 5 for every existing salon) takes over once
+  // it loads.
+  var categoriesState = useState(CATS.filter(function(c) { return c !== "All"; })); var categories = categoriesState[0]; var setCategories = categoriesState[1];
   var loadingState = useState(true); var loading = loadingState[0]; var setLoading = loadingState[1];
 
   var showAddStaffState = useState(false); var showAddStaff = showAddStaffState[0]; var setShowAddStaff = showAddStaffState[1];
@@ -213,6 +219,7 @@ export default function POSApp({ onLogout, userRole }) {
           db("GET", "marketing_campaigns", null, "?type=eq.winback&is_active=eq.true&limit=1"),
           db("GET", "marketing_campaigns", null, "?order=created_at.desc"),
           db("GET", "salon_marketing_config", null, "?limit=1"),
+          db("GET", "salon_service_categories", null, "?active=eq.true&order=sort_order.asc"),
         ]);
         if (results[0]) setSales(results[0]);
         if (results[1] && results[1].length > 0) setProducts(results[1]);
@@ -227,6 +234,9 @@ export default function POSApp({ onLogout, userRole }) {
         if (Array.isArray(results[10]) && results[10][0]) setWinbackCampaign(results[10][0]);
         if (Array.isArray(results[11])) setAllCampaigns(results[11]);
         if (Array.isArray(results[12]) && results[12][0]) setMarketingConfig(results[12][0]);
+        if (Array.isArray(results[13]) && results[13].length > 0) {
+          setCategories(results[13].map(function(c) { return c.name; }));
+        }
       } catch (e) {
         console.error("Load error:", e);
         setLoadError(true);
@@ -1180,7 +1190,7 @@ export default function POSApp({ onLogout, userRole }) {
 
             {/* Category filter */}
             <div style={{ display: "flex", gap: 6, marginBottom: 12, overflowX: "auto", paddingBottom: 4 }}>
-              {(typeFilter === "services" ? CATS : ["All", "Hair", "Nails", "Beauty"]).map(function(c) {
+              {(typeFilter === "services" ? ["All"].concat(categories) : ["All", "Hair", "Nails", "Beauty"]).map(function(c) {
                 return <button key={c} onClick={function() { setCatFilter(c); }} style={{ padding: "5px 12px", borderRadius: 20, border: "1.5px solid " + (catFilter === c ? GOLD : GOLD_DIM + "66"), background: catFilter === c ? "linear-gradient(135deg," + GOLD + "," + GOLD_LT + ")" : WHITE, color: catFilter === c ? BLACK : GOLD_DIM, fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>{c}</button>;
               })}
             </div>
@@ -1665,7 +1675,7 @@ export default function POSApp({ onLogout, userRole }) {
                 </div>
               </div>
             )}
-            {CATS.filter(function(c) { return c !== "All"; }).map(function(cat) {
+            {categories.map(function(cat) {
               var catServices = servicesList.filter(function(s) { return s.cat === cat; });
               if (catServices.length === 0) return null;
               return (

@@ -64,15 +64,21 @@ export default function BookingPage() {
   const [paymentStatus, setPaymentStatus] = useState(null);
   const [bookingServices, setBookingServices] = useState([]);
   const [bookingStaff, setBookingStaff]       = useState([]);
+  // Same default-then-upgrade pattern as POSApp.jsx: starts as the
+  // fixed CATS list so behavior is identical if the fetch is
+  // empty/slow/fails, then takes the real per-salon list once loaded.
+  const [categories, setCategories] = useState(CATS.filter(c => c !== "All"));
 
   useEffect(() => {
     async function loadBookingData() {
-      const [sv, st] = await Promise.all([
+      const [sv, st, cats] = await Promise.all([
         db("GET", "services", null, "?active=eq.true&order=cat.asc,name.asc"),
         db("GET", "public_staff_directory", null, "?active=eq.true&order=created_at.asc"),
+        db("GET", "salon_service_categories", null, "?active=eq.true&order=sort_order.asc"),
       ]);
       if (Array.isArray(sv)) setBookingServices(sv);
       if (Array.isArray(st)) setBookingStaff(st);
+      if (Array.isArray(cats) && cats.length > 0) setCategories(cats.map(c => c.name));
     }
     loadBookingData();
   }, []);
@@ -223,7 +229,7 @@ export default function BookingPage() {
                   <span style={{ fontSize: 18 }}>💬</span> Chat on WhatsApp
                 </a>
               </div>
-            ) : CATS.filter(c => c !== "All").map(cat => (
+            ) : categories.map(cat => (
               <div key={cat} style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, fontWeight: 800, color: primaryLt, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>{cat}</div>
                 {bookingServices.filter(s => s.cat === cat).map(s => (
