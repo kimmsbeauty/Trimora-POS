@@ -22,6 +22,7 @@ var ResetPinPage       = lazy(function() { return import("./pages/ResetPinPage")
 var ForgotPinPage      = lazy(function() { return import("./pages/ForgotPinPage"); });
 var TermsPage          = lazy(function() { return import("./pages/TermsPage"); });
 var SuperAdminGate     = lazy(function() { return import("./pages/SuperAdminGate"); });
+var SalesRepGate       = lazy(function() { return import("./pages/SalesRepGate"); });
 var OnboardingPage     = lazy(function() { return import("./pages/OnboardingPage"); });
 
 function RouteFallback() {
@@ -206,6 +207,7 @@ export default function App() {
         <Route path="/onboard"                element={<OnboardingPage />} />
         <Route path="/terms"                  element={<TermsPage />} />
         <Route path="/superadmin"             element={<SuperAdminGate />} />
+        <Route path="/sales"                  element={<SalesRepGate />} />
         <Route path="/reset-password"           element={<ResetPasswordPage />} />
         <Route path="/reset-password/:slug"     element={<ResetPasswordPage />} />
         <Route path="/reset-pin"              element={<ResetPinPage />} />
