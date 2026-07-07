@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_KEY, KIMMS_SALON_ID } from "./constants";
 import { getValidAccessToken } from "./deviceAuth";
 import { getCurrentSalonId } from "./currentSalon";
 
-const TENANT_TABLES = new Set([
+export const TENANT_TABLES = new Set([
   "bookings", "customers", "expenses", "feedback",
   "sales", "services", "staff", "stock", "salon_pins",
   "public_staff_directory", "salon_settings",
