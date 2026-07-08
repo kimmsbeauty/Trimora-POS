@@ -48,6 +48,12 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
   "salon_mpesa_config",
   "marketing_messages",
   "pin_login_attempts",
+  "salon_service_categories", // added 2026-07-08: was queried via db() in
+                              // POSApp.jsx/BookingPage.jsx since migration 018
+                              // but never registered here -- anon SELECT RLS
+                              // on this table is permissive (qual: true), so
+                              // this was an unfiltered cross-tenant read on
+                              // the public booking page until this fix.
 ];
 
 // Tables confirmed live (2026-07-07) to have a salon_id column, but

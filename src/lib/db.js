@@ -9,7 +9,7 @@ export const TENANT_TABLES = new Set([
   "sales", "services", "staff", "stock", "salon_pins",
   "public_staff_directory", "salon_settings",
   "marketing_campaigns", "salon_marketing_config", "salon_mpesa_config",
-  "marketing_messages", "pin_login_attempts",
+  "marketing_messages", "pin_login_attempts", "salon_service_categories",
 ]);
 
 const QUEUE_STORAGE_KEY = "trimora_offline_queue";
