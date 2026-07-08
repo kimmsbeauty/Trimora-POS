@@ -54,6 +54,10 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
                               // on this table is permissive (qual: true), so
                               // this was an unfiltered cross-tenant read on
                               // the public booking page until this fix.
+  "salon_enabled_modules", // added 2026-07-08 alongside migration
+                           // 019_auto_module_foundation.sql -- registered
+                           // in the same commit as table creation this
+                           // time, not after.
 ];
 
 // Tables confirmed live (2026-07-07) to have a salon_id column, but
