@@ -23,6 +23,7 @@ import {
   distinctStylistsInCart,
   rateForStylistName as rateForStylistNameLib,
 } from "../lib/cartMath.js";
+import { buildSaleData, computeStockAfterDeduction } from "../lib/saleLogic.js";
 import ShareBookingPanel from "../components/ShareBookingPanel.jsx";
 import TomorrowReminders from "../components/TomorrowReminders.jsx";
 import BirthdayReminders from "../components/BirthdayReminders.jsx";
@@ -557,34 +558,15 @@ export default function POSApp({ onLogout, userRole }) {
     if (cart.length === 0) return alert("Cart is empty");
     if (unassignedServiceItems().length > 0) return alert("Please assign a stylist to every service in the cart");
     try {
-      // Primary stylist = whoever has the highest revenue share on this sale.
-      // Kept for backward compatibility with older reports/CSV exports that
-      // expect a single `stylist` field; the real per-item truth lives in `items`.
-      var primaryStylist = stylistsInCart.length > 0
-        ? stylistsInCart.reduce(function(best, name) {
-            var nameTotal = serviceItems.filter(function(i){ return (i.stylist||selStaff)===name; }).reduce(function(a,i){ return a+i.price*(i.qty||1); }, 0);
-            var bestTotal = serviceItems.filter(function(i){ return (i.stylist||selStaff)===best; }).reduce(function(a,i){ return a+i.price*(i.qty||1); }, 0);
-            return nameTotal > bestTotal ? name : best;
-          }, stylistsInCart[0])
-        : selStaff;
-
       var feedbackToken = generateFeedbackToken();
-      var saleData = {
-        client: clientName, client_phone: clientPhone, stylist: primaryStylist, items: cart,
-        total: cartTotal,
-        service_total: serviceTotal,
-        product_total: productTotal,
-        discount_amount: discountAmt,
-        discount_type: discountAmt > 0 ? discountType : null,
-        discount_value: discountAmt > 0 ? discountNum : null,
-        discount_reason: discountAmt > 0 ? discountReason : null,
-        commission: commission,
-        commission_by_stylist: commissionByStylist,
-        is_multi_stylist: stylistsInCart.length > 1,
-        payment: payMethod,
-        date: todayStr(), time: nowTime(),
-        feedback_token: feedbackToken,
-      };
+      var saleData = buildSaleData({
+        clientName: clientName, clientPhone: clientPhone,
+        stylistsInCart: stylistsInCart, serviceItems: serviceItems, selStaff: selStaff,
+        cart: cart, cartTotal: cartTotal, serviceTotal: serviceTotal, productTotal: productTotal,
+        discountAmt: discountAmt, discountType: discountType, discountNum: discountNum, discountReason: discountReason,
+        commission: commission, commissionByStylist: commissionByStylist,
+        payMethod: payMethod, date: todayStr(), time: nowTime(), feedbackToken: feedbackToken,
+      });
       var saved = await db("POST", "sales", saleData);
       var newSale = (saved && saved[0]) || Object.assign({}, saleData, { id: "S" + Date.now() });
       setSales(function(p) { return [newSale].concat(p); });
@@ -593,7 +575,7 @@ export default function POSApp({ onLogout, userRole }) {
         var cartItem2 = productCartItems[ci];
         var prod = products.find(function(p) { return p.id === cartItem2.id; });
         if (prod) {
-          var ns = Math.max(0, prod.stock - cartItem2.qty);
+          var ns = computeStockAfterDeduction(prod.stock, cartItem2.qty);
           await db("PATCH", "stock", { stock: ns }, "?id=eq." + cartItem2.id);
           setProducts(function(p) { return p.map(function(pr) { return pr.id === cartItem2.id ? Object.assign({}, pr, { stock: ns }) : pr; }); });
         }
