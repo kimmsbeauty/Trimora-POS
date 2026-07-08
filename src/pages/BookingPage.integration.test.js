@@ -168,4 +168,38 @@ describe("BookingPage — full booking + payment-claim flow (mocked db)", () => 
     });
     expect(db).not.toHaveBeenCalledWith("POST", "customers", expect.any(Object));
   });
+
+  test("refuses the customer lookup/create (rather than guessing a salon) if salon.id is somehow missing", async () => {
+    // Defensive case only -- SalonGate is expected to guarantee this never
+    // happens in real routing (see the comment above confirm() in
+    // BookingPage.jsx), but this proves the refusal actually fires instead
+    // of silently falling back to another salon's id.
+    useSalon.mockReturnValue({ slug: "test-salon", name: "Test Salon", enabled_payment_methods: ["Cash"] }); // no id
+    jest.spyOn(console, "error").mockImplementation(() => {});
+
+    render(<BookingPage />);
+    await waitFor(() => expect(screen.getByText("Haircut")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Haircut"));
+    await waitFor(() => expect(screen.getByText("Jane")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Jane"));
+    await waitFor(() => expect(screen.getByText("10:00")).toBeInTheDocument());
+    fireEvent.change(screen.getByDisplayValue(""), { target: { value: "2026-08-01" } });
+    fireEvent.click(screen.getByText("10:00"));
+    fireEvent.click(screen.getByText("Continue →"));
+    await waitFor(() => expect(screen.getByPlaceholderText("Your name")).toBeInTheDocument());
+    fireEvent.change(screen.getByPlaceholderText("Your name"), { target: { value: "Someone" } });
+    fireEvent.change(screen.getByPlaceholderText(/Phone number/), { target: { value: "0799999999" } });
+    fireEvent.click(screen.getByText("Confirm Booking 👑"));
+
+    // The booking itself still gets created (booking write doesn't depend
+    // on salon.id -- db.js's own tenant resolution handles that layer).
+    await waitFor(() => expect(db).toHaveBeenCalledWith("POST", "bookings", expect.any(Object)));
+
+    // But the customer lookup/create is skipped entirely, not guessed.
+    expect(dbRpc).not.toHaveBeenCalled();
+    expect(db).not.toHaveBeenCalledWith("POST", "customers", expect.any(Object));
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining("Refusing customer lookup"));
+
+    console.error.mockRestore();
+  });
 });

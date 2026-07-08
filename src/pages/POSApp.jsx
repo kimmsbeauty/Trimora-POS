@@ -1648,7 +1648,7 @@ export default function POSApp({ onLogout, userRole }) {
                 <div style={{ fontWeight: 800, fontSize: 14, color: DARK, marginBottom: 12 }}>New Service</div>
                 <input placeholder="Service name" value={newService.name} onChange={function(e) { setNewService(function(p) { return Object.assign({}, p, { name: e.target.value }); }); }} style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
                 <select value={newService.cat} onChange={function(e) { setNewService(function(p) { return Object.assign({}, p, { cat: e.target.value }); }); }} style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 8 }}>
-                  <option>Hair</option><option>Nails</option><option>Beauty</option><option>Spa</option><option>Barber</option>
+                  {categories.map(function(c) { return <option key={c}>{c}</option>; })}
                 </select>
                 <input placeholder="Price (KES)" type="number" value={newService.price} onChange={function(e) { setNewService(function(p) { return Object.assign({}, p, { price: e.target.value }); }); }} style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 12 }} />
                 <div style={{ display: "flex", gap: 8 }}>
@@ -1671,7 +1671,7 @@ export default function POSApp({ onLogout, userRole }) {
                             <input value={editingService.name} onChange={function(e) { setEditingService(function(p) { return Object.assign({}, p, { name: e.target.value }); }); }} style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD, padding: "9px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
                             <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                               <select value={editingService.cat} onChange={function(e) { setEditingService(function(p) { return Object.assign({}, p, { cat: e.target.value }); }); }} style={{ flex: 1, borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "9px 12px", fontSize: 13, fontFamily: "inherit", outline: "none" }}>
-                                <option>Hair</option><option>Nails</option><option>Beauty</option><option>Spa</option><option>Barber</option>
+                                {categories.map(function(c) { return <option key={c}>{c}</option>; })}
                               </select>
                               <input type="number" value={editingService.price} onChange={function(e) { setEditingService(function(p) { return Object.assign({}, p, { price: parseInt(e.target.value) || 0 }); }); }} style={{ flex: 1, borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "9px 12px", fontSize: 13, fontFamily: "inherit", outline: "none" }} />
                             </div>

@@ -11,13 +11,15 @@ import { lighten, darken } from "../lib/colorUtils";
 import {
   CATS,
   BLACK, GOLD, DARK, WHITE, GREEN, MPESA_GREEN,
-  KIMMS_SALON_ID,
 } from "../lib/constants";
 
 export default function BookingPage() {
-  // This also renders on the legacy unprefixed /booking route, which has
-  // no SalonGate at all — same fallback pattern as LoginPage.jsx. The
-  // slug-prefixed route already gets branding for free via mode="public".
+  // Only ever rendered at /:slug/booking, inside SalonGate mode="public"
+  // (see App.jsx) -- the unprefixed /booking route renders
+  // TrimoraLandingPage instead, not this component. contextSalon is
+  // therefore always resolved by the time this renders in practice; the
+  // legacyBranding fallback below is a defensive no-op kept for safety,
+  // not something any current route actually exercises.
   const contextSalon = useSalon();
   const [legacyBranding, setLegacyBranding] = useState(null);
 
@@ -97,12 +99,23 @@ export default function BookingPage() {
     // the booking page is unauthenticated (no staff login), so there's no
     // session for RLS to scope by. The RPC does the same one-phone lookup
     // this flow always needed, without exposing the whole customers table
-    // to anyone holding the public anon key. Falls back to KIMMS_SALON_ID
-    // on the legacy unprefixed /booking route, same convention db.js uses.
-    const lookupSalonId = salon?.id || KIMMS_SALON_ID;
-    const existing = await dbRpc("public_customer_lookup", { p_salon_id: lookupSalonId, p_phone: sel.phone });
-    if (Array.isArray(existing) && existing.length === 0) {
-      await db("POST", "customers", { name: sel.name, phone: sel.phone, visit_count: 0, total_spend: 0, last_visit: sel.date });
+    // to anyone holding the public anon key.
+    //
+    // salon.id is expected to always be resolved here: BookingPage only
+    // ever renders inside SalonGate (see App.jsx's /:slug/booking route),
+    // which blocks rendering its children until a salon is resolved. If
+    // that guarantee is ever broken, skip the lookup/create rather than
+    // guessing a salon id -- same principle as db.js's tenant resolution.
+    if (!salon?.id) {
+      console.error(
+        "[BookingPage] Refusing customer lookup/create: no resolved salon id. This should " +
+        "never happen -- investigate SalonGate before assuming this is safe to ignore."
+      );
+    } else {
+      const existing = await dbRpc("public_customer_lookup", { p_salon_id: salon.id, p_phone: sel.phone });
+      if (Array.isArray(existing) && existing.length === 0) {
+        await db("POST", "customers", { name: sel.name, phone: sel.phone, visit_count: 0, total_spend: 0, last_visit: sel.date });
+      }
     }
     setSaving(false);
     setSavedBooking({ id: result?.[0]?.id, name: sel.name, phone: sel.phone, service: sel.service?.name, price: sel.service?.price, stylist: sel.stylist || "Any available", date: sel.date, time: sel.time });
