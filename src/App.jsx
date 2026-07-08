@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, useParams } from "react-router-dom";
 import { useState, useEffect, lazy, Suspense } from "react";
 import BookingPage from "./pages/BookingPage";
 import POSApp from "./pages/POSApp";
+import AutoApp from "./pages/AutoApp";
 import SalonBrandmark from "./components/SalonBrandmark";
 import LoginPage from "./pages/LoginPage";
 import RatingPage from "./pages/RatingPage";
@@ -220,6 +221,7 @@ export default function App() {
         <Route path="/:slug/booking" element={<SalonGate mode="public"><BookingPage /></SalonGate>} />
         <Route path="/:slug/rate/:token" element={<SalonGate mode="public"><RatingPage /></SalonGate>} />
         <Route path="/:slug/pos" element={<DeviceGate><SalonGate mode="authenticated"><StaffRoute /></SalonGate></DeviceGate>} />
+        <Route path="/:slug/auto" element={<DeviceGate><SalonGate mode="authenticated"><AutoApp /></SalonGate></DeviceGate>} />
 
         <Route path="*"            element={<TrimoraLandingPage />} />
       </Routes>
