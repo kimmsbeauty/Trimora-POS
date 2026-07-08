@@ -63,6 +63,13 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
   "vehicle_photos", // ditto -- salon_id denormalized directly on the
                     // row rather than joined through auto_vehicles, same
                     // convention as every other tenant table
+  "auto_services", // added 2026-07-08 alongside migration
+                   // 021_auto_catalog_inventory.sql
+  "auto_service_required_stock", // ditto
+  "auto_stock_movements", // ditto -- append-only ledger (select/insert
+                          // policies only), but still salon_id-scoped
+                          // and queried through db(), so still belongs
+                          // in TENANT_TABLES
 ];
 
 // Tables confirmed live (2026-07-07) to have a salon_id column, but
