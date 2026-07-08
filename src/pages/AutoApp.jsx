@@ -11,9 +11,10 @@
 import { useState, useEffect } from "react";
 import LoginPage from "./LoginPage";
 import CheckInPage from "./auto/CheckInPage";
+import BoardPage from "./auto/BoardPage";
 import { useSalon } from "../lib/SalonContext";
 import { db } from "../lib/db";
-import { INK, STEEL, CHROME, PAPER } from "./auto/theme";
+import { INK, STEEL, CHROME, PAPER, SIGNAL } from "./auto/theme";
 
 function ModuleGate({ children }) {
   var salon = useSalon();
@@ -59,11 +60,30 @@ function ModuleGate({ children }) {
 function AutoStaffRoute() {
   var loggedInState = useState(false);
   var loggedIn = loggedInState[0]; var setLoggedIn = loggedInState[1];
+  var tabState = useState("checkin");
+  var tab = tabState[0]; var setTab = tabState[1];
 
   if (!loggedIn) {
     return <LoginPage onLogin={function () { setLoggedIn(true); }} />;
   }
-  return <CheckInPage />;
+
+  var tabStyle = function (key) {
+    var active = tab === key;
+    return {
+      flex: 1, textAlign: "center", padding: "12px 0", fontSize: 13, fontWeight: 800,
+      cursor: "pointer", color: active ? INK : CHROME, background: active ? SIGNAL : "transparent",
+    };
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", background: STEEL, borderBottom: "1px solid rgba(143,166,184,0.15)" }}>
+        <div style={tabStyle("checkin")} onClick={function () { setTab("checkin"); }}>Check-In</div>
+        <div style={tabStyle("board")} onClick={function () { setTab("board"); }}>Queue &amp; Bays</div>
+      </div>
+      {tab === "checkin" ? <CheckInPage /> : <BoardPage />}
+    </div>
+  );
 }
 
 export default function AutoApp() {
