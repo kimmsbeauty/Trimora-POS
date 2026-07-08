@@ -70,6 +70,13 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
                           // policies only), but still salon_id-scoped
                           // and queried through db(), so still belongs
                           // in TENANT_TABLES
+  "auto_bays", // added 2026-07-08 alongside migration
+              // 022_auto_job_queue_bay.sql
+  "auto_jobs", // ditto
+  "auto_job_services", // ditto -- price snapshotted at add-time, not a
+                       // live FK-only reference to auto_services.price
+  "auto_job_events", // ditto -- append-only (select/insert only), the
+                     // data-logging hook for future AI/TIP work
 ];
 
 // Tables confirmed live (2026-07-07) to have a salon_id column, but
