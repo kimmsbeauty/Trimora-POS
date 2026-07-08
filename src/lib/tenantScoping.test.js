@@ -58,6 +58,11 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
                            // 019_auto_module_foundation.sql -- registered
                            // in the same commit as table creation this
                            // time, not after.
+  "auto_vehicles", // added 2026-07-08 alongside migration
+                   // 020_auto_vehicle_management.sql
+  "vehicle_photos", // ditto -- salon_id denormalized directly on the
+                    // row rather than joined through auto_vehicles, same
+                    // convention as every other tenant table
 ];
 
 // Tables confirmed live (2026-07-07) to have a salon_id column, but
