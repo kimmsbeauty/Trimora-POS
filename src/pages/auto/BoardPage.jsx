@@ -21,6 +21,7 @@ import { useState, useEffect, useCallback } from "react";
 import { db } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
 import AutoMpesaPaymentModal from "../../components/AutoMpesaPaymentModal";
+import { computeStockAfterDeduction } from "../../lib/saleLogic";
 import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "./theme";
 
 var ACTIVE_STATUSES = "waiting,in_bay,ready_for_collection";
@@ -121,6 +122,56 @@ export default function BoardPage() {
     load();
   }
 
+  // Stock deduction on job completion -- reads which services were on
+  // this job (auto_job_services), what each requires
+  // (auto_service_required_stock, configured in the Services tab), and
+  // deducts from the shared `stock` table + logs an auto_stock_movements
+  // row per item. Best-effort: mirrors POS's own completeSale() pattern
+  // of deducting stock *after* the primary record is already saved, and
+  // not rolling anything back if a deduction step fails partway --
+  // logged, not surfaced as a job-completion failure. Multiple line
+  // items requiring the same stock item correctly sum their deductions
+  // (computeStockAfterDeduction is applied cumulatively, not per-line
+  // against a stale starting figure).
+  async function deductStockForJob(job) {
+    try {
+      var jobServices = await db("GET", "auto_job_services", null, "?job_id=eq." + job.id + "&select=auto_service_id");
+      var serviceIds = (jobServices || []).map(function (js) { return js.auto_service_id; });
+      if (serviceIds.length === 0) return;
+
+      var requiredRows = await db("GET", "auto_service_required_stock", null,
+        "?auto_service_id=in.(" + serviceIds.join(",") + ")");
+      if (!requiredRows || requiredRows.length === 0) return;
+
+      // Sum required quantity per stock_id across all services on this
+      // job (a job can have multiple line items needing the same item).
+      var neededByStockId = {};
+      requiredRows.forEach(function (r) {
+        neededByStockId[r.stock_id] = (neededByStockId[r.stock_id] || 0) + Number(r.quantity);
+      });
+
+      var stockIds = Object.keys(neededByStockId);
+      var stockRows = await db("GET", "stock", null, "?id=in.(" + stockIds.join(",") + ")");
+      var stockById = {};
+      (stockRows || []).forEach(function (s) { stockById[s.id] = s; });
+
+      for (var i = 0; i < stockIds.length; i++) {
+        var stockId = stockIds[i];
+        var current = stockById[stockId];
+        if (!current) continue; // stock item deleted since being configured -- skip, don't throw
+        var qty = neededByStockId[stockId];
+        var newStock = computeStockAfterDeduction(current.stock, qty);
+        await db("PATCH", "stock", { stock: newStock }, "?id=eq." + stockId);
+        await db("POST", "auto_stock_movements", {
+          stock_id: stockId, change_qty: -qty, reason: "auto_job_completion",
+          reference_type: "auto_job", reference_id: job.id, created_by: job.assigned_staff_id || null,
+        });
+      }
+    } catch (err) {
+      console.error("Stock deduction failed for job " + job.id + ":", err);
+    }
+  }
+
   async function advanceJob(job, paymentMethod) {
     if (busy) return;
     var next = NEXT_STATUS[job.status];
@@ -145,6 +196,14 @@ export default function BoardPage() {
       }
     }
     await db("PATCH", "auto_jobs", patch, "?id=eq." + job.id);
+
+    if (next === "completed") {
+      // Fire-and-continue: deductStockForJob has its own try/catch and
+      // never throws, so a stock-config issue can't block the job from
+      // completing -- matches POS's own completeSale() precedent of not
+      // rolling back the primary record over a stock-side failure.
+      await deductStockForJob(job);
+    }
 
     if (next === "completed" && job.bay_id) {
       await db("PATCH", "auto_bays", { current_job_id: null }, "?id=eq." + job.bay_id);

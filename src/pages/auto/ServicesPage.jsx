@@ -19,9 +19,28 @@ export default function ServicesPage({ isAdmin }) {
   var newService = newServiceState[0]; var setNewService = newServiceState[1];
   var busyState = useState(false); var busy = busyState[0]; var setBusy = busyState[1];
 
+  // Stock-deduction config (Phase 6 follow-up): which stock items, and
+  // how much of each, a service consumes when a job completes. Lives on
+  // auto_service_required_stock, joined against the existing shared
+  // `stock` table (the same one POS's own Products/Stock tab manages --
+  // car-wash consumables like shampoo/wax/towels are just more rows in
+  // that table, not an Auto-specific copy, per the architecture plan).
+  var stockListState = useState([]); var stockList = stockListState[0]; var setStockList = stockListState[1];
+  var requiredStockState = useState([]); var requiredStock = requiredStockState[0]; var setRequiredStock = requiredStockState[1];
+  var managingStockForState = useState(null); // service.id currently expanded
+  var managingStockFor = managingStockForState[0]; var setManagingStockFor = managingStockForState[1];
+  var newReqStockState = useState({ stock_id: "", quantity: 1 });
+  var newReqStock = newReqStockState[0]; var setNewReqStock = newReqStockState[1];
+
   var load = useCallback(async function () {
-    var rows = await db("GET", "auto_services", null, "?order=active.desc,name.asc");
-    setServices(rows || []);
+    var results = await Promise.all([
+      db("GET", "auto_services", null, "?order=active.desc,name.asc"),
+      db("GET", "stock", null, "?order=name.asc"),
+      db("GET", "auto_service_required_stock", null, "?select=*,stock(name)"),
+    ]);
+    setServices(results[0] || []);
+    setStockList(results[1] || []);
+    setRequiredStock(results[2] || []);
     setLoading(false);
   }, []);
 
@@ -70,6 +89,37 @@ export default function ServicesPage({ isAdmin }) {
     if (busy) return;
     setBusy(true);
     await db("PATCH", "auto_services", { active: !service.active }, "?id=eq." + service.id);
+    setBusy(false);
+    load();
+  }
+
+  function requiredStockFor(serviceId) {
+    return requiredStock.filter(function (r) { return r.auto_service_id === serviceId; });
+  }
+
+  async function addRequiredStock(service) {
+    if (!newReqStock.stock_id || busy) return;
+    var qty = parseFloat(newReqStock.quantity) || 1;
+    var already = requiredStockFor(service.id).filter(function (r) { return r.stock_id === newReqStock.stock_id; })[0];
+    setBusy(true);
+    if (already) {
+      // unique(auto_service_id, stock_id) -- re-adding an already-mapped
+      // item updates its quantity instead of erroring.
+      await db("PATCH", "auto_service_required_stock", { quantity: qty }, "?id=eq." + already.id);
+    } else {
+      await db("POST", "auto_service_required_stock", {
+        auto_service_id: service.id, stock_id: newReqStock.stock_id, quantity: qty,
+      });
+    }
+    setNewReqStock({ stock_id: "", quantity: 1 });
+    setBusy(false);
+    load();
+  }
+
+  async function removeRequiredStock(row) {
+    if (busy) return;
+    setBusy(true);
+    await db("DELETE", "auto_service_required_stock", null, "?id=eq." + row.id);
     setBusy(false);
     load();
   }
@@ -180,9 +230,49 @@ export default function ServicesPage({ isAdmin }) {
                           style={{ cursor: "pointer", color: svc.active ? ALERT : SIGNAL, fontSize: 12, fontWeight: 700 }}>
                           {svc.active ? "Deactivate" : "Activate"}
                         </span>
+                        <span onClick={function () { setManagingStockFor(managingStockFor === svc.id ? null : svc.id); }}
+                          style={{ cursor: "pointer", color: CHROME, fontSize: 12, fontWeight: 700 }}>
+                          {managingStockFor === svc.id ? "Hide stock" : "Manage stock"}
+                        </span>
                       </div>
                     </div>
                   )}
+
+                  {managingStockFor === svc.id && (function () {
+                    var mappings = requiredStockFor(svc.id);
+                    return (
+                      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(143,166,184,0.15)" }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: CHROME, marginBottom: 8 }}>
+                          Stock used per job
+                        </div>
+                        {mappings.length === 0 && (
+                          <div style={{ fontSize: 12, color: CHROME, marginBottom: 10 }}>
+                            No stock configured -- completing this service won't deduct anything yet.
+                          </div>
+                        )}
+                        {mappings.map(function (r) {
+                          return (
+                            <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: PAPER, padding: "4px 0" }}>
+                              <span>{(r.stock && r.stock.name) || "Unknown item"} × {r.quantity}</span>
+                              <span onClick={function () { removeRequiredStock(r); }} style={{ cursor: "pointer", color: ALERT, fontWeight: 700 }}>Remove</span>
+                            </div>
+                          );
+                        })}
+                        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                          <select value={newReqStock.stock_id}
+                            onChange={function (e) { setNewReqStock(Object.assign({}, newReqStock, { stock_id: e.target.value })); }}
+                            style={Object.assign({}, inputStyle, { flex: 2 })}>
+                            <option value="">Select stock item…</option>
+                            {stockList.map(function (s) { return <option key={s.id} value={s.id}>{s.name} ({s.stock} in stock)</option>; })}
+                          </select>
+                          <input type="number" min="0.1" step="0.1" value={newReqStock.quantity}
+                            onChange={function (e) { setNewReqStock(Object.assign({}, newReqStock, { quantity: e.target.value })); }}
+                            style={Object.assign({}, inputStyle, { flex: 1 })} />
+                          <button onClick={function () { addRequiredStock(svc); }} disabled={busy || !newReqStock.stock_id} style={btnStyle}>Add</button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
