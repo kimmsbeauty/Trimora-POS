@@ -29,7 +29,10 @@ serve(async (req) => {
   }
 
   try {
-    const { salon_id, amount, phone, reference } = await req.json();
+    // job_id is optional -- present when this push was initiated from
+    // Trimora Auto's Board page (Section: Auto Phase 5). POS's checkout
+    // never sends it, so this is purely additive.
+    const { salon_id, amount, phone, reference, job_id } = await req.json();
 
     if (!salon_id || !amount || !phone) {
       return new Response(
@@ -189,6 +192,7 @@ serve(async (req) => {
         amount:    Math.ceil(amount),
         phone:     cleanPhone,
         reference: reference || null,
+        job_id:    job_id || null,
         status:    "pending",
       });
 
