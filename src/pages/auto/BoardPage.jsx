@@ -5,7 +5,7 @@
 // (Check-In, Queue, and Bay Management are one state machine, not three
 // separate data models). Tap a waiting job, then tap a free bay, to
 // start it. Tap an occupied bay to advance its job through the
-// wash -> detail -> ready -> completed sequence, or cancel it.
+// in_bay -> ready_for_collection -> completed sequence, or cancel it.
 //
 // Deliberately polling (10s interval + manual refresh button), not
 // Supabase Realtime -- the kickoff brief's hard constraint requires
@@ -18,11 +18,11 @@ import { useState, useEffect, useCallback } from "react";
 import { db } from "../../lib/db";
 import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "./theme";
 
-var ACTIVE_STATUSES = "waiting,washing,detailing,ready";
-var NEXT_STATUS = { washing: "detailing", detailing: "ready", ready: "completed" };
+var ACTIVE_STATUSES = "waiting,in_bay,ready_for_collection";
+var NEXT_STATUS = { in_bay: "ready_for_collection", ready_for_collection: "completed" };
 var STATUS_LABEL = {
-  waiting: "Waiting", washing: "Washing", detailing: "Detailing",
-  ready: "Ready for collection", completed: "Completed", cancelled: "Cancelled",
+  waiting: "Waiting", in_bay: "In bay",
+  ready_for_collection: "Ready for collection", completed: "Completed", cancelled: "Cancelled",
 };
 
 function vehicleLabel(job) {
@@ -72,9 +72,9 @@ export default function BoardPage() {
     if (!selectedJobId || busy) return;
     setBusy(true);
     await db("PATCH", "auto_jobs",
-      { status: "washing", bay_id: bayId, started_at: new Date().toISOString() },
+      { status: "in_bay", bay_id: bayId, in_bay_at: new Date().toISOString() },
       "?id=eq." + selectedJobId);
-    await db("PATCH", "auto_bays", { current_job_id: selectedJobId, status: "occupied" }, "?id=eq." + bayId);
+    await db("PATCH", "auto_bays", { current_job_id: selectedJobId }, "?id=eq." + bayId);
     await db("POST", "auto_job_events", {
       job_id: selectedJobId, event_type: "started", payload: { bay_id: bayId },
     });
@@ -90,11 +90,12 @@ export default function BoardPage() {
     setBusy(true);
 
     var patch = { status: next };
+    if (next === "ready_for_collection") patch.ready_at = new Date().toISOString();
     if (next === "completed") patch.completed_at = new Date().toISOString();
     await db("PATCH", "auto_jobs", patch, "?id=eq." + job.id);
 
     if (next === "completed" && job.bay_id) {
-      await db("PATCH", "auto_bays", { current_job_id: null, status: "free" }, "?id=eq." + job.bay_id);
+      await db("PATCH", "auto_bays", { current_job_id: null }, "?id=eq." + job.bay_id);
     }
 
     await db("POST", "auto_job_events", {
@@ -111,7 +112,7 @@ export default function BoardPage() {
     setBusy(true);
     await db("PATCH", "auto_jobs", { status: "cancelled" }, "?id=eq." + job.id);
     if (job.bay_id) {
-      await db("PATCH", "auto_bays", { current_job_id: null, status: "free" }, "?id=eq." + job.bay_id);
+      await db("PATCH", "auto_bays", { current_job_id: null }, "?id=eq." + job.bay_id);
     }
     await db("POST", "auto_job_events", { job_id: job.id, event_type: "cancelled" });
     setBusy(false);
@@ -148,7 +149,7 @@ export default function BoardPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
             {bays.map(function (bay) {
               var occupiedJob = bay.current_job_id ? jobsById[bay.current_job_id] : null;
-              var isFree = bay.status === "free";
+              var isFree = bay.active && !bay.current_job_id;
               var clickable = isFree && !!selectedJobId;
               return (
                 <div key={bay.id}

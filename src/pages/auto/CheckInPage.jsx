@@ -45,8 +45,6 @@ export default function CheckInPage() {
   var selectedState = useState({}); // { [service.id]: true }
   var selected = selectedState[0]; var setSelected = selectedState[1];
 
-  var notesState = useState(""); var notes = notesState[0]; var setNotes = notesState[1];
-
   var submittingState = useState(false);
   var submitting = submittingState[0]; var setSubmitting = submittingState[1];
 
@@ -62,7 +60,7 @@ export default function CheckInPage() {
   function resetForm() {
     setRegInput(""); setSearchStatus("idle"); setVehicle(null);
     setCustName(""); setCustPhone(""); setVMake(""); setVModel(""); setVColor("");
-    setSelected({}); setNotes(""); setResult(null);
+    setSelected({}); setResult(null);
   }
 
   async function handleSearch() {
@@ -129,7 +127,6 @@ export default function CheckInPage() {
       customer_id: customerId,
       vehicle_id: vehicleId,
       status: "waiting",
-      notes: notes.trim() || null,
       total_price: total,
     });
     if (!savedJob || !savedJob[0]) { setSubmitting(false); setResult("error"); return; }
@@ -298,9 +295,6 @@ export default function CheckInPage() {
                 );
               })}
             </div>
-            <textarea value={notes} onChange={function (e) { setNotes(e.target.value); }}
-              placeholder="Notes (optional)"
-              style={Object.assign({}, inputStyle, { marginTop: 14, minHeight: 60, resize: "vertical" })} />
           </div>
         )}
 
