@@ -2,6 +2,21 @@
 --
 -- Trimora Auto — Phase 3 (Job/Ticket/Queue/Bay state machine).
 --
+-- CORRECTED 2026-07-09 to match what is actually live in production.
+-- The originally committed version of this file diverged from what was
+-- applied via Supabase MCP on 2026-07-08 (auto_bays.status vs .active,
+-- auto_jobs.notes/started_at vs no-notes/in_bay_at+ready_at+cancel_reason,
+-- no CHECK constraints vs status/priority/payment_status CHECKs, missing
+-- created_by on auto_job_events). That drift broke CheckInPage.jsx and
+-- BoardPage.jsx, which were written against this file rather than the
+-- live schema -- see commit 4d032f30, which fixed the application code
+-- but left this file's drift uncorrected at the source. This version was
+-- reconstructed from information_schema.columns, pg_constraint, and
+-- pg_policies queried directly against the live database, and now
+-- matches production exactly. A DELETE-policy gap on auto_bays/auto_jobs/
+-- auto_job_services (migration 20260708182142, applied same day) is also
+-- folded in here rather than left as a separate undocumented patch.
+--
 -- Per the architecture plan's modeling note: Check-In, Queue, and Bay
 -- Management are one underlying job/ticket state machine with resource
 -- (bay) assignment, projected into multiple UI views, not three separate
@@ -26,8 +41,9 @@ create table public.auto_bays (
   id uuid primary key default gen_random_uuid(),
   salon_id uuid not null references public.salons(id),
   label text not null,
-  status text not null default 'free',
-  created_at timestamptz not null default now()
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  unique (salon_id, label)
 );
 
 alter table public.auto_bays enable row level security;
@@ -51,16 +67,20 @@ create table public.auto_jobs (
   salon_id uuid not null references public.salons(id),
   customer_id uuid not null references public.customers(id),
   vehicle_id uuid not null references public.auto_vehicles(id),
-  status text not null default 'waiting',
-  priority text,
-  bay_id uuid references public.auto_bays(id),
+  status text not null default 'waiting'
+    check (status in ('waiting','in_bay','ready_for_collection','completed','cancelled')),
+  priority text not null default 'normal'
+    check (priority in ('normal','high')),
+  bay_id uuid,
   assigned_staff_id uuid references public.staff(id),
   eta_minutes integer,
-  payment_status text not null default 'unpaid',
   total_price integer,
-  notes text,
+  payment_status text not null default 'unpaid'
+    check (payment_status in ('unpaid','paid')),
+  cancel_reason text,
   checked_in_at timestamptz not null default now(),
-  started_at timestamptz,
+  in_bay_at timestamptz,
+  ready_at timestamptz,
   completed_at timestamptz,
   created_at timestamptz not null default now()
 );
@@ -80,9 +100,14 @@ create policy "auto_jobs_delete_own_salon"
   on public.auto_jobs for delete to authenticated
   using (salon_id = auth_salon_id());
 
--- 3. Close the loop: bay -> its current job (nullable, set after check-in)
+-- 3. Close the loop: bay -> its current job (nullable, set after check-in),
+--    and the job -> bay FK (job created first in this file, so this FK is
+--    added after auto_bays already exists above).
+alter table public.auto_jobs
+  add constraint auto_jobs_bay_fk foreign key (bay_id) references public.auto_bays(id);
+
 alter table public.auto_bays
-  add column current_job_id uuid references public.auto_jobs(id);
+  add column current_job_id uuid references public.auto_jobs(id) on delete set null;
 
 -- 4. auto_job_services -- line items, price snapshotted at add-time
 create table public.auto_job_services (
@@ -91,6 +116,7 @@ create table public.auto_job_services (
   job_id uuid not null references public.auto_jobs(id) on delete cascade,
   auto_service_id uuid not null references public.auto_services(id),
   price integer not null,
+  completed_at timestamptz,
   created_at timestamptz not null default now()
 );
 
@@ -109,13 +135,16 @@ create policy "auto_job_services_delete_own_salon"
   on public.auto_job_services for delete to authenticated
   using (salon_id = auth_salon_id());
 
--- 5. auto_job_events -- append-only log (the AI/TIP data-logging hook)
+-- 5. auto_job_events -- append-only log (the AI/TIP data-logging hook).
+--    created_by is nullable so system-generated events (if any are ever
+--    written outside a staff action) aren't blocked.
 create table public.auto_job_events (
   id uuid primary key default gen_random_uuid(),
   salon_id uuid not null references public.salons(id),
   job_id uuid not null references public.auto_jobs(id) on delete cascade,
   event_type text not null,
   payload jsonb,
+  created_by uuid references public.staff(id),
   created_at timestamptz not null default now()
 );
 
