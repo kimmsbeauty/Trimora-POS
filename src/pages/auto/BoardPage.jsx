@@ -3,9 +3,12 @@
 // The Queue + Bay board -- one screen, two projections of the same
 // auto_jobs/auto_bays state, per the architecture plan's modeling note
 // (Check-In, Queue, and Bay Management are one state machine, not three
-// separate data models). Tap a waiting job, then tap a free bay, to
-// start it. Tap an occupied bay to advance its job through the
-// in_bay -> ready_for_collection -> completed sequence, or cancel it.
+// separate data models). Tap a waiting job, pick a staff member (required
+// -- Phase 4), then tap a free bay, to start it. Tap an occupied bay to
+// advance its job through the in_bay -> ready_for_collection -> completed
+// sequence, or cancel it. Commission is auto-calculated from the
+// assigned staff member's commission_pct (40% fallback if unset) at the
+// ready_for_collection stage, and is editable before completing.
 //
 // Deliberately polling (10s interval + manual refresh button), not
 // Supabase Realtime -- the kickoff brief's hard constraint requires
@@ -31,6 +34,12 @@ function vehicleLabel(job) {
   return v.reg_number + (v.make || v.model ? " · " + [v.make, v.model].filter(Boolean).join(" ") : "");
 }
 
+function defaultCommission(job, staffById) {
+  var staffMember = staffById[job.assigned_staff_id];
+  var pct = staffMember && staffMember.commission_pct != null ? staffMember.commission_pct : 40;
+  return Math.round((job.total_price || 0) * pct / 100);
+}
+
 function elapsedMinutes(isoString) {
   var mins = Math.round((Date.now() - new Date(isoString).getTime()) / 60000);
   return mins < 1 ? "just now" : mins + " min";
@@ -39,9 +48,14 @@ function elapsedMinutes(isoString) {
 export default function BoardPage() {
   var jobsState = useState([]); var jobs = jobsState[0]; var setJobs = jobsState[1];
   var baysState = useState([]); var bays = baysState[0]; var setBays = baysState[1];
+  var staffState = useState([]); var staff = staffState[0]; var setStaff = staffState[1];
   var loadingState = useState(true); var loading = loadingState[0]; var setLoading = loadingState[1];
   var selectedJobIdState = useState(null);
   var selectedJobId = selectedJobIdState[0]; var setSelectedJobId = selectedJobIdState[1];
+  var selectedStaffIdState = useState(null);
+  var selectedStaffId = selectedStaffIdState[0]; var setSelectedStaffId = selectedStaffIdState[1];
+  var commissionEditsState = useState({}); // job.id -> string being edited
+  var commissionEdits = commissionEditsState[0]; var setCommissionEdits = commissionEditsState[1];
   var busyState = useState(false); var busy = busyState[0]; var setBusy = busyState[1];
 
   var load = useCallback(async function () {
@@ -50,9 +64,11 @@ export default function BoardPage() {
       db("GET", "auto_jobs", null,
         "?status=in.(" + ACTIVE_STATUSES + ")&order=checked_in_at.asc" +
         "&select=*,auto_vehicles(reg_number,make,model,color),customers(name,phone)"),
+      db("GET", "staff", null, "?active=eq.true&order=name.asc"),
     ]);
     setBays(results[0] || []);
     setJobs(results[1] || []);
+    setStaff(results[2] || []);
     setLoading(false);
   }, []);
 
@@ -65,20 +81,24 @@ export default function BoardPage() {
   var jobsById = {};
   jobs.forEach(function (j) { jobsById[j.id] = j; });
 
+  var staffById = {};
+  staff.forEach(function (s) { staffById[s.id] = s; });
+
   var waitingJobs = jobs.filter(function (j) { return j.status === "waiting"; });
   var activeJobs = jobs.filter(function (j) { return j.status !== "waiting"; });
 
   async function assignBay(bayId) {
-    if (!selectedJobId || busy) return;
+    if (!selectedJobId || !selectedStaffId || busy) return;
     setBusy(true);
     await db("PATCH", "auto_jobs",
-      { status: "in_bay", bay_id: bayId, in_bay_at: new Date().toISOString() },
+      { status: "in_bay", bay_id: bayId, in_bay_at: new Date().toISOString(), assigned_staff_id: selectedStaffId },
       "?id=eq." + selectedJobId);
     await db("PATCH", "auto_bays", { current_job_id: selectedJobId }, "?id=eq." + bayId);
     await db("POST", "auto_job_events", {
-      job_id: selectedJobId, event_type: "started", payload: { bay_id: bayId },
+      job_id: selectedJobId, event_type: "started", payload: { bay_id: bayId, staff_id: selectedStaffId },
     });
     setSelectedJobId(null);
+    setSelectedStaffId(null);
     setBusy(false);
     load();
   }
@@ -91,7 +111,12 @@ export default function BoardPage() {
 
     var patch = { status: next };
     if (next === "ready_for_collection") patch.ready_at = new Date().toISOString();
-    if (next === "completed") patch.completed_at = new Date().toISOString();
+    if (next === "completed") {
+      patch.completed_at = new Date().toISOString();
+      var editedValue = commissionEdits[job.id];
+      var parsed = editedValue !== undefined ? parseInt(editedValue, 10) : NaN;
+      patch.commission = isNaN(parsed) ? defaultCommission(job, staffById) : parsed;
+    }
     await db("PATCH", "auto_jobs", patch, "?id=eq." + job.id);
 
     if (next === "completed" && job.bay_id) {
@@ -102,6 +127,14 @@ export default function BoardPage() {
       job_id: job.id, event_type: next === "completed" ? "completed" : "status_changed",
       payload: { from: job.status, to: next },
     });
+
+    if (next === "completed") {
+      setCommissionEdits(function (prev) {
+        var copy = Object.assign({}, prev);
+        delete copy[job.id];
+        return copy;
+      });
+    }
 
     setBusy(false);
     load();
@@ -141,7 +174,8 @@ export default function BoardPage() {
         <div style={Object.assign({}, panelStyle, { marginBottom: 16 })}>
           <div style={sectionLabel}>
             <span>Bays</span>
-            {selectedJobId && <span style={{ color: SIGNAL }}>Tap a free bay to assign</span>}
+            {selectedJobId && selectedStaffId && <span style={{ color: SIGNAL }}>Tap a free bay to assign</span>}
+            {selectedJobId && !selectedStaffId && <span style={{ color: CHROME }}>Select a staff member first</span>}
           </div>
           {bays.length === 0 && (
             <div style={{ fontSize: 13, color: CHROME }}>No bays set up yet for this business.</div>
@@ -150,7 +184,7 @@ export default function BoardPage() {
             {bays.map(function (bay) {
               var occupiedJob = bay.current_job_id ? jobsById[bay.current_job_id] : null;
               var isFree = bay.active && !bay.current_job_id;
-              var clickable = isFree && !!selectedJobId;
+              var clickable = isFree && !!selectedJobId && !!selectedStaffId;
               return (
                 <div key={bay.id}
                   onClick={function () { if (clickable) assignBay(bay.id); }}
@@ -186,7 +220,10 @@ export default function BoardPage() {
               var isSelected = selectedJobId === job.id;
               return (
                 <div key={job.id}
-                  onClick={function () { setSelectedJobId(isSelected ? null : job.id); }}
+                  onClick={function () {
+                    setSelectedJobId(isSelected ? null : job.id);
+                    setSelectedStaffId(null);
+                  }}
                   style={{
                     display: "flex", justifyContent: "space-between", alignItems: "center",
                     padding: "12px 14px", borderRadius: 10, cursor: "pointer",
@@ -206,6 +243,34 @@ export default function BoardPage() {
           </div>
         </div>
 
+        {/* Staff picker -- required before a bay can be assigned */}
+        {selectedJobId && (
+          <div style={Object.assign({}, panelStyle, { marginBottom: 16 })}>
+            <div style={sectionLabel}><span>Assign to staff member</span></div>
+            {staff.length === 0 && (
+              <div style={{ fontSize: 13, color: CHROME }}>No active staff found for this business.</div>
+            )}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {staff.map(function (s) {
+                var isSelected = selectedStaffId === s.id;
+                return (
+                  <div key={s.id}
+                    onClick={function () { setSelectedStaffId(isSelected ? null : s.id); }}
+                    style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      padding: "10px 14px", borderRadius: 10, cursor: "pointer",
+                      border: "1.5px solid " + (isSelected ? SIGNAL : "rgba(143,166,184,0.2)"),
+                      background: isSelected ? "rgba(61,220,151,0.1)" : "rgba(255,255,255,0.02)",
+                    }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: PAPER }}>{s.name}</div>
+                    <div style={{ fontSize: 11, color: CHROME }}>{s.role}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* In progress */}
         <div style={panelStyle}>
           <div style={sectionLabel}><span>In progress ({activeJobs.length})</span></div>
@@ -214,6 +279,11 @@ export default function BoardPage() {
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {activeJobs.map(function (job) {
+              var assignedStaff = staffById[job.assigned_staff_id];
+              var isReadyForCollection = job.status === "ready_for_collection";
+              var commissionValue = commissionEdits[job.id] !== undefined
+                ? commissionEdits[job.id]
+                : String(defaultCommission(job, staffById));
               return (
                 <div key={job.id} style={{
                   padding: "12px 14px", borderRadius: 10,
@@ -222,9 +292,30 @@ export default function BoardPage() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <div>
                       <div style={{ fontSize: 14, fontWeight: 700, color: PAPER }}>{vehicleLabel(job)}</div>
-                      <div style={{ fontSize: 11, color: CHROME }}>{STATUS_LABEL[job.status]}</div>
+                      <div style={{ fontSize: 11, color: CHROME }}>
+                        {STATUS_LABEL[job.status]}{assignedStaff ? " · " + assignedStaff.name : ""}
+                      </div>
                     </div>
-                    <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      {isReadyForCollection && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <span style={{ fontSize: 11, color: CHROME }}>KSh</span>
+                          <input type="number" value={commissionValue}
+                            onChange={function (e) {
+                              var v = e.target.value;
+                              setCommissionEdits(function (prev) {
+                                var copy = Object.assign({}, prev);
+                                copy[job.id] = v;
+                                return copy;
+                              });
+                            }}
+                            style={{
+                              width: 64, background: "rgba(255,255,255,0.04)", color: PAPER,
+                              border: "1px solid rgba(143,166,184,0.3)", borderRadius: 6,
+                              padding: "6px 8px", fontSize: 12,
+                            }} />
+                        </div>
+                      )}
                       {NEXT_STATUS[job.status] && (
                         <button onClick={function () { advanceJob(job); }} disabled={busy} style={{
                           background: SIGNAL, color: INK, border: "none", borderRadius: 8,
