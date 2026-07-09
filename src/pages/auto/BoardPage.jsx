@@ -10,6 +10,12 @@
 // assigned staff member's commission_pct (40% fallback if unset) at the
 // ready_for_collection stage, and is editable before completing.
 //
+// Completing a job offers Cash, M-Pesa (Till), or Pay later -- matching
+// POS's own pay-later convention (explicit decision: Auto should not be
+// stricter than POS on this). Pay later completes the job with
+// payment_status left as 'unpaid'; Cash/Till set payment_status='paid'
+// immediately.
+//
 // Deliberately polling (10s interval + manual refresh button), not
 // Supabase Realtime -- the kickoff brief's hard constraint requires
 // any new real-time infrastructure to be isolated from POS's existing
@@ -185,11 +191,11 @@ export default function BoardPage() {
       var editedValue = commissionEdits[job.id];
       var parsed = editedValue !== undefined ? parseInt(editedValue, 10) : NaN;
       patch.commission = isNaN(parsed) ? defaultCommission(job, staffById) : parsed;
-      // Phase 5: payment is collected via the Cash/Till step before this
-      // is ever called for a "completed" transition (see completeJobFlow
-      // below) -- paymentMethod should always be present here. Guarded
-      // anyway so a job never silently gets marked completed+paid
-      // without an explicit method being recorded.
+      // Cash/Till pass a paymentMethod and mark the job paid immediately.
+      // Pay later (explicit decision, matching POS's own convention)
+      // calls advanceJob with no paymentMethod at all -- payment_status
+      // stays 'unpaid', payment_method stays null, and nothing about
+      // completion is blocked on it.
       if (paymentMethod) {
         patch.payment_method = paymentMethod;
         patch.payment_status = "paid";
@@ -242,6 +248,11 @@ export default function BoardPage() {
   function payCash(job) {
     setPaymentJobId(null);
     advanceJob(job, "Cash");
+  }
+
+  function payLater(job) {
+    setPaymentJobId(null);
+    advanceJob(job);
   }
 
   function payTill() {
@@ -508,6 +519,13 @@ export default function BoardPage() {
                 background: "transparent", color: SIGNAL, fontWeight: 800, fontSize: 15, cursor: "pointer", marginBottom: 10,
               }}>
                 M-Pesa (Till)
+              </button>
+              <button onClick={function () { payLater(payJob); }} disabled={busy} style={{
+                width: "100%", padding: "10px 0", borderRadius: 10, border: "none",
+                background: "transparent", color: CHROME, fontWeight: 700, fontSize: 13, cursor: "pointer", marginBottom: 10,
+                textDecoration: "underline",
+              }}>
+                Pay later
               </button>
               <button onClick={function () { setPaymentJobId(null); }} style={{
                 width: "100%", padding: "12px 0", borderRadius: 10, border: "1px solid " + CHROME + "55",
