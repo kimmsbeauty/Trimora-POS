@@ -3,15 +3,24 @@
 // Entry point for Trimora Auto, mirroring the shape of App.jsx's
 // StaffRoute for POS: reuses the exact same LoginPage (staff PIN auth is
 // device-session-based via DeviceGate/SalonGate, not Auto-specific --
-// nothing about login needed to change). The one thing genuinely new
-// here is ModuleGate, checking salon_enabled_modules before showing
-// anything, so a salon with Auto disabled sees a clear, calm message
-// instead of a broken or half-working screen.
+// nothing about login needed to change). ModuleGate checks
+// salon_enabled_modules before showing anything, so a salon with Auto
+// disabled sees a clear, calm message instead of a broken or
+// half-working screen.
+//
+// LoginPage's onLogin(role) is captured (role is "staff" or "admin",
+// same distinction POS uses) to gate the Staff/Services tabs -- these
+// are genuinely admin-only, matching POS's own admin-only nav items.
+// Staff edits here operate on the same shared `staff` table POS uses
+// (Core data, not an Auto-specific copy); Services edits operate on
+// auto_services, which has no POS equivalent.
 
 import { useState, useEffect } from "react";
 import LoginPage from "./LoginPage";
 import CheckInPage from "./auto/CheckInPage";
 import BoardPage from "./auto/BoardPage";
+import StaffPage from "./auto/StaffPage";
+import ServicesPage from "./auto/ServicesPage";
 import { useSalon } from "../lib/SalonContext";
 import { db } from "../lib/db";
 import { INK, STEEL, CHROME, PAPER, SIGNAL } from "./auto/theme";
@@ -60,11 +69,13 @@ function ModuleGate({ children }) {
 function AutoStaffRoute() {
   var loggedInState = useState(false);
   var loggedIn = loggedInState[0]; var setLoggedIn = loggedInState[1];
+  var isAdminState = useState(false);
+  var isAdmin = isAdminState[0]; var setIsAdmin = isAdminState[1];
   var tabState = useState("checkin");
   var tab = tabState[0]; var setTab = tabState[1];
 
   if (!loggedIn) {
-    return <LoginPage onLogin={function () { setLoggedIn(true); }} />;
+    return <LoginPage onLogin={function (role) { setIsAdmin(role === "admin"); setLoggedIn(true); }} />;
   }
 
   var tabStyle = function (key) {
@@ -75,13 +86,28 @@ function AutoStaffRoute() {
     };
   };
 
+  var TABS = [
+    { key: "checkin", label: "Check-In", adminOnly: false },
+    { key: "board", label: "Queue & Bays", adminOnly: false },
+    { key: "staff", label: "Staff", adminOnly: true },
+    { key: "services", label: "Services", adminOnly: true },
+  ];
+  var visibleTabs = TABS.filter(function (t) { return !t.adminOnly || isAdmin; });
+
+  var page;
+  if (tab === "checkin") page = <CheckInPage />;
+  else if (tab === "board") page = <BoardPage />;
+  else if (tab === "staff") page = <StaffPage isAdmin={isAdmin} />;
+  else page = <ServicesPage isAdmin={isAdmin} />;
+
   return (
     <div>
       <div style={{ display: "flex", background: STEEL, borderBottom: "1px solid rgba(143,166,184,0.15)" }}>
-        <div style={tabStyle("checkin")} onClick={function () { setTab("checkin"); }}>Check-In</div>
-        <div style={tabStyle("board")} onClick={function () { setTab("board"); }}>Queue &amp; Bays</div>
+        {visibleTabs.map(function (t) {
+          return <div key={t.key} style={tabStyle(t.key)} onClick={function () { setTab(t.key); }}>{t.label}</div>;
+        })}
       </div>
-      {tab === "checkin" ? <CheckInPage /> : <BoardPage />}
+      {page}
     </div>
   );
 }

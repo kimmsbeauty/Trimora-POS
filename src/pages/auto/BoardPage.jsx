@@ -40,6 +40,11 @@ function defaultCommission(job, staffById) {
   return Math.round((job.total_price || 0) * pct / 100);
 }
 
+function defaultCommissionPct(job, staffById) {
+  var staffMember = staffById[job.assigned_staff_id];
+  return staffMember && staffMember.commission_pct != null ? staffMember.commission_pct : 40;
+}
+
 function elapsedMinutes(isoString) {
   var mins = Math.round((Date.now() - new Date(isoString).getTime()) / 60000);
   return mins < 1 ? "just now" : mins + " min";
@@ -54,8 +59,10 @@ export default function BoardPage() {
   var selectedJobId = selectedJobIdState[0]; var setSelectedJobId = selectedJobIdState[1];
   var selectedStaffIdState = useState(null);
   var selectedStaffId = selectedStaffIdState[0]; var setSelectedStaffId = selectedStaffIdState[1];
-  var commissionEditsState = useState({}); // job.id -> string being edited
+  var commissionEditsState = useState({}); // job.id -> KSh amount being edited
   var commissionEdits = commissionEditsState[0]; var setCommissionEdits = commissionEditsState[1];
+  var commissionPctEditsState = useState({}); // job.id -> percentage being edited
+  var commissionPctEdits = commissionPctEditsState[0]; var setCommissionPctEdits = commissionPctEditsState[1];
   var busyState = useState(false); var busy = busyState[0]; var setBusy = busyState[1];
 
   var load = useCallback(async function () {
@@ -130,6 +137,11 @@ export default function BoardPage() {
 
     if (next === "completed") {
       setCommissionEdits(function (prev) {
+        var copy = Object.assign({}, prev);
+        delete copy[job.id];
+        return copy;
+      });
+      setCommissionPctEdits(function (prev) {
         var copy = Object.assign({}, prev);
         delete copy[job.id];
         return copy;
@@ -281,6 +293,9 @@ export default function BoardPage() {
             {activeJobs.map(function (job) {
               var assignedStaff = staffById[job.assigned_staff_id];
               var isReadyForCollection = job.status === "ready_for_collection";
+              var commissionPctValue = commissionPctEdits[job.id] !== undefined
+                ? commissionPctEdits[job.id]
+                : String(defaultCommissionPct(job, staffById));
               var commissionValue = commissionEdits[job.id] !== undefined
                 ? commissionEdits[job.id]
                 : String(defaultCommission(job, staffById));
@@ -298,7 +313,28 @@ export default function BoardPage() {
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       {isReadyForCollection && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <input type="number" value={commissionPctValue}
+                            onChange={function (e) {
+                              var pctStr = e.target.value;
+                              var pctNum = parseInt(pctStr, 10);
+                              setCommissionPctEdits(function (prev) {
+                                var copy = Object.assign({}, prev);
+                                copy[job.id] = pctStr;
+                                return copy;
+                              });
+                              setCommissionEdits(function (prev) {
+                                var copy = Object.assign({}, prev);
+                                copy[job.id] = isNaN(pctNum) ? "0" : String(Math.round((job.total_price || 0) * pctNum / 100));
+                                return copy;
+                              });
+                            }}
+                            style={{
+                              width: 44, background: "rgba(255,255,255,0.04)", color: PAPER,
+                              border: "1px solid rgba(143,166,184,0.3)", borderRadius: 6,
+                              padding: "6px 6px", fontSize: 12, textAlign: "right",
+                            }} />
+                          <span style={{ fontSize: 11, color: CHROME }}>% =</span>
                           <span style={{ fontSize: 11, color: CHROME }}>KSh</span>
                           <input type="number" value={commissionValue}
                             onChange={function (e) {
