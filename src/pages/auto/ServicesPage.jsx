@@ -99,7 +99,7 @@ export default function ServicesPage({ isAdmin }) {
 
   async function addRequiredStock(service) {
     if (!newReqStock.stock_id || busy) return;
-    var qty = parseFloat(newReqStock.quantity) || 1;
+    var qty = parseInt(newReqStock.quantity, 10) || 1;
     var already = requiredStockFor(service.id).filter(function (r) { return r.stock_id === newReqStock.stock_id; })[0];
     setBusy(true);
     if (already) {
@@ -265,7 +265,7 @@ export default function ServicesPage({ isAdmin }) {
                             <option value="">Select stock item…</option>
                             {stockList.map(function (s) { return <option key={s.id} value={s.id}>{s.name} ({s.stock} in stock)</option>; })}
                           </select>
-                          <input type="number" min="0.1" step="0.1" value={newReqStock.quantity}
+                          <input type="number" min="1" step="1" value={newReqStock.quantity}
                             onChange={function (e) { setNewReqStock(Object.assign({}, newReqStock, { quantity: e.target.value })); }}
                             style={Object.assign({}, inputStyle, { flex: 1 })} />
                           <button onClick={function () { addRequiredStock(svc); }} disabled={busy || !newReqStock.stock_id} style={btnStyle}>Add</button>

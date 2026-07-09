@@ -165,7 +165,14 @@ export default function BoardPage() {
         var stockId = stockIds[i];
         var current = stockById[stockId];
         if (!current) continue; // stock item deleted since being configured -- skip, don't throw
-        var qty = neededByStockId[stockId];
+        // stock.stock and auto_stock_movements.change_qty are both
+        // integer columns, but auto_service_required_stock.quantity is
+        // numeric (the UI used to allow fractional entry). Round once,
+        // here, and use the same rounded value for both writes below --
+        // rounding qty itself rather than letting each write round
+        // independently at the DB layer keeps the stock total and its
+        // movement log from ever being able to drift apart.
+        var qty = Math.round(neededByStockId[stockId]);
         var newStock = computeStockAfterDeduction(current.stock, qty);
         await db("PATCH", "stock", { stock: newStock }, "?id=eq." + stockId);
         await db("POST", "auto_stock_movements", {

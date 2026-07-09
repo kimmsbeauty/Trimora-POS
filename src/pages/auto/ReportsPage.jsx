@@ -15,13 +15,11 @@
 // plan was written: a staff commission leaderboard (Phase 4) and a
 // payment method breakdown (Phase 5).
 //
-// Inventory usage is included and correctly shows an empty state --
-// auto_stock_movements has zero rows in production as of this build
-// (no job-completion code deducts stock yet; that's separate,
-// unbuilt scope per the Phase 2 migration's own note). Reporting on
-// zero real activity honestly, rather than omitting the section, is
-// the more accurate choice: it'll start showing real data the moment
-// that's built, with no reporting-side change needed.
+// Inventory usage joins auto_stock_movements against the shared stock
+// table for human-readable item names, same as Top Services joins
+// against auto_services -- both tables were empty in production when
+// this file was first written (job completion didn't deduct stock
+// yet), but that's since been built, so this reports on real data now.
 
 import { useState, useEffect, useCallback } from "react";
 import { db } from "../../lib/db";
@@ -61,7 +59,7 @@ export default function ReportsPage({ isAdmin }) {
       db("GET", "auto_job_services", null, "?select=*,auto_services(name)"),
       db("GET", "auto_bays", null, "?order=label.asc"),
       db("GET", "staff", null, "?order=name.asc"),
-      db("GET", "auto_stock_movements", null, "?order=created_at.desc&limit=200"),
+      db("GET", "auto_stock_movements", null, "?order=created_at.desc&limit=200&select=*,stock(name)"),
     ]);
     setJobs(results[0] || []);
     setJobServices(results[1] || []);
@@ -171,11 +169,13 @@ export default function ReportsPage({ isAdmin }) {
     return Object.assign({ name: (s && s.name) || "Unknown staff" }, e[1]);
   }).sort(function (a, b) { return b.commission - a.commission; });
 
-  // Inventory usage -- honestly empty right now (see file header note).
+  // Inventory usage -- joined against stock(name) for readability,
+  // same pattern as Top Services joining auto_services(name).
   var stockAgg = {};
   stockMoves.forEach(function (m) {
-    if (!stockAgg[m.stock_id]) stockAgg[m.stock_id] = 0;
-    stockAgg[m.stock_id] += m.change_qty || 0;
+    var name = (m.stock && m.stock.name) || "Unknown item";
+    if (!stockAgg[name]) stockAgg[name] = 0;
+    stockAgg[name] += m.change_qty || 0;
   });
   var stockRows = Object.entries(stockAgg);
 
@@ -305,7 +305,7 @@ export default function ReportsPage({ isAdmin }) {
         <CardTitle>Inventory Usage</CardTitle>
         {stockRows.length === 0 ? (
           <div style={{ fontSize: 12, color: CHROME }}>
-            No stock movements recorded yet — job completion doesn't deduct stock automatically yet, so this stays empty until that's built.
+            No stock movements recorded yet — nothing's been configured to deduct on the Services tab, or no completed jobs have used a mapped service yet.
           </div>
         ) : stockRows.map(function (e, i) {
           return (
