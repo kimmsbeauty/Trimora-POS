@@ -21,6 +21,7 @@ import CheckInPage from "./auto/CheckInPage";
 import BoardPage from "./auto/BoardPage";
 import StaffPage from "./auto/StaffPage";
 import ServicesPage from "./auto/ServicesPage";
+import ReportsPage from "./auto/ReportsPage";
 import { useSalon } from "../lib/SalonContext";
 import { db } from "../lib/db";
 import { INK, STEEL, CHROME, PAPER, SIGNAL } from "./auto/theme";
@@ -91,6 +92,7 @@ function AutoStaffRoute() {
     { key: "board", label: "Queue & Bays", adminOnly: false },
     { key: "staff", label: "Staff", adminOnly: true },
     { key: "services", label: "Services", adminOnly: true },
+    { key: "reports", label: "Reports", adminOnly: true },
   ];
   var visibleTabs = TABS.filter(function (t) { return !t.adminOnly || isAdmin; });
 
@@ -98,7 +100,8 @@ function AutoStaffRoute() {
   if (tab === "checkin") page = <CheckInPage />;
   else if (tab === "board") page = <BoardPage />;
   else if (tab === "staff") page = <StaffPage isAdmin={isAdmin} />;
-  else page = <ServicesPage isAdmin={isAdmin} />;
+  else if (tab === "services") page = <ServicesPage isAdmin={isAdmin} />;
+  else page = <ReportsPage isAdmin={isAdmin} />;
 
   return (
     <div>
