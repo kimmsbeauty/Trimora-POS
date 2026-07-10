@@ -5,6 +5,11 @@
 // architecture plan Section 6, objection 1). POS's Services tab has
 // no reach into this table at all, so unlike staff editing, this
 // needed a genuinely new screen.
+//
+// Also manages auto_bays (added later) -- no bay-creation UI existed
+// anywhere before this, bays had to be seeded directly via SQL to
+// unblock testing the Board's assign flow. Living here rather than a
+// separate tab since this is already Auto's "setup/config" home.
 
 import { useState, useEffect, useCallback } from "react";
 import { db } from "../../lib/db";
@@ -32,15 +37,26 @@ export default function ServicesPage({ isAdmin }) {
   var newReqStockState = useState({ stock_id: "", quantity: 1 });
   var newReqStock = newReqStockState[0]; var setNewReqStock = newReqStockState[1];
 
+  // Bays: no creation UI existed anywhere in the codebase until now --
+  // flagged as a real gap earlier this session (bays were seeded
+  // directly via SQL to unblock testing the Board's assign flow).
+  // Added here rather than a new tab, since Services is already the
+  // "salon setup/config" home for Auto's admin screens.
+  var baysState = useState([]); var bays = baysState[0]; var setBays = baysState[1];
+  var showAddBayState = useState(false); var showAddBay = showAddBayState[0]; var setShowAddBay = showAddBayState[1];
+  var newBayLabelState = useState(""); var newBayLabel = newBayLabelState[0]; var setNewBayLabel = newBayLabelState[1];
+
   var load = useCallback(async function () {
     var results = await Promise.all([
       db("GET", "auto_services", null, "?order=active.desc,name.asc"),
       db("GET", "stock", null, "?order=name.asc"),
       db("GET", "auto_service_required_stock", null, "?select=*,stock(name)"),
+      db("GET", "auto_bays", null, "?order=label.asc"),
     ]);
     setServices(results[0] || []);
     setStockList(results[1] || []);
     setRequiredStock(results[2] || []);
+    setBays(results[3] || []);
     setLoading(false);
   }, []);
 
@@ -120,6 +136,32 @@ export default function ServicesPage({ isAdmin }) {
     if (busy) return;
     setBusy(true);
     await db("DELETE", "auto_service_required_stock", null, "?id=eq." + row.id);
+    setBusy(false);
+    load();
+  }
+
+  async function addBay() {
+    var label = newBayLabel.trim();
+    if (!label || busy) return;
+    // auto_bays has a unique(salon_id, label) constraint -- guard
+    // client-side with a clear message rather than letting a raw
+    // constraint-violation error surface.
+    if (bays.some(function (b) { return b.label.toLowerCase() === label.toLowerCase(); })) {
+      window.alert("A bay named \"" + label + "\" already exists.");
+      return;
+    }
+    setBusy(true);
+    await db("POST", "auto_bays", { label: label });
+    setNewBayLabel("");
+    setShowAddBay(false);
+    setBusy(false);
+    load();
+  }
+
+  async function toggleBayActive(bay) {
+    if (busy) return;
+    setBusy(true);
+    await db("PATCH", "auto_bays", { active: !bay.active }, "?id=eq." + bay.id);
     setBusy(false);
     load();
   }
@@ -277,6 +319,53 @@ export default function ServicesPage({ isAdmin }) {
               );
             })}
           </div>
+        </div>
+
+        <div style={Object.assign({}, panelStyle, { marginTop: 16 })}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: CHROME }}>
+              Bays ({bays.length})
+            </span>
+            <span onClick={function () { setShowAddBay(!showAddBay); }} style={{ cursor: "pointer", color: SIGNAL, fontSize: 12, fontWeight: 800 }}>
+              {showAddBay ? "Cancel" : "+ Add bay"}
+            </span>
+          </div>
+
+          {showAddBay && (
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <input placeholder="e.g. Bay 3" value={newBayLabel}
+                onChange={function (e) { setNewBayLabel(e.target.value); }}
+                style={Object.assign({}, inputStyle, { flex: 1 })} />
+              <button onClick={addBay} disabled={busy || !newBayLabel.trim()} style={btnStyle}>Save</button>
+            </div>
+          )}
+
+          {bays.length === 0 ? (
+            <div style={{ fontSize: 12, color: CHROME }}>No bays yet — add one to start assigning jobs on the Board.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {bays.map(function (bay) {
+                return (
+                  <div key={bay.id} style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    padding: "10px 14px", borderRadius: 10, border: "1.5px solid rgba(143,166,184,0.2)",
+                    background: bay.active ? "rgba(255,255,255,0.02)" : "rgba(255,107,74,0.04)",
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: PAPER }}>{bay.label}</div>
+                      <div style={{ fontSize: 11, color: CHROME }}>
+                        {bay.current_job_id ? "Occupied" : "Free"}{!bay.active ? " · inactive" : ""}
+                      </div>
+                    </div>
+                    <span onClick={function () { toggleBayActive(bay); }}
+                      style={{ cursor: "pointer", color: bay.active ? ALERT : SIGNAL, fontSize: 12, fontWeight: 700 }}>
+                      {bay.active ? "Deactivate" : "Activate"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
