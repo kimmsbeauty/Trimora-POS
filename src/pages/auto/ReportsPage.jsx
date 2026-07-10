@@ -61,6 +61,8 @@ export default function ReportsPage({ isAdmin }) {
   var staffState = useState([]); var staff = staffState[0]; var setStaff = staffState[1];
   var stockMovesState = useState([]); var stockMoves = stockMovesState[0]; var setStockMoves = stockMovesState[1];
   var rangeState = useState("7d"); var range = rangeState[0]; var setRange = rangeState[1];
+  var customFromState = useState(""); var customFrom = customFromState[0]; var setCustomFrom = customFromState[1];
+  var customToState = useState(""); var customTo = customToState[0]; var setCustomTo = customToState[1];
 
   var load = useCallback(async function () {
     var results = await Promise.all([
@@ -91,9 +93,22 @@ export default function ReportsPage({ isAdmin }) {
   }
 
   var preset = RANGE_PRESETS.filter(function (p) { return p.key === range; })[0];
-  var cutoff = preset.days === null ? null : daysAgo(preset.days);
+  var isCustom = range === "custom";
+  var cutoff = isCustom ? null : (preset.days === null ? null : daysAgo(preset.days));
+  var customFromDate = isCustom && customFrom ? startOfDay(new Date(customFrom)) : null;
+  var customToDate = isCustom && customTo ? (function () {
+    var d = new Date(customTo); d.setHours(23, 59, 59, 999); return d;
+  })() : null;
+  var rangeLabel = isCustom
+    ? (customFrom && customTo ? customFrom + " to " + customTo : "Custom (pick both dates)")
+    : preset.label;
 
   var jobsInRange = jobs.filter(function (j) {
+    if (isCustom) {
+      if (!customFromDate || !customToDate || !j.completed_at) return false;
+      var t = new Date(j.completed_at);
+      return t >= customFromDate && t <= customToDate;
+    }
     if (!cutoff) return true;
     return j.completed_at && new Date(j.completed_at) >= cutoff;
   });
@@ -250,10 +265,39 @@ export default function ReportsPage({ isAdmin }) {
             </button>
           );
         })}
+        <button onClick={function () { setRange("custom"); }} style={{
+          padding: "7px 14px", borderRadius: 20, border: "1.5px solid " + (isCustom ? SIGNAL : CHROME + "55"),
+          background: isCustom ? SIGNAL : "transparent", color: isCustom ? INK : CHROME,
+          fontSize: 12, fontWeight: 700, cursor: "pointer",
+        }}>
+          Custom
+        </button>
       </div>
 
+      {isCustom && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 10, color: CHROME, marginBottom: 4 }}>From</div>
+            <input type="date" value={customFrom} onChange={function (e) { setCustomFrom(e.target.value); }}
+              style={{
+                background: STEEL, color: PAPER, border: "1px solid " + CHROME + "55", borderRadius: 8,
+                padding: "8px 10px", fontSize: 13,
+              }} />
+          </div>
+          <div style={{ color: CHROME, marginTop: 16 }}>–</div>
+          <div>
+            <div style={{ fontSize: 10, color: CHROME, marginBottom: 4 }}>To</div>
+            <input type="date" value={customTo} onChange={function (e) { setCustomTo(e.target.value); }}
+              style={{
+                background: STEEL, color: PAPER, border: "1px solid " + CHROME + "55", borderRadius: 8,
+                padding: "8px 10px", fontSize: 13,
+              }} />
+          </div>
+        </div>
+      )}
+
       <Card>
-        <CardTitle>Summary — {preset.label}</CardTitle>
+        <CardTitle>Summary — {rangeLabel}</CardTitle>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
           {[
             { label: "Revenue", value: money(totalRevenue) },
@@ -318,7 +362,7 @@ export default function ReportsPage({ isAdmin }) {
       </Card>
 
       <Card>
-        <CardTitle>Bay Utilization — {preset.label}</CardTitle>
+        <CardTitle>Bay Utilization — {rangeLabel}</CardTitle>
         {bayRows.length === 0 ? (
           <div style={{ fontSize: 12, color: CHROME }}>No bays configured.</div>
         ) : bayRows.map(function (b, i) {
@@ -332,7 +376,7 @@ export default function ReportsPage({ isAdmin }) {
       </Card>
 
       <Card>
-        <CardTitle>Payment Methods — {preset.label}</CardTitle>
+        <CardTitle>Payment Methods — {rangeLabel}</CardTitle>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: PAPER, padding: "6px 0" }}>
           <span>Cash</span><span style={{ color: SIGNAL }}>{money(byMethod.Cash)}</span>
         </div>
@@ -347,7 +391,7 @@ export default function ReportsPage({ isAdmin }) {
       </Card>
 
       <Card>
-        <CardTitle>Staff Commission — {preset.label}</CardTitle>
+        <CardTitle>Staff Commission — {rangeLabel}</CardTitle>
         {staffRows.length === 0 ? (
           <div style={{ fontSize: 12, color: CHROME }}>No completed jobs with an assigned staff member in this range.</div>
         ) : staffRows.map(function (s, i) {
