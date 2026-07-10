@@ -27,6 +27,7 @@ import { useState, useEffect, useCallback } from "react";
 import { db } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
 import AutoMpesaPaymentModal from "../../components/AutoMpesaPaymentModal";
+import AutoReceipt from "../../components/AutoReceipt";
 import { computeStockAfterDeduction } from "../../lib/saleLogic";
 import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "./theme";
 
@@ -82,6 +83,14 @@ export default function BoardPage() {
   var paymentJobId = paymentJobIdState[0]; var setPaymentJobId = paymentJobIdState[1];
   var showMpesaModalState = useState(false);
   var showMpesaModal = showMpesaModalState[0]; var setShowMpesaModal = showMpesaModalState[1];
+  // Receipt: shown automatically right after a job completes, matching
+  // POS's own completeSale() -> Receipt convention. Holds the finalized
+  // job + its line items fetched fresh right after completion, since
+  // the completed job drops out of `jobs` on the next load() (it's
+  // filtered out by ACTIVE_STATUSES) before a receipt could otherwise
+  // read its final commission/payment_method/completed_at.
+  var receiptJobState = useState(null); var receiptJob = receiptJobState[0]; var setReceiptJob = receiptJobState[1];
+  var receiptServicesState = useState([]); var receiptServices = receiptServicesState[0]; var setReceiptServices = receiptServicesState[1];
 
   var load = useCallback(async function () {
     var results = await Promise.all([
@@ -238,6 +247,15 @@ export default function BoardPage() {
         delete copy[job.id];
         return copy;
       });
+
+      var finalized = await db("GET", "auto_jobs", null,
+        "?id=eq." + job.id + "&select=*,auto_vehicles(reg_number,make,model,color),customers(name,phone)");
+      var services = await db("GET", "auto_job_services", null,
+        "?job_id=eq." + job.id + "&select=*,auto_services(name)");
+      if (finalized && finalized[0]) {
+        setReceiptJob(finalized[0]);
+        setReceiptServices(services || []);
+      }
     }
 
     setBusy(false);
@@ -557,6 +575,16 @@ export default function BoardPage() {
           />
         );
       })()}
+
+      {receiptJob && (
+        <AutoReceipt
+          salon={salon}
+          job={receiptJob}
+          jobServices={receiptServices}
+          staffById={staffById}
+          onClose={function () { setReceiptJob(null); setReceiptServices([]); }}
+        />
+      )}
     </div>
   );
 }
