@@ -12,6 +12,10 @@ import {
   revenueByMonth,
   salonsByMonth,
   revenueBySalon,
+  getAutoHealthFlags,
+  autoSalonsNeedingAttention,
+  autoRevenueByMonth,
+  autoRevenueBySalon,
 } from "./salonHealth";
 
 var FIXED_NOW = new Date("2026-07-02T12:00:00Z");
@@ -174,5 +178,95 @@ describe("revenueBySalon", () => {
     var result = revenueBySalon(payments, multiSalons);
     expect(result[0].salonId).toBe("b");
     expect(result[1].salonId).toBe("a");
+  });
+});
+
+describe("getAutoHealthFlags", () => {
+  it("never flags a salon where Auto isn't enabled, regardless of zero counts", () => {
+    var s = { auto_enabled: false, auto_bay_count: 0, auto_service_count: 0, auto_job_count: 0 };
+    expect(getAutoHealthFlags(s, FIXED_NOW)).toEqual([]);
+  });
+
+  it("flags zero bays as high severity when Auto is enabled", () => {
+    var s = { auto_enabled: true, auto_bay_count: 0, auto_service_count: 2, auto_job_count: 5, auto_last_job_completed_at: FIXED_NOW.toISOString() };
+    var flags = getAutoHealthFlags(s, FIXED_NOW);
+    expect(flags).toContainEqual({ severity: "high", label: "No bays configured" });
+  });
+
+  it("flags zero active services as high severity when Auto is enabled", () => {
+    var s = { auto_enabled: true, auto_bay_count: 2, auto_service_count: 0, auto_job_count: 5, auto_last_job_completed_at: FIXED_NOW.toISOString() };
+    var flags = getAutoHealthFlags(s, FIXED_NOW);
+    expect(flags).toContainEqual({ severity: "high", label: "No active services configured" });
+  });
+
+  it("flags zero jobs as medium severity, distinct from a stale-jobs flag", () => {
+    var s = { auto_enabled: true, auto_bay_count: 2, auto_service_count: 2, auto_job_count: 0 };
+    var flags = getAutoHealthFlags(s, FIXED_NOW);
+    expect(flags).toContainEqual({ severity: "medium", label: "Zero jobs recorded" });
+    expect(flags.some(function(f) { return f.label.indexOf("No completed job in") === 0; })).toBe(false);
+  });
+
+  it("flags a 30+ day gap since the last completed job, with the correct day count", () => {
+    var thirtyFiveDaysAgo = new Date(FIXED_NOW.getTime() - 35 * 24 * 60 * 60 * 1000);
+    var s = { auto_enabled: true, auto_bay_count: 2, auto_service_count: 2, auto_job_count: 10, auto_last_job_completed_at: thirtyFiveDaysAgo.toISOString() };
+    var flags = getAutoHealthFlags(s, FIXED_NOW);
+    expect(flags).toContainEqual({ severity: "medium", label: "No completed job in 35 days" });
+  });
+
+  it("does not flag a healthy, active Auto salon", () => {
+    var s = { auto_enabled: true, auto_bay_count: 2, auto_service_count: 3, auto_job_count: 10, auto_last_job_completed_at: FIXED_NOW.toISOString() };
+    expect(getAutoHealthFlags(s, FIXED_NOW)).toEqual([]);
+  });
+});
+
+describe("autoSalonsNeedingAttention", () => {
+  it("excludes salons where Auto isn't enabled even if they'd otherwise flag", () => {
+    var salons = [
+      { id: "1", auto_enabled: false, auto_bay_count: 0 },
+      { id: "2", auto_enabled: true, auto_bay_count: 0, auto_service_count: 0, auto_job_count: 0 },
+    ];
+    var result = autoSalonsNeedingAttention(salons, FIXED_NOW);
+    expect(result.length).toBe(1);
+    expect(result[0].salon.id).toBe("2");
+  });
+
+  it("sorts by highest flag severity first", () => {
+    var salons = [
+      { id: "low", auto_enabled: true, auto_bay_count: 2, auto_service_count: 2, auto_job_count: 10, auto_last_job_completed_at: new Date(FIXED_NOW.getTime() - 35 * 86400000).toISOString() },
+      { id: "high", auto_enabled: true, auto_bay_count: 0, auto_service_count: 0, auto_job_count: 0 },
+    ];
+    var result = autoSalonsNeedingAttention(salons, FIXED_NOW);
+    expect(result[0].salon.id).toBe("high");
+  });
+});
+
+describe("autoRevenueByMonth", () => {
+  it("sums completed job revenue by month", () => {
+    var jobs = [
+      { completed_at: "2026-06-15T10:00:00Z", total_price: 1000 },
+      { completed_at: "2026-06-20T10:00:00Z", total_price: 500 },
+      { completed_at: "2026-07-01T10:00:00Z", total_price: 2000 },
+    ];
+    var result = autoRevenueByMonth(jobs);
+    var june = result.find(function(r) { return r.label.indexOf("Jun") === 0; });
+    expect(june.value).toBe(1500);
+  });
+
+  it("skips jobs with no completed_at rather than crashing", () => {
+    var jobs = [{ completed_at: null, total_price: 500 }];
+    expect(autoRevenueByMonth(jobs)).toEqual([]);
+  });
+});
+
+describe("autoRevenueBySalon", () => {
+  it("sums and sorts revenue by salon descending, carrying the salon name", () => {
+    var jobs = [
+      { salon_id: "a", salon_name: "Kimms", total_price: 100 },
+      { salon_id: "b", salon_name: "Grace", total_price: 900 },
+      { salon_id: "a", salon_name: "Kimms", total_price: 50 },
+    ];
+    var result = autoRevenueBySalon(jobs);
+    expect(result[0]).toEqual({ salonId: "b", name: "Grace", value: 900 });
+    expect(result[1]).toEqual({ salonId: "a", name: "Kimms", value: 150 });
   });
 });

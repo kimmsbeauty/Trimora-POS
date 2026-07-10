@@ -13,6 +13,9 @@ import {
   revenueByMonth as revenueByMonthLib,
   salonsByMonth as salonsByMonthLib,
   revenueBySalon as revenueBySalonLib,
+  autoSalonsNeedingAttention as autoSalonsNeedingAttentionLib,
+  autoRevenueByMonth as autoRevenueByMonthLib,
+  autoRevenueBySalon as autoRevenueBySalonLib,
 } from "../lib/salonHealth.js";
 
 var GOLD_LT = "#F5E6B8";
@@ -62,7 +65,7 @@ export default function SuperAdminDashboard({ onLogout }) {
   // changes to those blocks.
   var PRODUCTS = [
     { key: "salons", label: "🏠 Salons", homeView: "salons", views: ["salons", "detail", "plans", "audit", "requests", "health", "analytics"] },
-    { key: "auto",   label: "🚗 Auto",   homeView: "carwashes", views: ["carwashes"] },
+    { key: "auto",   label: "🚗 Auto",   homeView: "carwashes", views: ["carwashes", "autohealth", "autoanalytics", "autoaudit"] },
   ];
 
   var [view,         setView]         = useState("salons"); // "salons" | "detail"
@@ -81,6 +84,9 @@ export default function SuperAdminDashboard({ onLogout }) {
   var [analyticsLoading, setAnalyticsLoading] = useState(false);
   var [allPayments, setAllPayments] = useState([]);
   var [analyticsLoaded, setAnalyticsLoaded] = useState(false);
+  var [autoAnalyticsLoading, setAutoAnalyticsLoading] = useState(false);
+  var [allAutoJobs, setAllAutoJobs] = useState([]);
+  var [autoAnalyticsLoaded, setAutoAnalyticsLoaded] = useState(false);
   var [editModal, setEditModal] = useState(null);
   var [editFields, setEditFields] = useState({});
   var [editSaving, setEditSaving] = useState(false);
@@ -436,6 +442,30 @@ export default function SuperAdminDashboard({ onLogout }) {
 
   function salonsNeedingAttention() {
     return salonsNeedingAttentionLib(salons);
+  }
+
+  function autoSalonsNeedingAttention() {
+    return autoSalonsNeedingAttentionLib(salons);
+  }
+
+  // Loaded once, lazily, only when Auto Analytics is opened -- mirrors
+  // loadAnalytics() above exactly, just against auto_platform_jobs
+  // (migration 028) instead of salon_subscription_payments.
+  async function loadAutoAnalytics() {
+    if (autoAnalyticsLoaded) return;
+    setAutoAnalyticsLoading(true);
+    var rows = await saFetch("GET", "auto_platform_jobs", "?status=eq.completed&order=completed_at.asc");
+    if (rows) setAllAutoJobs(rows);
+    setAutoAnalyticsLoaded(true);
+    setAutoAnalyticsLoading(false);
+  }
+
+  function autoRevenueByMonth() {
+    return autoRevenueByMonthLib(allAutoJobs);
+  }
+
+  function autoRevenueBySalon() {
+    return autoRevenueBySalonLib(allAutoJobs);
   }
 
   // PLANS is built from the database-fetched plans array (loaded lazily
@@ -955,6 +985,8 @@ export default function SuperAdminDashboard({ onLogout }) {
       manual_onboard:       { icon: "🏪", label: "Manually onboarded salon" },
       generate_invite:      { icon: "📨", label: "Generated invite link" },
       update_plan_price:    { icon: "💲", label: "Updated plan price" },
+      enable_auto_module:   { icon: "🚗", label: "Onboarded salon into Auto" },
+      disable_auto_module:  { icon: "🚫", label: "Suspended salon's Auto access" },
     };
 
     return (
@@ -1270,6 +1302,23 @@ export default function SuperAdminDashboard({ onLogout }) {
               );
             })}
           </div>
+
+          <div style={{ display: "flex", gap: 8, marginTop: 12, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+            {[
+              { label: "📊 Analytics",  onClick: function() { setView("autoanalytics"); loadAutoAnalytics(); } },
+              { label: "📋 Audit Log",  onClick: function() { setView("autoaudit"); loadAuditLog(); } },
+              { label: "🩺 Health",     onClick: function() { setView("autohealth"); } },
+            ].map(function(btn) {
+              return (
+                <button key={btn.label} onClick={btn.onClick} style={{
+                  flexShrink: 0, background: "rgba(255,255,255,0.1)", border: "1px solid " + GOLD_DIM + "44",
+                  color: WHITE, borderRadius: 20, padding: "7px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
+                }}>
+                  {btn.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div style={{ padding: 16 }}>
@@ -1306,6 +1355,198 @@ export default function SuperAdminDashboard({ onLogout }) {
               </div>
             );
           })}
+        </div>
+      </div>
+    );
+  }
+
+  // ── AUTO HEALTH VIEW ─────────────────────────────────────────────
+  // Mirrors the salon Health view exactly, using getAutoHealthFlags
+  // (salonHealth.js) against salon_directory's auto_* columns
+  // (migration 028) -- no new fetch, same loaded `salons` state.
+  if (view === "autohealth") {
+    var autoFlagged = autoSalonsNeedingAttention();
+    var autoSeverityColor = { high: RED, medium: AMBER, low: "#999" };
+    var autoSeverityBg    = { high: "#FEE2E2", medium: "#FEF3C7", low: "#F3F4F6" };
+
+    return (
+      <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
+        <div style={{ background: BLACK, padding: "16px 20px" }}>
+          <button onClick={function() { setView("carwashes"); }}
+            style={{ background: "none", border: "none", color: GOLD_DIM, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 8, padding: 0 }}>
+            ← Back
+          </button>
+          <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>🩺 Auto Health</div>
+          <div style={{ fontSize: 11, color: GOLD_DIM + "aa", marginTop: 2 }}>
+            {autoFlagged.length === 0 ? "All onboarded car washes look healthy." : autoFlagged.length + " car wash" + (autoFlagged.length === 1 ? "" : "es") + " need" + (autoFlagged.length === 1 ? "s" : "") + " attention"}
+          </div>
+        </div>
+
+        <div style={{ padding: 16 }}>
+          {autoFlagged.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>
+              <div style={{ fontSize: 32, marginBottom: 10 }}>✅</div>
+              Nothing needs attention right now.
+            </div>
+          ) : (
+            autoFlagged.map(function(item) {
+              var s = item.salon;
+              return (
+                <div key={s.id} onClick={function() { openSalonDetail(s); }}
+                  style={{ background: WHITE, borderRadius: 14, padding: 14, marginBottom: 10, border: "1.5px solid " + GOLD_DIM + "33", cursor: "pointer" }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: DARK }}>{s.name}</div>
+                    <div style={{ fontSize: 10, color: "#999" }}>/{s.slug}</div>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {item.flags.map(function(f, i) {
+                      return (
+                        <span key={i} style={{
+                          fontSize: 10, fontWeight: 800, padding: "4px 9px", borderRadius: 20,
+                          background: autoSeverityBg[f.severity], color: autoSeverityColor[f.severity],
+                        }}>
+                          {f.label}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── AUTO ANALYTICS VIEW ──────────────────────────────────────────
+  if (view === "autoanalytics") {
+    var autoRevMonthly  = autoRevenueByMonth();
+    var autoRevBySalon  = autoRevenueBySalon();
+    var autoMaxRev      = Math.max.apply(null, autoRevMonthly.map(function(r) { return r.value; }).concat([1]));
+    var autoMaxSalonRev = Math.max.apply(null, autoRevBySalon.map(function(r) { return r.value; }).concat([1]));
+    var autoTotalRevenue = allAutoJobs.reduce(function(a, j) { return a + Number(j.total_price || 0); }, 0);
+
+    return (
+      <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
+        <div style={{ background: BLACK, padding: "16px 20px" }}>
+          <button onClick={function() { setView("carwashes"); }}
+            style={{ background: "none", border: "none", color: GOLD_DIM, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 8, padding: 0 }}>
+            ← Back
+          </button>
+          <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>📊 Auto Analytics</div>
+          <div style={{ fontSize: 11, color: GOLD_DIM + "aa", marginTop: 2 }}>Across all onboarded car washes · completed jobs only</div>
+        </div>
+
+        <div style={{ padding: 16 }}>
+          {autoAnalyticsLoading ? (
+            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>Loading...</div>
+          ) : (
+            <div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10, marginBottom: 14 }}>
+                <StatCard icon="💰" label="Total Auto Revenue" value={fmt(autoTotalRevenue)} sub={allAutoJobs.length + " completed jobs"} />
+              </div>
+
+              <div style={{ background: WHITE, borderRadius: 14, padding: 16, marginBottom: 14, border: "1.5px solid " + GOLD_DIM + "33" }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: DARK, marginBottom: 12 }}>Auto Revenue by Month</div>
+                {autoRevMonthly.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "#999" }}>No completed jobs yet.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {autoRevMonthly.map(function(r) {
+                      return (
+                        <div key={r.label}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#666", marginBottom: 3 }}>
+                            <span>{r.label}</span>
+                            <span style={{ fontWeight: 800, color: DARK }}>{fmt(r.value)}</span>
+                          </div>
+                          <div style={{ background: CREAM, borderRadius: 6, height: 8, overflow: "hidden" }}>
+                            <div style={{ background: GOLD, height: "100%", width: (r.value / autoMaxRev * 100) + "%", borderRadius: 6 }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ background: WHITE, borderRadius: 14, padding: 16, border: "1.5px solid " + GOLD_DIM + "33" }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: DARK, marginBottom: 12 }}>Auto Revenue by Salon</div>
+                {autoRevBySalon.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "#999" }}>No completed jobs yet.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {autoRevBySalon.map(function(r) {
+                      return (
+                        <div key={r.salonId}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#666", marginBottom: 3 }}>
+                            <span>{r.name}</span>
+                            <span style={{ fontWeight: 800, color: DARK }}>{fmt(r.value)}</span>
+                          </div>
+                          <div style={{ background: CREAM, borderRadius: 6, height: 8, overflow: "hidden" }}>
+                            <div style={{ background: GOLD_DIM, height: "100%", width: (r.value / autoMaxSalonRev * 100) + "%", borderRadius: 6 }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── AUTO AUDIT LOG VIEW ──────────────────────────────────────────
+  // Reuses the same loaded auditLog state as the main Audit Log view
+  // (loadAuditLog() is called from the nav button below, same as the
+  // Salons product's Audit Log entry point) -- just filtered to Auto-
+  // tagged actions. No new RPC, no separate log.
+  if (view === "autoaudit") {
+    var autoActionLabels = {
+      enable_auto_module:  { icon: "🚗", label: "Onboarded salon into Auto" },
+      disable_auto_module: { icon: "🚫", label: "Suspended salon's Auto access" },
+    };
+    var autoAuditEntries = auditLog.filter(function(e) { return autoActionLabels[e.action]; });
+
+    return (
+      <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
+        <div style={{ background: BLACK, padding: "16px 20px" }}>
+          <button onClick={function() { setView("carwashes"); }}
+            style={{ background: "none", border: "none", color: GOLD_DIM, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 8, padding: 0 }}>
+            ← Back
+          </button>
+          <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>📋 Auto Audit Log</div>
+          <div style={{ fontSize: 11, color: GOLD_DIM + "aa", marginTop: 2 }}>Onboard/suspend actions only, most recent 200 overall</div>
+        </div>
+
+        <div style={{ padding: 16 }}>
+          {auditLoading ? (
+            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>Loading...</div>
+          ) : autoAuditEntries.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>No Auto onboarding actions logged yet.</div>
+          ) : (
+            autoAuditEntries.map(function(entry) {
+              var meta = autoActionLabels[entry.action];
+              return (
+                <div key={entry.id} style={{ background: WHITE, borderRadius: 12, padding: 14, marginBottom: 8, border: "1.5px solid " + GOLD_DIM + "33" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: DARK }}>
+                      {meta.icon} {meta.label}
+                      {entry.salon_name && <span style={{ color: GOLD_DIM }}>{" · "}{entry.salon_name}</span>}
+                    </div>
+                    <div style={{ fontSize: 10, color: "#999", whiteSpace: "nowrap", marginLeft: 8 }}>
+                      {new Date(entry.created_at).toLocaleString("en-KE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 10, color: "#aaa" }}>by {entry.admin_email || "unknown"}</div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     );

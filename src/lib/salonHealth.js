@@ -100,3 +100,71 @@ export function revenueBySalon(allPayments, salons) {
   rows.sort(function(a, b) { return b.value - a.value; });
   return rows;
 }
+
+// ── Trimora Auto (car wash) equivalents ──────────────────────────────
+// Same shape and severity convention as getHealthFlags/salonsNeedingAttention
+// above, scoped to salon_directory's auto_* columns (migration 028) --
+// only evaluated for salons with the module actually enabled, since an
+// un-onboarded salon having zero bays/services/jobs is expected, not a
+// health problem.
+
+export function getAutoHealthFlags(s, now) {
+  now = now || new Date();
+  var flags = [];
+  if (!s.auto_enabled) return flags;
+
+  if ((s.auto_bay_count || 0) === 0) {
+    flags.push({ severity: "high", label: "No bays configured" });
+  }
+  if ((s.auto_service_count || 0) === 0) {
+    flags.push({ severity: "high", label: "No active services configured" });
+  }
+  if ((s.auto_job_count || 0) === 0) {
+    flags.push({ severity: "medium", label: "Zero jobs recorded" });
+  } else if (s.auto_last_job_completed_at) {
+    var daysSince = Math.floor((now - new Date(s.auto_last_job_completed_at)) / (1000 * 60 * 60 * 24));
+    if (daysSince >= 30) {
+      flags.push({ severity: "medium", label: "No completed job in " + daysSince + " days" });
+    }
+  }
+  return flags;
+}
+
+export function autoSalonsNeedingAttention(salons, now) {
+  return salons
+    .filter(function(s) { return s.auto_enabled; })
+    .map(function(s) { return { salon: s, flags: getAutoHealthFlags(s, now) }; })
+    .filter(function(item) { return item.flags.length > 0; })
+    .sort(function(a, b) {
+      var weight = { high: 3, medium: 2, low: 1 };
+      var aMax = Math.max.apply(null, a.flags.map(function(f) { return weight[f.severity]; }));
+      var bMax = Math.max.apply(null, b.flags.map(function(f) { return weight[f.severity]; }));
+      return bMax - aMax;
+    });
+}
+
+// jobs: rows from auto_platform_jobs (migration 028), status='completed' pre-filtered by caller
+export function autoRevenueByMonth(jobs) {
+  var map = {};
+  jobs.forEach(function(j) {
+    if (!j.completed_at) return;
+    var d = new Date(j.completed_at);
+    var key = d.toLocaleDateString("en-KE", { month: "short", year: "numeric" });
+    map[key] = (map[key] || 0) + Number(j.total_price || 0);
+  });
+  return Object.keys(map).map(function(k) { return { label: k, value: map[k] }; });
+}
+
+export function autoRevenueBySalon(jobs) {
+  var map = {};
+  var names = {};
+  jobs.forEach(function(j) {
+    map[j.salon_id] = (map[j.salon_id] || 0) + Number(j.total_price || 0);
+    names[j.salon_id] = j.salon_name;
+  });
+  var rows = Object.keys(map).map(function(salonId) {
+    return { salonId: salonId, name: names[salonId] || "Unknown salon", value: map[salonId] };
+  });
+  rows.sort(function(a, b) { return b.value - a.value; });
+  return rows;
+}
