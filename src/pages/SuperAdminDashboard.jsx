@@ -52,6 +52,19 @@ function StatCard({ icon, label, value, sub }) {
 }
 
 export default function SuperAdminDashboard({ onLogout }) {
+  // Every product this dashboard can manage, and which `view` key(s)
+  // belong to it. Adding a future product (e.g. a third industry
+  // module) is just one more entry here plus its own `view === "..."`
+  // block elsewhere in this file -- the switcher itself needs no
+  // further changes. "salons" owns every view that isn't explicitly
+  // claimed by another product, so existing views (plans/audit/
+  // requests/health/analytics/detail) stay under Salons with zero
+  // changes to those blocks.
+  var PRODUCTS = [
+    { key: "salons", label: "🏠 Salons", homeView: "salons", views: ["salons", "detail", "plans", "audit", "requests", "health", "analytics"] },
+    { key: "auto",   label: "🚗 Auto",   homeView: "carwashes", views: ["carwashes"] },
+  ];
+
   var [view,         setView]         = useState("salons"); // "salons" | "detail"
   var [salons,       setSalons]       = useState([]);
   var [stats,        setStats]        = useState(null);
@@ -656,6 +669,33 @@ export default function SuperAdminDashboard({ onLogout }) {
     }
   }
 
+  async function toggleAutoModule(salon, enabled) {
+    setActionLoading(true);
+    var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    if (!token) { setActionLoading(false); alert("Session expired. Please sign out and sign in again."); return; }
+    var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/superadmin_set_module", {
+      method: "POST",
+      headers: {
+        apikey:         SUPABASE_KEY,
+        Authorization:  "Bearer " + token,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        p_salon_id:   salon.id,
+        p_module_key: "auto",
+        p_enabled:    enabled,
+      }),
+    });
+    setActionLoading(false);
+    if (res.ok) {
+      logAction(enabled ? "enable_auto_module" : "disable_auto_module", salon.id, salon.name, null);
+      await loadData();
+    } else {
+      var err = await res.json().catch(function() { return {}; });
+      alert("Failed to update Auto module: " + (err.message || res.status));
+    }
+  }
+
   async function reactivateSalon(salon) {
     setActionLoading(true);
     var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
@@ -1191,6 +1231,86 @@ export default function SuperAdminDashboard({ onLogout }) {
     );
   }
 
+  // ── CAR WASHES VIEW (Trimora Auto module) ───────────────────────────
+  // Salon = tenant; a "car wash" is just a salon with the Auto module
+  // enabled via salon_enabled_modules (module_key='auto'). There's no
+  // separate car-wash entity to create -- onboarding a new car wash
+  // means either enabling Auto for an existing salon, or creating a new
+  // salon (via +Manual / +Invite, unchanged) and then enabling Auto here.
+  // Toggling calls superadmin_set_module, a new SECURITY DEFINER RPC --
+  // salon_enabled_modules never had a superadmin write path before this
+  // (its own migration comment says toggling was meant to be a
+  // service-role-only action), so this is genuinely new capability, not
+  // a UI wired onto something that already worked another way.
+  if (view === "carwashes") {
+    var carwashEnabledCount = salons.filter(function(s) { return s.auto_enabled; }).length;
+    return (
+      <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
+        <div style={{ background: BLACK, padding: "16px 20px" }}>
+          <button onClick={function() { setView("salons"); }}
+            style={{ background: "none", border: "none", color: GOLD_DIM, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 8, padding: 0 }}>
+            ← Back
+          </button>
+          <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>🚗 Car Washes (Trimora Auto)</div>
+          <div style={{ fontSize: 11, color: GOLD_DIM + "aa", marginTop: 2, marginBottom: 10 }}>
+            {carwashEnabledCount} of {salons.length} salons onboarded · toggle to onboard or suspend a salon's Auto access
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            {PRODUCTS.map(function(p) {
+              var active = p.views.indexOf(view) !== -1;
+              return (
+                <button key={p.key} onClick={function() { setView(p.homeView); }} style={{
+                  flex: 1, padding: "9px 0", borderRadius: 10, border: "none",
+                  background: active ? GOLD : "rgba(255,255,255,0.08)",
+                  color: active ? BLACK : GOLD_DIM,
+                  fontSize: 12, fontWeight: 800, cursor: "pointer",
+                }}>
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={{ padding: 16 }}>
+          {salons.map(function(s) {
+            return (
+              <div key={s.id} style={{ background: WHITE, borderRadius: 14, padding: 14, marginBottom: 10, border: "1.5px solid " + GOLD_DIM + "33" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                      {s.salon_number && <span style={{ fontSize: 10, fontWeight: 900, color: WHITE, background: GOLD_DIM, borderRadius: 6, padding: "2px 7px", letterSpacing: "0.03em" }}>#{String(s.salon_number).padStart(3, "0")}</span>}
+                      <div style={{ fontSize: 14, fontWeight: 800, color: DARK }}>{s.name}</div>
+                      <Badge color={s.auto_enabled ? GREEN : "#999"}>{s.auto_enabled ? "Onboarded" : "Not onboarded"}</Badge>
+                      {s.suspended && <Badge color={RED}>Account suspended</Badge>}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#888" }}>
+                      /{s.slug}
+                      {s.auto_enabled && s.auto_enabled_at ? " · enabled " + new Date(s.auto_enabled_at).toLocaleDateString() : ""}
+                    </div>
+                  </div>
+                  <button
+                    disabled={actionLoading}
+                    onClick={function() { toggleAutoModule(s, !s.auto_enabled); }}
+                    style={{
+                      background: s.auto_enabled ? "#FEE2E2" : GOLD_DIM,
+                      color: s.auto_enabled ? RED : BLACK,
+                      border: "none", borderRadius: 8, padding: "8px 14px",
+                      fontSize: 12, fontWeight: 800, cursor: actionLoading ? "default" : "pointer",
+                      opacity: actionLoading ? 0.6 : 1,
+                    }}
+                  >
+                    {s.auto_enabled ? "Suspend" : "Onboard"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   // ── ANALYTICS VIEW ───────────────────────────────────────────────
   if (view === "analytics") {
     var revMonthly  = revenueByMonth();
@@ -1477,6 +1597,25 @@ export default function SuperAdminDashboard({ onLogout }) {
             <div style={{ fontSize: 10, color: GOLD_DIM, letterSpacing: "0.15em" }}>SUPER ADMIN</div>
           </div>
           {session && <div style={{ fontSize: 10, color: GOLD_DIM + "88" }}>{session.email}</div>}
+        </div>
+
+        {/* Product switcher -- data-driven off PRODUCTS above, so a
+            future product needs no changes here, just a new PRODUCTS
+            entry and its own view block. */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+          {PRODUCTS.map(function(p) {
+            var active = p.views.indexOf(view) !== -1;
+            return (
+              <button key={p.key} onClick={function() { setView(p.homeView); }} style={{
+                flex: 1, padding: "9px 0", borderRadius: 10, border: "none",
+                background: active ? GOLD : "rgba(255,255,255,0.08)",
+                color: active ? BLACK : GOLD_DIM,
+                fontSize: 12, fontWeight: 800, cursor: "pointer",
+              }}>
+                {p.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Horizontally scrollable button row on phones; spreads evenly
