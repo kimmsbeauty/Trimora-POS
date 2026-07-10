@@ -28,6 +28,24 @@ function money(n) {
   return "KSh " + (n || 0).toLocaleString();
 }
 
+function buildWhatsAppMessage(salon, job, lineItems, staffMember, dateLabel, vehicleLabel) {
+  var lines = [];
+  lines.push("🧾 *" + (salon && salon.name ? salon.name : "Trimora Auto") + " — Receipt*");
+  lines.push(dateLabel);
+  lines.push("");
+  if (vehicleLabel) lines.push("🚗 " + vehicleLabel);
+  if (staffMember) lines.push("👤 Attended by: " + staffMember.name);
+  lines.push("");
+  lineItems.forEach(function (li) {
+    var name = (li.auto_services && li.auto_services.name) || "Service";
+    lines.push(name + " — " + money(li.price));
+  });
+  lines.push("");
+  lines.push("*TOTAL: " + money(job.total_price) + "*");
+  lines.push(job.payment_status === "paid" ? "Paid via " + (job.payment_method || "—") : "Payment not yet collected");
+  return lines.join("\n");
+}
+
 export default function AutoReceipt({ salon, job, jobServices, staffById, onClose }) {
   var vehicle = job.auto_vehicles || {};
   var customer = job.customers || {};
@@ -103,12 +121,27 @@ export default function AutoReceipt({ salon, job, jobServices, staffById, onClos
             🖨️ Print
           </button>
           <button onClick={onClose} style={{
-            flex: 2, background: SIGNAL, border: "none", borderRadius: 10,
+            flex: 1, background: SIGNAL, border: "none", borderRadius: 10,
             padding: "11px 0", fontWeight: 800, fontSize: 13, cursor: "pointer", color: INK,
           }}>
             Close
           </button>
         </div>
+
+        {customer.phone && (
+          <a
+            href={"https://wa.me/254" + customer.phone.replace(/^0/, "").replace(/\D/g, "") +
+              "?text=" + encodeURIComponent(buildWhatsAppMessage(salon, job, lineItems, staffMember, dateLabel, vehicleLabel))}
+            target="_blank" rel="noreferrer"
+            style={{
+              display: "block", width: "100%", boxSizing: "border-box", marginTop: 8,
+              background: "#25D366", color: "#fff", borderRadius: 10, padding: "11px 0",
+              fontWeight: 800, fontSize: 13, textDecoration: "none", textAlign: "center",
+            }}
+          >
+            📲 Share via WhatsApp
+          </a>
+        )}
 
         <div style={{ textAlign: "center", marginTop: 16, paddingTop: 12, borderTop: "1px dashed " + CHROME + "33" }}>
           <div style={{ fontSize: 10, color: CHROME, letterSpacing: "0.08em" }}>
