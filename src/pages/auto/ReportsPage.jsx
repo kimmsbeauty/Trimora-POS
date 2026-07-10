@@ -31,6 +31,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { db } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
+import AutoExportButton from "../../components/AutoExportButton";
 import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "./theme";
 
 function money(n) {
@@ -66,7 +67,7 @@ export default function ReportsPage({ isAdmin }) {
 
   var load = useCallback(async function () {
     var results = await Promise.all([
-      db("GET", "auto_jobs", null, "?status=eq.completed&order=completed_at.desc&select=*,auto_vehicles(reg_number)"),
+      db("GET", "auto_jobs", null, "?status=eq.completed&order=completed_at.desc&select=*,auto_vehicles(reg_number,make),customers(name)"),
       db("GET", "auto_job_services", null, "?select=*,auto_services(name)"),
       db("GET", "auto_bays", null, "?order=label.asc"),
       db("GET", "staff", null, "?order=name.asc"),
@@ -272,6 +273,16 @@ export default function ReportsPage({ isAdmin }) {
         }}>
           Custom
         </button>
+        <div style={{ marginLeft: "auto" }}>
+          <AutoExportButton
+            jobs={jobsInRange}
+            jobServices={jobServices}
+            staffById={staffById}
+            staffRows={staffRows}
+            rangeLabel={rangeLabel}
+            salonName={salon && salon.name}
+          />
+        </div>
       </div>
 
       {isCustom && (
