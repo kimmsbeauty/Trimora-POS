@@ -30,6 +30,7 @@ function StatusBadge({ status }) {
 export default function SalesRepDashboard({ onLogout }) {
   var [requests, setRequests] = useState([]);
   var [loading, setLoading] = useState(true);
+  var [requestType, setRequestType] = useState("salon"); // "salon" | "auto"
   var [salonName, setSalonName] = useState("");
   var [ownerName, setOwnerName] = useState("");
   var [ownerEmail, setOwnerEmail] = useState("");
@@ -44,10 +45,20 @@ export default function SalesRepDashboard({ onLogout }) {
 
   useEffect(function() { loadRequests(); }, []);
 
+  // Fetches both request tables and merges them into one list, each row
+  // tagged with _type so the UI can badge it -- salon_onboarding_requests
+  // and auto_onboarding_requests are genuinely separate tables (not one
+  // table with a module flag), so this is a real merge, not a filter.
   async function loadRequests() {
     setLoading(true);
-    var rows = await repFetch("GET", "salon_onboarding_requests", "?order=created_at.desc");
-    if (rows) setRequests(rows);
+    var results = await Promise.all([
+      repFetch("GET", "salon_onboarding_requests", "?order=created_at.desc"),
+      repFetch("GET", "auto_onboarding_requests", "?order=created_at.desc"),
+    ]);
+    var salonRows = (results[0] || []).map(function(r) { return Object.assign({ _type: "salon" }, r); });
+    var autoRows  = (results[1] || []).map(function(r) { return Object.assign({ _type: "auto" }, r); });
+    var merged = salonRows.concat(autoRows).sort(function(a, b) { return new Date(b.created_at) - new Date(a.created_at); });
+    setRequests(merged);
     setLoading(false);
   }
 
@@ -70,7 +81,8 @@ export default function SalesRepDashboard({ onLogout }) {
       notes:        notes.trim()      || null,
     };
 
-    var result = await repFetch("POST", "salon_onboarding_requests", "", body);
+    var table = requestType === "auto" ? "auto_onboarding_requests" : "salon_onboarding_requests";
+    var result = await repFetch("POST", table, "", body);
     setSubmitting(false);
 
     if (!result) {
@@ -106,9 +118,26 @@ export default function SalesRepDashboard({ onLogout }) {
       <div style={{ padding: 16 }}>
         {/* Submission form */}
         <div style={{ background: WHITE, borderRadius: 14, padding: 18, marginBottom: 20, border: "1.5px solid " + GOLD_DIM + "33" }}>
-          <div style={{ fontSize: 14, fontWeight: 800, color: DARK, marginBottom: 4 }}>New Salon Submission</div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+            {[
+              { key: "salon", label: "🏪 New Salon" },
+              { key: "auto",  label: "🚗 New Car Wash" },
+            ].map(function(t) {
+              var active = requestType === t.key;
+              return (
+                <button key={t.key} onClick={function() { setRequestType(t.key); }} style={{
+                  flex: 1, padding: "8px 0", borderRadius: 8, border: active ? "none" : "1.5px solid " + GOLD_DIM + "44",
+                  background: active ? GOLD : "transparent", color: active ? BLACK : GOLD_DIM,
+                  fontSize: 12, fontWeight: 800, cursor: "pointer",
+                }}>
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: DARK, marginBottom: 4 }}>{requestType === "auto" ? "New Car Wash Submission" : "New Salon Submission"}</div>
           <div style={{ fontSize: 11, color: "#999", marginBottom: 14 }}>
-            This goes to Trimora's superadmin for review — the salon isn't created until it's approved.
+            This goes to Trimora's superadmin for review — {requestType === "auto" ? "the car wash isn't onboarded" : "the salon isn't created"} until it's approved.
           </div>
 
           <input
@@ -182,7 +211,12 @@ export default function SalesRepDashboard({ onLogout }) {
               <div key={r.id} style={{ background: WHITE, borderRadius: 14, padding: 16, marginBottom: 10, border: "1.5px solid " + GOLD_DIM + "33" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: DARK }}>{r.salon_name}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: DARK }}>{r.salon_name}</div>
+                      <span style={{ fontSize: 9, fontWeight: 800, padding: "2px 7px", borderRadius: 10, background: r._type === "auto" ? "#DBEAFE" : "#F5F0E8", color: r._type === "auto" ? "#1E40AF" : "#666" }}>
+                        {r._type === "auto" ? "🚗 Car Wash" : "🏪 Salon"}
+                      </span>
+                    </div>
                     {r.owner_name && <div style={{ fontSize: 12, color: "#888" }}>{r.owner_name}</div>}
                   </div>
                   <StatusBadge status={r.status} />

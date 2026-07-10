@@ -65,7 +65,7 @@ export default function SuperAdminDashboard({ onLogout }) {
   // changes to those blocks.
   var PRODUCTS = [
     { key: "salons", label: "🏠 Salons", homeView: "salons", views: ["salons", "detail", "plans", "audit", "requests", "health", "analytics"] },
-    { key: "auto",   label: "🚗 Auto",   homeView: "carwashes", views: ["carwashes", "autohealth", "autoanalytics", "autoaudit"] },
+    { key: "auto",   label: "🚗 Auto",   homeView: "carwashes", views: ["carwashes", "autohealth", "autoanalytics", "autoaudit", "autorequests"] },
   ];
 
   var [view,         setView]         = useState("salons"); // "salons" | "detail"
@@ -113,9 +113,11 @@ export default function SuperAdminDashboard({ onLogout }) {
   var [inviteName,   setInviteName]   = useState("");
   var [inviteLink,   setInviteLink]   = useState("");
   var [inviteLoading,setInviteLoading]= useState(false);
+  var [inviteModuleKey, setInviteModuleKey] = useState(null); // null = regular salon, "auto" = car wash
   var [manualModal,  setManualModal]  = useState(false);
   var [manualName,   setManualName]   = useState("");
   var [manualEmail,  setManualEmail]  = useState("");
+  var [manualModuleKey, setManualModuleKey] = useState(null); // null = regular salon, "auto" = car wash
   var [manualPass,   setManualPass]   = useState("");
   var [manualStaff,  setManualStaff]  = useState("");
   var [manualAdmin,  setManualAdmin]  = useState("");
@@ -128,6 +130,12 @@ export default function SuperAdminDashboard({ onLogout }) {
   var [requestsLoaded, setRequestsLoaded] = useState(false);
   var [rejectModal,  setRejectModal]  = useState(null); // request row being rejected
   var [rejectReason, setRejectReason] = useState("");
+  var [autoOnboardingRequests, setAutoOnboardingRequests] = useState([]);
+  var [autoRequestsLoading, setAutoRequestsLoading] = useState(false);
+  var [autoRequestsLoaded, setAutoRequestsLoaded] = useState(false);
+  var [autoApprovingId, setAutoApprovingId] = useState(null);
+  var [autoRejectModal, setAutoRejectModal] = useState(null);
+  var [autoRejectReason, setAutoRejectReason] = useState("");
   var [approvingId,  setApprovingId]  = useState(null);
   var [addRepModal,  setAddRepModal]  = useState(false);
   var [addRepEmail,  setAddRepEmail]  = useState("");
@@ -301,6 +309,106 @@ export default function SuperAdminDashboard({ onLogout }) {
     });
     setRejectModal(null);
     setRejectReason("");
+  }
+
+  // ── Auto Requests (separate from salon_onboarding_requests) ─────────
+  // Same three functions as above, operating on auto_onboarding_requests
+  // instead. Approving passes p_module_key: "auto" to create_invite, so
+  // complete_salon_onboarding auto-enables the module the moment the
+  // prospect completes onboarding -- same underlying mechanism as the
+  // salon flow, not a parallel implementation.
+  async function loadAutoOnboardingRequests() {
+    if (autoRequestsLoaded) return;
+    setAutoRequestsLoading(true);
+    var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    if (!token) { setAutoRequestsLoading(false); return; }
+    var res = await fetch(SUPABASE_URL + "/rest/v1/auto_onboarding_requests?order=created_at.desc", {
+      method: "GET",
+      headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + token },
+    });
+    if (res.ok) {
+      var rows = await res.json();
+      setAutoOnboardingRequests(rows || []);
+    }
+    setAutoRequestsLoaded(true);
+    setAutoRequestsLoading(false);
+  }
+
+  async function approveAutoRequest(request) {
+    setAutoApprovingId(request.id);
+    var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    if (!token) { setAutoApprovingId(null); alert("Session expired. Please sign out and sign in again."); return; }
+
+    var inviteRes = await fetch(SUPABASE_URL + "/rest/v1/rpc/create_invite", {
+      method: "POST",
+      headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ p_email: request.owner_email || null, p_salon_name: request.salon_name, p_module_key: "auto" }),
+    });
+
+    if (!inviteRes.ok) {
+      setAutoApprovingId(null);
+      alert("Failed to generate invite for this request.");
+      return;
+    }
+
+    var inviteToken = await inviteRes.json();
+
+    var updateRes = await fetch(SUPABASE_URL + "/rest/v1/auto_onboarding_requests?id=eq." + request.id, {
+      method: "PATCH",
+      headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({
+        status: "approved",
+        reviewed_by: session.uid,
+        reviewed_at: new Date().toISOString(),
+        resulting_invite_token: inviteToken,
+      }),
+    });
+
+    setAutoApprovingId(null);
+
+    if (!updateRes.ok) {
+      alert("Invite was created but updating the request record failed. Invite token: " + inviteToken);
+      return;
+    }
+
+    logAction("generate_invite_auto", null, request.salon_name, "Approved Auto onboarding request from rep, id " + request.id);
+    setAutoOnboardingRequests(function(prev) {
+      return prev.map(function(r) {
+        return r.id === request.id
+          ? Object.assign({}, r, { status: "approved", resulting_invite_token: inviteToken })
+          : r;
+      });
+    });
+  }
+
+  async function rejectAutoRequest() {
+    if (!autoRejectModal) return;
+    var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    if (!token) { alert("Session expired. Please sign out and sign in again."); return; }
+
+    var res = await fetch(SUPABASE_URL + "/rest/v1/auto_onboarding_requests?id=eq." + autoRejectModal.id, {
+      method: "PATCH",
+      headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({
+        status: "rejected",
+        rejection_reason: autoRejectReason.trim() || null,
+        reviewed_by: session.uid,
+        reviewed_at: new Date().toISOString(),
+      }),
+    });
+
+    if (!res.ok) { alert("Failed to reject request."); return; }
+
+    var rejectedId = autoRejectModal.id;
+    setAutoOnboardingRequests(function(prev) {
+      return prev.map(function(r) {
+        return r.id === rejectedId
+          ? Object.assign({}, r, { status: "rejected", rejection_reason: autoRejectReason.trim() || null })
+          : r;
+      });
+    });
+    setAutoRejectModal(null);
+    setAutoRejectReason("");
   }
 
   // Creates a new sales rep account. Requires a genuine service-role
@@ -587,6 +695,7 @@ export default function SuperAdminDashboard({ onLogout }) {
         body: JSON.stringify({
           p_email:      manualEmail.trim(),
           p_salon_name: manualName.trim(),
+          p_module_key: manualModuleKey,
         }),
       });
 
@@ -622,7 +731,7 @@ export default function SuperAdminDashboard({ onLogout }) {
 
       setManualLoading(false);
       setManualDone("✅ " + manualName + " onboarded successfully! POS: /" + slug + "/pos");
-      logAction("manual_onboard", null, manualName.trim(), "Slug: " + slug + " · Email: " + manualEmail.trim());
+      logAction(manualModuleKey === "auto" ? "manual_onboard_auto" : "manual_onboard", null, manualName.trim(), "Slug: " + slug + " · Email: " + manualEmail.trim());
       setManualName(""); setManualEmail(""); setManualPass("");
       setManualStaff(""); setManualAdmin("");
       await loadData();
@@ -648,6 +757,7 @@ export default function SuperAdminDashboard({ onLogout }) {
       body: JSON.stringify({
         p_email:      inviteEmail || null,
         p_salon_name: inviteName  || null,
+        p_module_key: inviteModuleKey,
       }),
     });
     setInviteLoading(false);
@@ -655,7 +765,7 @@ export default function SuperAdminDashboard({ onLogout }) {
       var inviteToken = await res.json();
       var link = window.location.origin + "/onboard?token=" + inviteToken;
       setInviteLink(link);
-      logAction("generate_invite", null, inviteName || null, inviteEmail ? "Pre-filled for: " + inviteEmail : null);
+      logAction(inviteModuleKey === "auto" ? "generate_invite_auto" : "generate_invite", null, inviteName || null, inviteEmail ? "Pre-filled for: " + inviteEmail : null);
     } else {
       alert("Failed to generate invite link.");
     }
@@ -984,6 +1094,8 @@ export default function SuperAdminDashboard({ onLogout }) {
       edit_salon_details:   { icon: "✏️", label: "Edited salon details" },
       manual_onboard:       { icon: "🏪", label: "Manually onboarded salon" },
       generate_invite:      { icon: "📨", label: "Generated invite link" },
+      manual_onboard_auto:  { icon: "🚗", label: "Manually onboarded car wash" },
+      generate_invite_auto: { icon: "🚗", label: "Generated Auto invite link" },
       update_plan_price:    { icon: "💲", label: "Updated plan price" },
       enable_auto_module:   { icon: "🚗", label: "Onboarded salon into Auto" },
       disable_auto_module:  { icon: "🚫", label: "Suspended salon's Auto access" },
@@ -1308,6 +1420,9 @@ export default function SuperAdminDashboard({ onLogout }) {
               { label: "📊 Analytics",  onClick: function() { setView("autoanalytics"); loadAutoAnalytics(); } },
               { label: "📋 Audit Log",  onClick: function() { setView("autoaudit"); loadAuditLog(); } },
               { label: "🩺 Health",     onClick: function() { setView("autohealth"); } },
+              { label: "🧑‍💼 Requests", onClick: function() { setView("autorequests"); loadAutoOnboardingRequests(); } },
+              { label: "+ Onboard",     onClick: function() { setManualModuleKey("auto"); setManualModal(true); setManualDone(""); } },
+              { label: "+ Invite",      onClick: function() { setInviteModuleKey("auto"); setInviteModal(true); setInviteLink(""); setInviteEmail(""); setInviteName(""); } },
             ].map(function(btn) {
               return (
                 <button key={btn.label} onClick={btn.onClick} style={{
@@ -1507,8 +1622,10 @@ export default function SuperAdminDashboard({ onLogout }) {
   // tagged actions. No new RPC, no separate log.
   if (view === "autoaudit") {
     var autoActionLabels = {
-      enable_auto_module:  { icon: "🚗", label: "Onboarded salon into Auto" },
-      disable_auto_module: { icon: "🚫", label: "Suspended salon's Auto access" },
+      enable_auto_module:   { icon: "🚗", label: "Onboarded salon into Auto" },
+      disable_auto_module:  { icon: "🚫", label: "Suspended salon's Auto access" },
+      manual_onboard_auto:  { icon: "🏪", label: "Manually onboarded car wash" },
+      generate_invite_auto: { icon: "📨", label: "Generated Auto invite link" },
     };
     var autoAuditEntries = auditLog.filter(function(e) { return autoActionLabels[e.action]; });
 
@@ -1548,6 +1665,116 @@ export default function SuperAdminDashboard({ onLogout }) {
             })
           )}
         </div>
+      </div>
+    );
+  }
+
+  // ── AUTO REQUESTS VIEW ───────────────────────────────────────────
+  // Mirrors the salon Onboarding Requests view exactly, against
+  // auto_onboarding_requests (a genuinely separate table, not a flag on
+  // salon_onboarding_requests) and approveAutoRequest()/rejectAutoRequest()
+  // above. Approving passes p_module_key: "auto" to create_invite -- the
+  // exact same RPC the salon flow uses, just tagged -- so the resulting
+  // salon has Auto enabled automatically the moment onboarding completes.
+  if (view === "autorequests") {
+    return (
+      <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
+        <div style={{ background: BLACK, padding: "16px 20px" }}>
+          <button onClick={function() { setView("carwashes"); }}
+            style={{ background: "none", border: "none", color: GOLD_DIM, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 8, padding: 0 }}>
+            ← Back
+          </button>
+          <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>🧑‍💼 Auto Requests</div>
+          <div style={{ fontSize: 11, color: GOLD_DIM + "aa", marginTop: 2 }}>Car wash onboarding requests, separate from salon requests</div>
+        </div>
+
+        <div style={{ padding: 16 }}>
+          {autoRequestsLoading ? (
+            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>Loading...</div>
+          ) : autoOnboardingRequests.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>No Auto onboarding requests yet.</div>
+          ) : (
+            autoOnboardingRequests.map(function(r) {
+              var statusMeta = {
+                pending:  { bg: "#FEF3C7", fg: "#92400E", label: "🕓 Pending" },
+                approved: { bg: "#D1FAE5", fg: "#065F46", label: "✅ Approved" },
+                rejected: { bg: "#FEE2E2", fg: "#991B1B", label: "❌ Rejected" },
+              }[r.status] || { bg: "#F5F0E8", fg: "#666", label: r.status };
+
+              return (
+                <div key={r.id} style={{ background: WHITE, borderRadius: 12, padding: 14, marginBottom: 10, border: "1.5px solid " + GOLD_DIM + "33" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: DARK }}>{r.salon_name}</div>
+                    <div style={{ padding: "3px 10px", borderRadius: 20, fontSize: 10, fontWeight: 800, background: statusMeta.bg, color: statusMeta.fg }}>
+                      {statusMeta.label}
+                    </div>
+                  </div>
+
+                  {(r.owner_name || r.owner_email || r.owner_phone) && (
+                    <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>
+                      {r.owner_name}{r.owner_name && (r.owner_email || r.owner_phone) ? " · " : ""}
+                      {r.owner_email}{r.owner_email && r.owner_phone ? " · " : ""}{r.owner_phone}
+                    </div>
+                  )}
+
+                  {r.notes && <div style={{ fontSize: 12, color: "#666", marginBottom: 8, fontStyle: "italic" }}>{r.notes}</div>}
+
+                  <div style={{ fontSize: 10, color: "#aaa", marginBottom: r.status === "pending" ? 10 : 0 }}>
+                    {new Date(r.created_at).toLocaleString("en-KE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  </div>
+
+                  {r.status === "pending" && (
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={function() { approveAutoRequest(r); }} disabled={autoApprovingId === r.id}
+                        style={{ flex: 1, background: "linear-gradient(135deg," + GOLD + "," + GOLD + ")", color: BLACK, border: "none", borderRadius: 8, padding: "9px 0", fontWeight: 900, fontSize: 12, cursor: autoApprovingId === r.id ? "not-allowed" : "pointer", opacity: autoApprovingId === r.id ? 0.6 : 1 }}>
+                        {autoApprovingId === r.id ? "Approving..." : "✅ Approve"}
+                      </button>
+                      <button onClick={function() { setAutoRejectModal(r); setAutoRejectReason(""); }}
+                        style={{ flex: 1, background: "#FEE2E2", color: "#991B1B", border: "none", borderRadius: 8, padding: "9px 0", fontWeight: 900, fontSize: 12, cursor: "pointer" }}>
+                        ❌ Reject
+                      </button>
+                    </div>
+                  )}
+
+                  {r.status === "approved" && r.resulting_invite_token && (
+                    <div style={{ background: "#F0FDF4", border: "1px solid " + GREEN + "55", borderRadius: 8, padding: 10, marginTop: 8 }}>
+                      <div style={{ fontSize: 10, color: "#065F46", fontWeight: 700, marginBottom: 4 }}>Invite link (Auto enables on completion):</div>
+                      <div style={{ fontSize: 10, color: DARK, wordBreak: "break-all", fontFamily: "monospace" }}>
+                        {window.location.origin + "/onboard?token=" + r.resulting_invite_token}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {autoRejectModal && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 100 }}>
+            <div style={{ background: WHITE, borderRadius: 16, padding: 24, maxWidth: 380, width: "100%" }}>
+              <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 4 }}>Reject Auto Request</div>
+              <div style={{ fontSize: 12, color: "#888", marginBottom: 14 }}>{autoRejectModal.salon_name}</div>
+              <textarea
+                placeholder="Reason (optional, visible to the rep)"
+                value={autoRejectReason}
+                onChange={function(e) { setAutoRejectReason(e.target.value); }}
+                rows={3}
+                style={{ width: "100%", borderRadius: 8, border: "1.5px solid " + GOLD_DIM + "33", padding: "10px 12px", fontSize: 13, boxSizing: "border-box", marginBottom: 14, fontFamily: "inherit", resize: "vertical" }}
+              />
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={function() { setAutoRejectModal(null); setAutoRejectReason(""); }}
+                  style={{ flex: 1, background: GRAY, color: DARK, border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                  Cancel
+                </button>
+                <button onClick={rejectAutoRequest}
+                  style={{ flex: 1, background: "#EF4444", color: WHITE, border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 900, fontSize: 13, cursor: "pointer" }}>
+                  Confirm Reject
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1875,8 +2102,8 @@ export default function SuperAdminDashboard({ onLogout }) {
             { label: "🧑‍💼 Requests", onClick: function() { setView("requests"); loadOnboardingRequests(); } },
             { label: "🩺 Health",     onClick: function() { setView("health"); } },
             { label: "📊 Analytics",  onClick: function() { setView("analytics"); loadAnalytics(); } },
-            { label: "+ Manual",      onClick: function() { setManualModal(true); setManualDone(""); } },
-            { label: "+ Invite",      onClick: function() { setInviteModal(true); setInviteLink(""); setInviteEmail(""); setInviteName(""); }, highlight: true },
+            { label: "+ Manual",      onClick: function() { setManualModuleKey(null); setManualModal(true); setManualDone(""); } },
+            { label: "+ Invite",      onClick: function() { setInviteModuleKey(null); setInviteModal(true); setInviteLink(""); setInviteEmail(""); setInviteName(""); }, highlight: true },
             { label: "Sign Out",      onClick: handleLogout, muted: true },
           ].map(function(btn) {
             return (
@@ -2011,8 +2238,8 @@ export default function SuperAdminDashboard({ onLogout }) {
       {manualModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 2000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
           <div style={{ background: WHITE, borderRadius: "20px 20px 0 0", padding: "24px 20px 32px", width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}>
-            <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 4 }}>🏪 Manual Onboarding</div>
-            <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>Create a salon directly without an invite link.</div>
+            <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 4 }}>{manualModuleKey === "auto" ? "🚗 Onboard Car Wash" : "🏪 Manual Onboarding"}</div>
+            <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>{manualModuleKey === "auto" ? "Create a salon with Auto enabled from the start, without an invite link." : "Create a salon directly without an invite link."}</div>
 
             {[
               ["Salon Name", manualName, setManualName, "text", "e.g. Grace Beauty Studio"],
@@ -2065,8 +2292,8 @@ export default function SuperAdminDashboard({ onLogout }) {
       {inviteModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 2000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
           <div style={{ background: WHITE, borderRadius: "20px 20px 0 0", padding: "24px 20px 32px", width: "100%", maxWidth: 480 }}>
-            <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 4 }}>🔗 Generate Invite Link</div>
-            <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>One-time link, expires in 7 days.</div>
+            <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 4 }}>{inviteModuleKey === "auto" ? "🚗 Invite Car Wash" : "🔗 Generate Invite Link"}</div>
+            <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>{inviteModuleKey === "auto" ? "One-time link, Auto enabled automatically on completion. Expires in 7 days." : "One-time link, expires in 7 days."}</div>
 
             <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 6, textTransform: "uppercase" }}>Prospect's Email (optional — pre-fills the form)</label>
             <input
