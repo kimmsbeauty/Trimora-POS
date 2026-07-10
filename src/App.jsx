@@ -7,6 +7,7 @@ import AutoApp from "./pages/AutoApp";
 import SalonBrandmark from "./components/SalonBrandmark";
 import LoginPage from "./pages/LoginPage";
 import RatingPage from "./pages/RatingPage";
+import AutoRatingPage from "./pages/AutoRatingPage";
 import TrimoraLandingPage from "./pages/TrimoraLandingPage";
 import { getDeviceLoginStatus, silentDeviceLogin, clearDeviceAuth } from "./lib/deviceAuth";
 import { SalonGate, fetchPublicSalonBranding } from "./lib/SalonContext";
@@ -220,6 +221,7 @@ export default function App() {
 
         <Route path="/:slug/booking" element={<SalonGate mode="public"><BookingPage /></SalonGate>} />
         <Route path="/:slug/rate/:token" element={<SalonGate mode="public"><RatingPage /></SalonGate>} />
+        <Route path="/:slug/auto/rate/:token" element={<SalonGate mode="public"><AutoRatingPage /></SalonGate>} />
         <Route path="/:slug/pos" element={<DeviceGate><SalonGate mode="authenticated"><StaffRoute /></SalonGate></DeviceGate>} />
         <Route path="/:slug/auto" element={<DeviceGate><SalonGate mode="authenticated"><AutoApp /></SalonGate></DeviceGate>} />
 

@@ -28,6 +28,7 @@ import { db } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
 import AutoMpesaPaymentModal from "../../components/AutoMpesaPaymentModal";
 import AutoReceipt from "../../components/AutoReceipt";
+import AutoFeedbackModal from "../../components/AutoFeedbackModal";
 import { computeStockAfterDeduction } from "../../lib/saleLogic";
 import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "./theme";
 
@@ -53,6 +54,14 @@ function defaultCommission(job, staffById) {
 function defaultCommissionPct(job, staffById) {
   var staffMember = staffById[job.assigned_staff_id];
   return staffMember && staffMember.commission_pct != null ? staffMember.commission_pct : 40;
+}
+
+// Matches POSApp.jsx's generateFeedbackToken exactly -- same 12 random
+// bytes hex-encoded, same source of randomness (window.crypto).
+function generateFeedbackToken() {
+  var bytes = new Uint8Array(12);
+  window.crypto.getRandomValues(bytes);
+  return Array.from(bytes).map(function (b) { return b.toString(16).padStart(2, "0"); }).join("");
 }
 
 function elapsedMinutes(isoString) {
@@ -91,6 +100,10 @@ export default function BoardPage() {
   // read its final commission/payment_method/completed_at.
   var receiptJobState = useState(null); var receiptJob = receiptJobState[0]; var setReceiptJob = receiptJobState[1];
   var receiptServicesState = useState([]); var receiptServices = receiptServicesState[0]; var setReceiptServices = receiptServicesState[1];
+  var showInPersonFeedbackState = useState(false);
+  var showInPersonFeedback = showInPersonFeedbackState[0]; var setShowInPersonFeedback = showInPersonFeedbackState[1];
+  var feedbackSentNoticeState = useState(false);
+  var feedbackSentNotice = feedbackSentNoticeState[0]; var setFeedbackSentNotice = feedbackSentNoticeState[1];
 
   var load = useCallback(async function () {
     var results = await Promise.all([
@@ -204,6 +217,7 @@ export default function BoardPage() {
     if (next === "ready_for_collection") patch.ready_at = new Date().toISOString();
     if (next === "completed") {
       patch.completed_at = new Date().toISOString();
+      patch.feedback_token = generateFeedbackToken();
       var editedValue = commissionEdits[job.id];
       var parsed = editedValue !== undefined ? parseInt(editedValue, 10) : NaN;
       patch.commission = isNaN(parsed) ? defaultCommission(job, staffById) : parsed;
@@ -282,6 +296,40 @@ export default function BoardPage() {
 
   function payTill() {
     setShowMpesaModal(true);
+  }
+
+  // Matches POSApp.jsx's sendFeedbackRequest exactly: same refusal
+  // rather than sending a link guaranteed to fail if slug is somehow
+  // missing, same wa.me phone-cleaning convention, same message shape.
+  function sendFeedbackRequest(phone, clientFirstName, token) {
+    if (!phone) return;
+    if (!salon || !salon.slug) {
+      console.error(
+        "[BoardPage] Refusing to send a feedback rating link: salon or " +
+        "salon.slug is missing. This should never happen for a loaded salon."
+      );
+      return;
+    }
+    var cleanPhone = phone.replace(/^0/, "254").replace(/\D/g, "");
+    var ratingPath = "/" + salon.slug + "/auto/rate/" + token;
+    var ratingUrl = window.location.origin + ratingPath;
+    var message = "Hi " + clientFirstName + "! 👋 Thank you for visiting " + (salon.name || "us") + " 🚗\n\n" +
+      "We'd love to hear how your wash went — it only takes a few seconds:\n" + ratingUrl + "\n\n" +
+      "— " + (salon.name || "Trimora Auto");
+    var waLink = "https://wa.me/" + cleanPhone + "?text=" + encodeURIComponent(message);
+    window.open(waLink, "_blank");
+  }
+
+  async function submitInPersonFeedback(data) {
+    if (!receiptJob) return;
+    var customer = receiptJob.customers || {};
+    var saved = await db("POST", "feedback", {
+      rating: data.rating, note: data.note || null, stylist: data.staffName || null,
+      client: customer.name || null, feedback_token: receiptJob.feedback_token || null,
+      date: data.date, time: data.time,
+    });
+    if (!saved) { alert("Couldn't save this feedback right now. Please try again."); return; }
+    setShowInPersonFeedback(false);
   }
 
   function handleMpesaPaid(job, method) {
@@ -583,7 +631,33 @@ export default function BoardPage() {
           jobServices={receiptServices}
           staffById={staffById}
           onClose={function () { setReceiptJob(null); setReceiptServices([]); }}
+          onSendFeedback={function () {
+            var customer = receiptJob.customers || {};
+            if (!customer.phone) { alert("No phone number on file for this customer."); return; }
+            sendFeedbackRequest(customer.phone, (customer.name || "").split(" ")[0], receiptJob.feedback_token);
+            setFeedbackSentNotice(true);
+            setTimeout(function () { setFeedbackSentNotice(false); }, 4000);
+          }}
+          onInPersonFeedback={function () { setShowInPersonFeedback(true); }}
         />
+      )}
+
+      {showInPersonFeedback && receiptJob && (
+        <AutoFeedbackModal
+          staffList={staff}
+          onClose={function () { setShowInPersonFeedback(false); }}
+          onSubmit={submitInPersonFeedback}
+        />
+      )}
+
+      {feedbackSentNotice && (
+        <div style={{
+          position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 2100,
+          background: STEEL, border: "1.5px solid " + SIGNAL, borderRadius: 12, padding: "12px 20px",
+          display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 700, color: PAPER,
+        }}>
+          <span style={{ fontSize: 16 }}>🚗</span> Feedback request sent!
+        </div>
       )}
     </div>
   );

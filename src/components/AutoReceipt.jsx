@@ -46,7 +46,7 @@ function buildWhatsAppMessage(salon, job, lineItems, staffMember, dateLabel, veh
   return lines.join("\n");
 }
 
-export default function AutoReceipt({ salon, job, jobServices, staffById, onClose }) {
+export default function AutoReceipt({ salon, job, jobServices, staffById, onClose, onSendFeedback, onInPersonFeedback }) {
   var vehicle = job.auto_vehicles || {};
   var customer = job.customers || {};
   var staffMember = staffById ? staffById[job.assigned_staff_id] : null;
@@ -141,6 +141,27 @@ export default function AutoReceipt({ salon, job, jobServices, staffById, onClos
           >
             📲 Share via WhatsApp
           </a>
+        )}
+
+        {job.feedback_token && (onSendFeedback || onInPersonFeedback) && (
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            {onSendFeedback && (
+              <button onClick={onSendFeedback} style={{
+                flex: 1, background: "transparent", border: "1px solid " + CHROME + "55", borderRadius: 10,
+                padding: "9px 0", fontWeight: 700, fontSize: 12, cursor: "pointer", color: CHROME,
+              }}>
+                💬 Send Feedback Link
+              </button>
+            )}
+            {onInPersonFeedback && (
+              <button onClick={onInPersonFeedback} style={{
+                flex: 1, background: "transparent", border: "1px solid " + CHROME + "55", borderRadius: 10,
+                padding: "9px 0", fontWeight: 700, fontSize: 12, cursor: "pointer", color: CHROME,
+              }}>
+                ⭐ Rate Now
+              </button>
+            )}
+          </div>
         )}
 
         <div style={{ textAlign: "center", marginTop: 16, paddingTop: 12, borderTop: "1px dashed " + CHROME + "33" }}>
