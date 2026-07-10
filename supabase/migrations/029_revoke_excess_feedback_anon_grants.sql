@@ -1,0 +1,24 @@
+-- Found while auditing the `feedback` table before building Auto's
+-- version of customer feedback/ratings (feature-parity item #6).
+--
+-- `anon` (the public key baked into the deployed JS bundle) had
+-- SELECT/UPDATE/DELETE/TRUNCATE grants on `feedback`, alongside the
+-- one it actually needs (INSERT, for the public rating page). RLS is
+-- enabled and correctly blocks anon from SELECT/UPDATE/DELETE in
+-- practice (no policy exists for those roles/commands) -- but Postgres
+-- RLS has a documented blind spot: policies do not apply to TRUNCATE
+-- at all, since it operates on the whole table rather than row by
+-- row. So anon's TRUNCATE grant was not protected by anything.
+--
+-- Not actively exploitable through the app as built -- PostgREST's
+-- REST interface only exposes SELECT/INSERT/UPDATE/DELETE as HTTP
+-- verbs, not TRUNCATE, so nothing in the UI can trigger it. Latent
+-- excess privilege, not a live hole, but the same category of thing
+-- the platform_stats/salon_directory fix earlier removed on principle:
+-- anon should hold exactly the grants the public flow needs and
+-- nothing else.
+--
+-- feedback_anon_insert (the actual policy the rating page relies on)
+-- is untouched by this.
+
+revoke select, update, delete, truncate on public.feedback from anon;
