@@ -23,6 +23,7 @@ import StaffPage from "./auto/StaffPage";
 import ServicesPage from "./auto/ServicesPage";
 import ReportsPage from "./auto/ReportsPage";
 import ExpensesPage from "./auto/ExpensesPage";
+import AutoSetupChecklist from "../components/AutoSetupChecklist";
 import { useSalon } from "../lib/SalonContext";
 import { db } from "../lib/db";
 import { INK, STEEL, CHROME, PAPER, SIGNAL } from "./auto/theme";
@@ -108,6 +109,7 @@ function AutoStaffRoute() {
 
   return (
     <div>
+      {isAdmin && <AutoSetupChecklist onNavigate={setTab} />}
       <div style={{ display: "flex", background: STEEL, borderBottom: "1px solid rgba(143,166,184,0.15)" }}>
         {visibleTabs.map(function (t) {
           return <div key={t.key} style={tabStyle(t.key)} onClick={function () { setTab(t.key); }}>{t.label}</div>;
