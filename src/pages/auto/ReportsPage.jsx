@@ -15,6 +15,13 @@
 // plan was written: a staff commission leaderboard (Phase 4) and a
 // payment method breakdown (Phase 5).
 //
+// Feature-parity item #2 (End-of-day summary, matching POS's own
+// EndOfDaySummary.jsx): rather than duplicating the aggregation logic
+// in a separate component, the Summary card's WhatsApp share button
+// reuses whatever's already computed for the currently selected range
+// -- only rendered when range === "today", so an end-of-day summary
+// can never be shared while actually showing some other range's data.
+//
 // Inventory usage joins auto_stock_movements against the shared stock
 // table for human-readable item names, same as Top Services joins
 // against auto_services -- both tables were empty in production when
@@ -23,6 +30,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { db } from "../../lib/db";
+import { useSalon } from "../../lib/SalonContext";
 import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "./theme";
 
 function money(n) {
@@ -45,6 +53,7 @@ var RANGE_PRESETS = [
 ];
 
 export default function ReportsPage({ isAdmin }) {
+  var salon = useSalon();
   var loadingState = useState(true); var loading = loadingState[0]; var setLoading = loadingState[1];
   var jobsState = useState([]); var jobs = jobsState[0]; var setJobs = jobsState[1];
   var jobServicesState = useState([]); var jobServices = jobServicesState[0]; var setJobServices = jobServicesState[1];
@@ -179,6 +188,42 @@ export default function ReportsPage({ isAdmin }) {
   });
   var stockRows = Object.entries(stockAgg);
 
+  // End-of-day share -- reuses the exact same jobsInRange/totalRevenue/
+  // topServices/staffRows/byMethod computed above for whatever range is
+  // selected. Only rendered when range === "today" (see the Summary
+  // card below) so it can't be shared while mislabeled as some other
+  // range's data.
+  function buildEodMessage() {
+    var lines = [];
+    lines.push("🚗 *" + ((salon && salon.name) || "Trimora Auto") + " — Daily Close*");
+    lines.push(new Date().toLocaleDateString("en-KE"));
+    lines.push("");
+    lines.push("💰 *Revenue*: " + money(totalRevenue));
+    lines.push("🧾 Jobs: " + jobCount + " · Avg ticket: " + money(avgTicket));
+    lines.push("");
+    lines.push("💳 *Payments*");
+    lines.push("Cash: " + money(byMethod.Cash));
+    lines.push("M-Pesa (Till): " + money(byMethod.Till));
+    if (byMethod.unpaid > 0) lines.push("Unpaid: " + money(byMethod.unpaid));
+    lines.push("");
+    lines.push("👩‍💼 *Commission Owed*: " + money(totalCommission));
+    if (staffRows.length > 0) {
+      staffRows.forEach(function (s) {
+        lines.push(s.name + ": " + money(s.commission) + " (" + s.count + " job" + (s.count !== 1 ? "s" : "") + ")");
+      });
+    }
+    lines.push("");
+    lines.push("🧴 *Top Services*");
+    if (topServices.length === 0) {
+      lines.push("None today.");
+    } else {
+      topServices.forEach(function (e) {
+        lines.push(e[0] + " — " + e[1].count + "× · " + money(e[1].revenue));
+      });
+    }
+    return lines.join("\n");
+  }
+
   function Card(props) {
     return <div style={Object.assign({ background: STEEL, borderRadius: 14, padding: 16, marginBottom: 12, border: "1px solid " + CHROME + "33" }, props.style || {})}>{props.children}</div>;
   }
@@ -224,6 +269,20 @@ export default function ReportsPage({ isAdmin }) {
           })}
         </div>
         <div style={{ fontSize: 11, color: CHROME, marginTop: 10 }}>Total commission owed: {money(totalCommission)}</div>
+        {range === "today" && (
+          <a
+            href={"https://wa.me/254" + ((salon && salon.contact_phone) || "113828280").replace(/^0/, "").replace(/\D/g, "") +
+              "?text=" + encodeURIComponent(buildEodMessage())}
+            target="_blank" rel="noreferrer"
+            style={{
+              display: "block", width: "100%", boxSizing: "border-box", marginTop: 12,
+              background: "#25D366", color: "#fff", borderRadius: 10, padding: "11px 0",
+              fontWeight: 800, fontSize: 13, textDecoration: "none", textAlign: "center",
+            }}
+          >
+            📲 Share End-of-Day Summary
+          </a>
+        )}
       </Card>
 
       <Card>
