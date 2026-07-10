@@ -32,6 +32,7 @@ import { useState, useEffect, useCallback } from "react";
 import { db } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
 import AutoExportButton from "../../components/AutoExportButton";
+import AutoAskTrimora from "../../components/AutoAskTrimora";
 import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "./theme";
 
 function money(n) {
@@ -253,6 +254,7 @@ export default function ReportsPage({ isAdmin }) {
 
   return (
     <div style={{ minHeight: "100vh", background: INK, padding: 16, paddingBottom: 40, fontFamily: "system-ui, -apple-system, sans-serif" }}>
+      <AutoAskTrimora />
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         {RANGE_PRESETS.map(function (p) {
           var active = p.key === range;
