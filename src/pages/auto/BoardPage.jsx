@@ -110,7 +110,7 @@ export default function BoardPage() {
       db("GET", "auto_bays", null, "?order=label.asc"),
       db("GET", "auto_jobs", null,
         "?status=in.(" + ACTIVE_STATUSES + ")&order=checked_in_at.asc" +
-        "&select=*,auto_vehicles(reg_number,make,model,color),customers(name,phone)"),
+        "&select=*,auto_vehicles(reg_number,make,model,color),customers(id,name,phone,visit_count,total_spend)"),
       db("GET", "staff", null, "?active=eq.true&order=name.asc"),
     ]);
     setBays(results[0] || []);
@@ -245,6 +245,20 @@ export default function BoardPage() {
       await db("PATCH", "auto_bays", { current_job_id: null }, "?id=eq." + job.bay_id);
     }
 
+    // Loyalty (feature-parity item #7): increments the same shared
+    // customers.visit_count/total_spend columns POS's own completeSale()
+    // writes to -- matches POS's exact read-then-increment pattern
+    // (not atomic, same as POS, not a new risk introduced here). A
+    // customer's loyalty tier reflects their whole relationship with
+    // the business, salon and car-wash combined, same reasoning as
+    // Expenses being one shared ledger rather than a separate Auto copy.
+    if (next === "completed" && job.customer_id) {
+      var cust = job.customers || {};
+      var newVisits = (cust.visit_count || 0) + 1;
+      var newSpend = (cust.total_spend || 0) + (job.total_price || 0);
+      await db("PATCH", "customers", { visit_count: newVisits, total_spend: newSpend }, "?id=eq." + job.customer_id);
+    }
+
     await db("POST", "auto_job_events", {
       job_id: job.id, event_type: next === "completed" ? "completed" : "status_changed",
       payload: { from: job.status, to: next },
@@ -263,7 +277,7 @@ export default function BoardPage() {
       });
 
       var finalized = await db("GET", "auto_jobs", null,
-        "?id=eq." + job.id + "&select=*,auto_vehicles(reg_number,make,model,color),customers(name,phone)");
+        "?id=eq." + job.id + "&select=*,auto_vehicles(reg_number,make,model,color),customers(id,name,phone,visit_count,total_spend)");
       var services = await db("GET", "auto_job_services", null,
         "?job_id=eq." + job.id + "&select=*,auto_services(name)");
       if (finalized && finalized[0]) {

@@ -22,6 +22,7 @@
 // name/tagline/logo, no POS-specific styling baked in).
 
 import SalonBrandmark from "./SalonBrandmark";
+import LoyaltyBadge from "./LoyaltyBadge";
 import { INK, STEEL, CHROME, SIGNAL, PAPER } from "../pages/auto/theme";
 
 function money(n) {
@@ -76,8 +77,9 @@ export default function AutoReceipt({ salon, job, jobServices, staffById, onClos
           <b style={{ color: PAPER }}>Vehicle:</b> {vehicleLabel || "—"}
         </div>
         {customer.name && (
-          <div style={{ fontSize: 12, color: CHROME, marginBottom: 4 }}>
+          <div style={{ fontSize: 12, color: CHROME, marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
             <b style={{ color: PAPER }}>Customer:</b> {customer.name}
+            <LoyaltyBadge customer={customer} size="sm" />
           </div>
         )}
         {staffMember && (

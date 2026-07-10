@@ -11,6 +11,7 @@
 import { useState, useEffect } from "react";
 import { useSalon } from "../../lib/SalonContext";
 import { db } from "../../lib/db";
+import LoyaltyBadge from "../../components/LoyaltyBadge";
 import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "./theme";
 
 function normalizeReg(raw) {
@@ -68,7 +69,7 @@ export default function CheckInPage() {
     if (!reg) return;
     setSearchStatus("searching");
     var rows = await db("GET", "auto_vehicles", null,
-      "?reg_number=eq." + encodeURIComponent(reg) + "&select=*,customers(id,name,phone)");
+      "?reg_number=eq." + encodeURIComponent(reg) + "&select=*,customers(id,name,phone,visit_count,total_spend)");
     if (rows && rows.length > 0) {
       setVehicle(rows[0]);
       setSearchStatus("found");
@@ -241,8 +242,9 @@ export default function CheckInPage() {
             <div style={{ fontSize: 16, fontWeight: 800, color: PAPER, marginBottom: 4 }}>
               {[vehicle.make, vehicle.model, vehicle.color].filter(Boolean).join(" · ") || "Vehicle"}
             </div>
-            <div style={{ fontSize: 13, color: CHROME }}>
+            <div style={{ fontSize: 13, color: CHROME, display: "flex", alignItems: "center", gap: 6 }}>
               {vehicle.customers ? (vehicle.customers.name + " · " + vehicle.customers.phone) : "Customer on file"}
+              {vehicle.customers && <LoyaltyBadge customer={vehicle.customers} size="sm" />}
             </div>
           </div>
         )}
