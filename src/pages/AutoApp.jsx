@@ -84,7 +84,7 @@ function AutoStaffRoute() {
   var tabStyle = function (key) {
     var active = tab === key;
     return {
-      flex: 1, textAlign: "center", padding: "12px 0", fontSize: 13, fontWeight: 800,
+      flexShrink: 0, whiteSpace: "nowrap", textAlign: "center", padding: "12px 18px", fontSize: 13, fontWeight: 800,
       cursor: "pointer", color: active ? INK : CHROME, background: active ? SIGNAL : "transparent",
     };
   };
@@ -110,11 +110,15 @@ function AutoStaffRoute() {
   return (
     <div>
       {isAdmin && <AutoSetupChecklist onNavigate={setTab} />}
-      <div style={{ display: "flex", background: STEEL, borderBottom: "1px solid rgba(143,166,184,0.15)" }}>
+      <div className="auto-tab-scroll" style={{
+        display: "flex", background: STEEL, borderBottom: "1px solid rgba(143,166,184,0.15)",
+        overflowX: "auto", WebkitOverflowScrolling: "touch", scrollbarWidth: "none",
+      }}>
         {visibleTabs.map(function (t) {
           return <div key={t.key} style={tabStyle(t.key)} onClick={function () { setTab(t.key); }}>{t.label}</div>;
         })}
       </div>
+      <style>{".auto-tab-scroll::-webkit-scrollbar { display: none; }"}</style>
       {page}
     </div>
   );
