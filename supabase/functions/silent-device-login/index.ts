@@ -4,12 +4,21 @@
 // any human-typed credentials.
 //
 // Flow:
-//  1. Look up salon_auth_users + salon_device_secrets for this salon_id
-//  2. Attempt password grant with stored secret
-//  3. If password grant fails (secret out of sync — e.g. after a PIN reset
-//     which sets a placeholder password), auto-resync: generate a new secret,
-//     update Auth password, upsert secret, retry grant
-//  4. Return access_token + refresh_token
+//  1. Look up salon_auth_users for this salon_id (this one IS a hard
+//     requirement -- if it's missing, something is fundamentally wrong
+//     with how the salon was provisioned, not something this function
+//     should try to self-heal).
+//  2. Look up salon_device_secrets for this salon_id.
+//  3. Attempt password grant with the stored secret, if one exists.
+//  4. Auto-resync whenever attempt 3 didn't succeed -- either because
+//     no secret row existed yet at all (e.g. a salon whose onboarding
+//     created the Auth user but never provisioned an initial secret --
+//     found and fixed 2026-07-11 for a newly onboarded car wash), or
+//     because a stored secret is stale (e.g. after a PIN reset sets a
+//     placeholder password). Both cases get the same fix: generate a
+//     new secret, set it as the Auth user's password, upsert the
+//     secret row, retry the grant.
+//  5. Return access_token + refresh_token.
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -65,7 +74,10 @@ serve(async (req) => {
         { status: 403, headers: { ...CORS, "Content-Type": "application/json" } });
     }
 
-    // Get auth user
+    // Get auth user -- still a hard requirement, not auto-healed. If
+    // this row is missing, the salon was never provisioned with a
+    // Supabase Auth user at all, which is a different, deeper problem
+    // than a missing/stale secret.
     const { data: authUserRow, error: authUserError } = await supabase
       .from("salon_auth_users")
       .select("id")
@@ -74,18 +86,6 @@ serve(async (req) => {
 
     if (authUserError || !authUserRow) {
       return new Response(JSON.stringify({ error: "No device account found for this salon. Please contact support." }),
-        { status: 404, headers: { ...CORS, "Content-Type": "application/json" } });
-    }
-
-    // Get stored secret
-    const { data: secretRow, error: secretError } = await supabase
-      .from("salon_device_secrets")
-      .select("secret")
-      .eq("salon_id", salon_id)
-      .single();
-
-    if (secretError || !secretRow) {
-      return new Response(JSON.stringify({ error: "Device login not set up for this salon yet. Please contact support." }),
         { status: 404, headers: { ...CORS, "Content-Type": "application/json" } });
     }
 
@@ -98,13 +98,28 @@ serve(async (req) => {
 
     const email = userData.user.email;
 
-    // Attempt 1: use stored secret
-    let tokenData = await attemptPasswordGrant(supabaseUrl, serviceKey, email, secretRow.secret);
+    // Get stored secret -- no longer a hard failure if missing. A
+    // missing secret row and a stale/wrong secret get the same fix
+    // below (auto-resync), so both fall through to that same path
+    // instead of the missing-row case being a dead end.
+    const { data: secretRow } = await supabase
+      .from("salon_device_secrets")
+      .select("secret")
+      .eq("salon_id", salon_id)
+      .single();
 
-    // Attempt 2: if grant failed, auto-resync secret and retry
-    // This heals the mismatch caused by PIN reset setting a placeholder password
+    // Attempt 1: use stored secret, if one exists
+    let tokenData = secretRow ? await attemptPasswordGrant(supabaseUrl, serviceKey, email, secretRow.secret) : null;
+
+    // Attempt 2: no secret existed yet, or the grant failed with the
+    // stored one -- auto-resync: generate a new secret, set it as the
+    // Auth user's password, upsert the secret row, retry.
     if (!tokenData) {
-      console.log("Password grant failed for salon", salon_id, "— auto-resyncing device secret");
+      console.log(
+        secretRow
+          ? "Password grant failed for salon " + salon_id + " — auto-resyncing device secret"
+          : "No device secret on file for salon " + salon_id + " — provisioning one now"
+      );
 
       const newSecret = randomSecret();
 

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import SalonBrandmark from "../components/SalonBrandmark";
 import GoldBtn from "../components/GoldBtn";
 import { SUPABASE_URL, SUPABASE_KEY, GOLD, BLACK, DARK, WHITE, RED } from "../lib/constants.js";
+import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "./auto/theme";
 import { lighten, darken } from "../lib/colorUtils";
 import { useParams } from "react-router-dom";
 import { useSalon, fetchPublicSalonBranding } from "../lib/SalonContext";
@@ -33,7 +34,7 @@ async function verifyPin(role, pin) {
   }
 }
 
-export default function LoginPage({ onLogin }) {
+export default function LoginPage({ onLogin, isAuto }) {
   // This component also renders on the legacy unprefixed /pos route,
   // which is never wrapped in SalonGate — so contextSalon is genuinely
   // null there, not just missing fields. We do an independent,
@@ -82,6 +83,23 @@ export default function LoginPage({ onLogin }) {
   var primaryDim = darken(primary, 18);
   var bgStop3   = lighten(secondary, 3.5);
   var bookingHref = (salon && salon.slug) ? "/" + salon.slug + "/booking" : "/booking";
+
+  // Feature-parity fix: Auto's login uses its own fixed theme.js
+  // palette (same as every other Auto screen -- Board, Check-In,
+  // Services), not per-salon custom branding the way POS's own login
+  // does. Mirrors the exact isAuto pattern OnboardingPage.jsx already
+  // established for the same distinction.
+  var pageBg     = isAuto ? INK : "linear-gradient(160deg," + BLACK + " 0%," + secondary + " 60%," + bgStop3 + " 100%)";
+  var panelBg    = isAuto ? STEEL : "rgba(255,255,255,0.04)";
+  var panelBorder = isAuto ? CHROME + "44" : primaryDim;
+  var accentColor = isAuto ? SIGNAL : primary;
+  var accentColorLt = isAuto ? SIGNAL : primaryLt;
+  var errorColor = isAuto ? ALERT : RED;
+  var textColor  = isAuto ? PAPER : WHITE;
+  var dimColor   = isAuto ? CHROME : "rgba(255,255,255,0.5)";
+  var faintColor = isAuto ? CHROME + "88" : "rgba(255,255,255,0.25)";
+  var inputBg    = isAuto ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.06)";
+  var buttonTextColor = isAuto ? INK : BLACK;
 
   var pinState     = useState("");
   var pin          = pinState[0]; var setPin = pinState[1];
@@ -183,7 +201,7 @@ export default function LoginPage({ onLogin }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(160deg," + BLACK + " 0%," + secondary + " 60%," + bgStop3 + " 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+    <div style={{ minHeight: "100vh", background: pageBg, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
 
       {/* Animated CSS */}
       <style>{`
@@ -202,37 +220,37 @@ export default function LoginPage({ onLogin }) {
         .shake { animation: shake 0.6s ease; }
       `}</style>
 
-      <div style={{ position: "absolute", width: 280, height: 280, borderRadius: "50%", border: "2px solid " + primary, opacity: 0.1, pointerEvents: "none" }} />
+      <div style={{ position: "absolute", width: 280, height: 280, borderRadius: "50%", border: "2px solid " + accentColor, opacity: 0.1, pointerEvents: "none" }} />
 
-      <div style={{ background: "rgba(255,255,255,0.04)", border: "1.5px solid " + (locked ? RED : primaryDim), borderRadius: 24, padding: 36, maxWidth: 340, width: "100%", textAlign: "center", boxShadow: "0 8px 40px rgba(0,0,0,0.6)", transition: "border-color 0.3s" }}>
+      <div style={{ background: panelBg, border: "1.5px solid " + (locked ? errorColor : panelBorder), borderRadius: 24, padding: 36, maxWidth: 340, width: "100%", textAlign: "center", boxShadow: "0 8px 40px rgba(0,0,0,0.6)", transition: "border-color 0.3s" }}>
 
         <SalonBrandmark salon={salon} size="lg" />
-        <div style={{ borderTop: "1px solid " + primaryDim, margin: "24px 0 20px", opacity: 0.4 }} />
+        <div style={{ borderTop: "1px solid " + panelBorder, margin: "24px 0 20px", opacity: 0.4 }} />
 
         {/* Lockout screen */}
         {locked ? (
           <div>
             <span style={lockIconStyle}>🔒</span>
-            <div style={{ fontSize: 16, fontWeight: 900, color: RED, marginBottom: 8 }}>Too many attempts</div>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", marginBottom: 20, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 16, fontWeight: 900, color: errorColor, marginBottom: 8 }}>Too many attempts</div>
+            <div style={{ fontSize: 13, color: dimColor, marginBottom: 20, lineHeight: 1.6 }}>
               Please wait before trying again.
             </div>
-            <div style={{ background: "rgba(239,68,68,0.15)", border: "1.5px solid " + RED, borderRadius: 14, padding: "18px 0", marginBottom: 20 }}>
-              <div style={{ fontSize: 11, color: RED, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Retry in</div>
-              <div style={{ fontSize: 42, fontWeight: 900, color: RED, fontFamily: "Georgia,serif" }}>{countdown}s</div>
+            <div style={{ background: isAuto ? ALERT + "22" : "rgba(239,68,68,0.15)", border: "1.5px solid " + errorColor, borderRadius: 14, padding: "18px 0", marginBottom: 20 }}>
+              <div style={{ fontSize: 11, color: errorColor, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Retry in</div>
+              <div style={{ fontSize: 42, fontWeight: 900, color: errorColor, fontFamily: "Georgia,serif" }}>{countdown}s</div>
             </div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>Access will restore automatically</div>
+            <div style={{ fontSize: 11, color: faintColor }}>Access will restore automatically</div>
           </div>
         ) : (
           <div>
             {/* Role selector */}
-            <div style={{ display: "flex", background: "rgba(255,255,255,0.06)", borderRadius: 10, padding: 3, marginBottom: 20, border: "1px solid " + primaryDim }}>
+            <div style={{ display: "flex", background: "rgba(255,255,255,0.06)", borderRadius: 10, padding: 3, marginBottom: 20, border: "1px solid " + panelBorder }}>
               {["staff", "admin"].map(function(r) {
                 return (
                   <button key={r} onClick={function(){ switchRole(r); }} style={{
                     flex: 1, border: "none", borderRadius: 8, padding: "9px 0", fontSize: 13, fontWeight: 700,
-                    background: role === r ? "linear-gradient(135deg," + primary + "," + primaryLt + ")" : "transparent",
-                    color: role === r ? BLACK : "rgba(255,255,255,0.4)",
+                    background: role === r ? "linear-gradient(135deg," + accentColor + "," + accentColorLt + ")" : "transparent",
+                    color: role === r ? buttonTextColor : dimColor,
                     cursor: "pointer", transition: "all 0.2s",
                   }}>
                     {r === "admin" ? "👑 Admin" : "✂ Staff"}
@@ -241,7 +259,7 @@ export default function LoginPage({ onLogin }) {
               })}
             </div>
 
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 12, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+            <div style={{ fontSize: 12, color: dimColor, marginBottom: 12, letterSpacing: "0.1em", textTransform: "uppercase" }}>
               {role === "admin" ? "Owner PIN" : "Staff PIN"}
             </div>
 
@@ -250,7 +268,7 @@ export default function LoginPage({ onLogin }) {
               <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 10 }}>
                 {[0,1,2].map(function(i) {
                   return (
-                    <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: i < attempts ? RED : "rgba(255,255,255,0.15)", transition: "background 0.3s" }} />
+                    <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: i < attempts ? errorColor : "rgba(255,255,255,0.15)", transition: "background 0.3s" }} />
                   );
                 })}
               </div>
@@ -265,23 +283,32 @@ export default function LoginPage({ onLogin }) {
               maxLength={6}
               disabled={loading}
               className={shake ? "shake" : ""}
-              style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + (error ? RED : primaryDim), background: "rgba(255,255,255,0.06)", padding: "13px 14px", fontSize: 24, textAlign: "center", letterSpacing: "0.4em", boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: WHITE, marginBottom: 8, transition: "border-color 0.2s" }}
+              style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + (error ? errorColor : panelBorder), background: inputBg, padding: "13px 14px", fontSize: 24, textAlign: "center", letterSpacing: "0.4em", boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: textColor, marginBottom: 8, transition: "border-color 0.2s" }}
             />
 
             {error && (
-              <div style={{ color: RED, fontSize: 12, marginBottom: 8, padding: "6px 10px", background: "rgba(239,68,68,0.1)", borderRadius: 8, border: "1px solid rgba(239,68,68,0.3)" }}>
+              <div style={{ color: errorColor, fontSize: 12, marginBottom: 8, padding: "6px 10px", background: isAuto ? ALERT + "1a" : "rgba(239,68,68,0.1)", borderRadius: 8, border: "1px solid " + (isAuto ? errorColor + "55" : "rgba(239,68,68,0.3)") }}>
                 {error}
               </div>
             )}
 
-            <GoldBtn onClick={handleLogin} disabled={loading} style={{ width: "100%", marginTop: 8 }}>
-              {loading ? "Verifying..." : "Login →"}
-            </GoldBtn>
+            {isAuto ? (
+              <button onClick={handleLogin} disabled={loading} style={{
+                width: "100%", marginTop: 8, background: SIGNAL, color: INK, border: "none", borderRadius: 10,
+                padding: "13px 0", fontWeight: 900, fontSize: 15, cursor: loading ? "default" : "pointer", opacity: loading ? 0.6 : 1,
+              }}>
+                {loading ? "Verifying..." : "Login →"}
+              </button>
+            ) : (
+              <GoldBtn onClick={handleLogin} disabled={loading} style={{ width: "100%", marginTop: 8 }}>
+                {loading ? "Verifying..." : "Login →"}
+              </GoldBtn>
+            )}
 
             {role === "admin" && (
               <a
                 href={(salon && salon.slug) ? "/" + salon.slug + "/forgot-pin" : "/forgot-pin"}
-                style={{ display: "block", marginTop: 12, fontSize: 11, color: "rgba(255,255,255,0.25)", fontWeight: 700, textDecoration: "none" }}
+                style={{ display: "block", marginTop: 12, fontSize: 11, color: faintColor, fontWeight: 700, textDecoration: "none" }}
               >
                 Forgot admin PIN? Click here to reset it.
               </a>
@@ -289,10 +316,12 @@ export default function LoginPage({ onLogin }) {
           </div>
         )}
 
-        <div style={{ marginTop: 24, borderTop: "1px solid rgba(201,168,76,0.2)", paddingTop: 16 }}>
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginBottom: 8 }}>Are you a customer?</div>
-          <a href={bookingHref} style={{ fontSize: 13, color: primaryLt, fontWeight: 700, textDecoration: "none" }}>Book an appointment →</a>
-        </div>
+        {!isAuto && (
+          <div style={{ marginTop: 24, borderTop: "1px solid rgba(201,168,76,0.2)", paddingTop: 16 }}>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginBottom: 8 }}>Are you a customer?</div>
+            <a href={bookingHref} style={{ fontSize: 13, color: primaryLt, fontWeight: 700, textDecoration: "none" }}>Book an appointment →</a>
+          </div>
+        )}
       </div>
     </div>
   );

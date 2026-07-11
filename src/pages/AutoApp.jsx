@@ -78,7 +78,7 @@ function AutoStaffRoute() {
   var tab = tabState[0]; var setTab = tabState[1];
 
   if (!loggedIn) {
-    return <LoginPage onLogin={function (role) { setIsAdmin(role === "admin"); setLoggedIn(true); }} />;
+    return <LoginPage isAuto={true} onLogin={function (role) { setIsAdmin(role === "admin"); setLoggedIn(true); }} />;
   }
 
   var tabStyle = function (key) {
