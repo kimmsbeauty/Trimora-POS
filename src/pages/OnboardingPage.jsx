@@ -9,11 +9,21 @@
 //  2. Use the returned session to call complete_salon_onboarding()
 //
 // If no token or invalid/expired token → shows "Invalid invite" screen.
+//
+// Theme/copy switches to Trimora Auto's own palette (theme.js) and
+// car-wash wording whenever the invite is module_key='auto' -- an
+// invite generated via the Car Washes "+ Invite"/"+ Onboard" flow
+// should read as Auto from the very first screen, not switch over only
+// after signup completes. The "Invite Required" (invalid/expired
+// token) screen can't know this -- module_key is only ever returned
+// for a *valid* token -- so it always stays salon-themed, which is
+// correct rather than an oversight.
 
 import { useState, useEffect } from "react";
 import SalonBrandmark from "../components/SalonBrandmark";
 import GoldBtn from "../components/GoldBtn";
 import { SUPABASE_URL, SUPABASE_KEY, GOLD, GOLD_LT, GOLD_DIM, BLACK, WHITE, RED, GREEN } from "../lib/constants.js";
+import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "./auto/theme";
 import { persistSession } from "../lib/deviceAuth";
 import { generateUniqueSlug } from "../lib/slugify";
 
@@ -30,6 +40,7 @@ export default function OnboardingPage() {
   // ── Invite token state ───────────────────────────────────────────
   var [tokenStatus, setTokenStatus] = useState("checking"); // checking | valid | invalid
   var [inviteToken, setInviteToken] = useState("");
+  var [moduleKey, setModuleKey] = useState(null); // null = regular salon invite, "auto" = car wash
 
   // ── Form fields ──────────────────────────────────────────────────
   var [salonName, setSalonName] = useState("");
@@ -78,6 +89,7 @@ export default function OnboardingPage() {
           setInviteToken(token);
           if (data.email)      setEmail(data.email);
           if (data.salon_name) setSalonName(data.salon_name);
+          if (data.module_key) setModuleKey(data.module_key);
           setTokenStatus("valid");
         } else {
           setTokenStatus("invalid");
@@ -92,7 +104,7 @@ export default function OnboardingPage() {
   }, []);
 
   function validate() {
-    if (!salonName.trim()) return "Please enter your salon name.";
+    if (!salonName.trim()) return "Please enter your " + (isAuto ? "car wash" : "salon") + " name.";
     if (!email.trim())     return "Please enter your email address.";
     if (!password || password.length < 6) return "Password must be at least 6 characters.";
     if (!staffPin || !adminPin) return "Please choose both a staff PIN and an admin PIN.";
@@ -220,15 +232,24 @@ export default function OnboardingPage() {
     }
   }
 
+  // ── Theme/copy switch ────────────────────────────────────────────
+  // Trimora Auto's own palette (theme.js: INK/STEEL/CHROME/SIGNAL/
+  // ALERT/PAPER) is deliberately not the salon gold/black look -- see
+  // that file's own header comment. An 'auto'-tagged invite means
+  // someone is signing up specifically for a car wash, so this page
+  // should look and read like Auto from the first screen, not switch
+  // over only after they log in.
+  var isAuto = moduleKey === "auto";
+
   // ── FATAL ERROR ──────────────────────────────────────────────────
   if (fatalError) {
     return (
-      <div style={{ minHeight: "100vh", background: "linear-gradient(160deg," + BLACK + " 0%,#1A1400 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-        <div style={{ background: "rgba(255,255,255,0.04)", border: "1.5px solid " + RED, borderRadius: 24, padding: 36, maxWidth: 340, width: "100%", textAlign: "center" }}>
+      <div style={{ minHeight: "100vh", background: isAuto ? INK : "linear-gradient(160deg," + BLACK + " 0%,#1A1400 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+        <div style={{ background: isAuto ? STEEL : "rgba(255,255,255,0.04)", border: "1.5px solid " + (isAuto ? ALERT : RED), borderRadius: 24, padding: 36, maxWidth: 340, width: "100%", textAlign: "center" }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
-          <div style={{ fontSize: 16, fontWeight: 900, color: RED, marginBottom: 10 }}>Something went wrong</div>
-          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", marginBottom: 20, lineHeight: 1.6 }}>{fatalError}</div>
-          <a href="mailto:admin@trimorasystems.com" style={{ color: GOLD, fontWeight: 800, fontSize: 13 }}>Contact support →</a>
+          <div style={{ fontSize: 16, fontWeight: 900, color: isAuto ? ALERT : RED, marginBottom: 10 }}>Something went wrong</div>
+          <div style={{ fontSize: 13, color: isAuto ? CHROME : "rgba(255,255,255,0.5)", marginBottom: 20, lineHeight: 1.6 }}>{fatalError}</div>
+          <a href="mailto:admin@trimorasystems.com" style={{ color: isAuto ? SIGNAL : GOLD, fontWeight: 800, fontSize: 13 }}>Contact support →</a>
         </div>
       </div>
     );
@@ -237,8 +258,8 @@ export default function OnboardingPage() {
   // ── CHECKING token ───────────────────────────────────────────────
   if (tokenStatus === "checking") {
     return (
-      <div style={{ minHeight: "100vh", background: "linear-gradient(160deg," + BLACK + " 0%,#1A1400 60%,#2C1F00 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ color: GOLD_DIM, fontSize: 14 }}>Validating invite...</div>
+      <div style={{ minHeight: "100vh", background: isAuto ? INK : "linear-gradient(160deg," + BLACK + " 0%,#1A1400 60%,#2C1F00 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ color: isAuto ? CHROME : GOLD_DIM, fontSize: 14 }}>Validating invite...</div>
       </div>
     );
   }
@@ -268,15 +289,15 @@ export default function OnboardingPage() {
   // ── NEEDS EMAIL CONFIRMATION ─────────────────────────────────────
   if (needsConfirm) {
     return (
-      <div style={{ minHeight: "100vh", background: "linear-gradient(160deg," + BLACK + " 0%,#1A1400 60%,#2C1F00 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-        <div style={{ background: "rgba(255,255,255,0.04)", border: "1.5px solid " + GOLD_DIM, borderRadius: 24, padding: 36, maxWidth: 340, width: "100%", textAlign: "center" }}>
+      <div style={{ minHeight: "100vh", background: isAuto ? INK : "linear-gradient(160deg," + BLACK + " 0%,#1A1400 60%,#2C1F00 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+        <div style={{ background: isAuto ? STEEL : "rgba(255,255,255,0.04)", border: "1.5px solid " + (isAuto ? CHROME + "44" : GOLD_DIM), borderRadius: 24, padding: 36, maxWidth: 340, width: "100%", textAlign: "center" }}>
           <div style={{ fontSize: 40, marginBottom: 8 }}>📧</div>
-          <div style={{ fontSize: 16, fontWeight: 900, color: GOLD_LT, marginBottom: 8 }}>Check your email</div>
-          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", lineHeight: 1.6 }}>
-            We sent a confirmation link to <b style={{ color: GOLD_DIM }}>{email}</b>. Click it, then contact us to complete your salon setup.
+          <div style={{ fontSize: 16, fontWeight: 900, color: isAuto ? PAPER : GOLD_LT, marginBottom: 8 }}>Check your email</div>
+          <div style={{ fontSize: 13, color: isAuto ? CHROME : "rgba(255,255,255,0.5)", lineHeight: 1.6 }}>
+            We sent a confirmation link to <b style={{ color: isAuto ? SIGNAL : GOLD_DIM }}>{email}</b>. Click it, then contact us to complete your {isAuto ? "car wash" : "salon"} setup.
           </div>
           <a href="mailto:admin@trimorasystems.com"
-            style={{ display: "inline-block", marginTop: 16, color: GOLD, fontWeight: 800, fontSize: 13 }}>
+            style={{ display: "inline-block", marginTop: 16, color: isAuto ? SIGNAL : GOLD, fontWeight: 800, fontSize: 13 }}>
             admin@trimorasystems.com
           </a>
         </div>
@@ -285,34 +306,59 @@ export default function OnboardingPage() {
   }
 
   // ── VALID INVITE — show signup form ──────────────────────────────
+  var panelBg     = isAuto ? STEEL : "rgba(255,255,255,0.04)";
+  var panelBorder = isAuto ? CHROME + "44" : GOLD_DIM;
+  var titleColor  = isAuto ? PAPER : GOLD_LT;
+  var dimColor    = isAuto ? CHROME : "rgba(255,255,255,0.5)";
+  var accentColor = isAuto ? SIGNAL : GOLD;
+  var textColor   = isAuto ? PAPER : WHITE;
+  var thingLabel  = isAuto ? "car wash" : "salon";
+
+  var autoInputStyle = {
+    width: "100%", borderRadius: 10,
+    border: "1.5px solid " + CHROME + "44",
+    background: INK,
+    padding: "12px 14px", fontSize: 14,
+    boxSizing: "border-box", fontFamily: "inherit",
+    outline: "none", color: PAPER, marginBottom: 10,
+  };
+  var effectiveInputStyle = isAuto ? autoInputStyle : inputStyle;
+
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(160deg," + BLACK + " 0%,#1A1400 60%,#2C1F00 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ background: "rgba(255,255,255,0.04)", border: "1.5px solid " + GOLD_DIM, borderRadius: 24, padding: 36, maxWidth: 360, width: "100%", textAlign: "center", boxShadow: "0 8px 40px rgba(0,0,0,0.6)" }}>
+    <div style={{ minHeight: "100vh", background: isAuto ? INK : "linear-gradient(160deg," + BLACK + " 0%,#1A1400 60%,#2C1F00 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: panelBg, border: "1.5px solid " + panelBorder, borderRadius: 24, padding: 36, maxWidth: 360, width: "100%", textAlign: "center", boxShadow: "0 8px 40px rgba(0,0,0,0.6)" }}>
 
-        <SalonBrandmark salon={null} size="md" />
-        <div style={{ borderTop: "1px solid " + GOLD_DIM, margin: "20px 0 18px", opacity: 0.4 }} />
+        {isAuto ? (
+          <>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: CHROME }}>Trimora Auto</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: PAPER, marginTop: 2 }}>🚗 Car Wash Setup</div>
+          </>
+        ) : (
+          <SalonBrandmark salon={null} size="md" />
+        )}
+        <div style={{ borderTop: "1px solid " + panelBorder, margin: "20px 0 18px", opacity: isAuto ? 1 : 0.4 }} />
 
-        <div style={{ fontSize: 16, fontWeight: 900, color: GOLD_LT, marginBottom: 4 }}>Set up your salon</div>
-        <div style={{ fontSize: 11, color: GOLD_DIM + "88", marginBottom: 20 }}>
+        <div style={{ fontSize: 16, fontWeight: 900, color: titleColor, marginBottom: 4 }}>Set up your {thingLabel}</div>
+        <div style={{ fontSize: 11, color: isAuto ? CHROME : GOLD_DIM + "88", marginBottom: 20 }}>
           ✓ Invite verified — you're good to go
         </div>
 
-        <input placeholder="Salon name" value={salonName}
+        <input placeholder={isAuto ? "Car wash name" : "Salon name"} value={salonName}
           onChange={function(e) { setSalonName(e.target.value); setError(""); }}
-          disabled={loading} style={inputStyle} />
+          disabled={loading} style={effectiveInputStyle} />
 
         <input type="email" placeholder="Your email" value={email}
           onChange={function(e) { setEmail(e.target.value); setError(""); }}
-          disabled={loading} style={inputStyle} />
+          disabled={loading} style={effectiveInputStyle} />
 
         <div style={{ position: "relative", marginBottom: 10 }}>
           <input type={showPass ? "text" : "password"} placeholder="Choose a password (min 6 chars)" value={password}
             onChange={function(e) { setPassword(e.target.value); setError(""); }}
             disabled={loading}
-            style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM, background: "rgba(255,255,255,0.06)", padding: "12px 44px 12px 14px", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: WHITE }}
+            style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + panelBorder, background: isAuto ? INK : "rgba(255,255,255,0.06)", padding: "12px 44px 12px 14px", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: textColor }}
           />
           <button onClick={function() { setShowPass(!showPass); }} type="button"
-            style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "rgba(255,255,255,0.4)", padding: 0, lineHeight: 1 }}>
+            style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 18, color: isAuto ? CHROME : "rgba(255,255,255,0.4)", padding: 0, lineHeight: 1 }}>
             {showPass ? "🙈" : "👁"}
           </button>
         </div>
@@ -322,21 +368,21 @@ export default function OnboardingPage() {
             placeholder="Staff PIN" value={staffPin} maxLength={6} inputMode="numeric"
             onChange={function(e) { setStaffPin(e.target.value.replace(/\D/g, "")); setError(""); }}
             disabled={loading}
-            style={{ flex: 1, minWidth: 0, borderRadius: 10, border: "1.5px solid " + GOLD_DIM, background: "rgba(255,255,255,0.06)", padding: "12px 8px", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: WHITE, textAlign: "center" }}
+            style={{ flex: 1, minWidth: 0, borderRadius: 10, border: "1.5px solid " + panelBorder, background: isAuto ? INK : "rgba(255,255,255,0.06)", padding: "12px 8px", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: textColor, textAlign: "center" }}
           />
           <input
             placeholder="Admin PIN" value={adminPin} maxLength={6} inputMode="numeric"
             onChange={function(e) { setAdminPin(e.target.value.replace(/\D/g, "")); setError(""); }}
             disabled={loading}
-            style={{ flex: 1, minWidth: 0, borderRadius: 10, border: "1.5px solid " + GOLD_DIM, background: "rgba(255,255,255,0.06)", padding: "12px 8px", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: WHITE, textAlign: "center" }}
+            style={{ flex: 1, minWidth: 0, borderRadius: 10, border: "1.5px solid " + panelBorder, background: isAuto ? INK : "rgba(255,255,255,0.06)", padding: "12px 8px", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: textColor, textAlign: "center" }}
           />
         </div>
-        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 14, textAlign: "left" }}>
-          Staff PIN: for all staff · Admin PIN: for salon owner only. Both 4–6 digits, must be different.
+        <div style={{ fontSize: 10, color: isAuto ? CHROME + "cc" : "rgba(255,255,255,0.3)", marginBottom: 14, textAlign: "left" }}>
+          Staff PIN: for all staff · Admin PIN: for {isAuto ? "car wash owner" : "salon owner"} only. Both 4–6 digits, must be different.
         </div>
 
         {error && (
-          <div style={{ color: RED, fontSize: 12, marginBottom: 10, padding: "6px 10px", background: "rgba(239,68,68,0.1)", borderRadius: 8, border: "1px solid rgba(239,68,68,0.3)" }}>
+          <div style={{ color: isAuto ? ALERT : RED, fontSize: 12, marginBottom: 10, padding: "6px 10px", background: isAuto ? ALERT + "1a" : "rgba(239,68,68,0.1)", borderRadius: 8, border: "1px solid " + (isAuto ? ALERT + "55" : "rgba(239,68,68,0.3)") }}>
             {error}
           </div>
         )}
@@ -348,23 +394,34 @@ export default function OnboardingPage() {
             id="terms"
             checked={termsAccepted}
             onChange={function(e) { setTermsAccepted(e.target.checked); setError(""); }}
-            style={{ marginTop: 3, width: 16, height: 16, flexShrink: 0, accentColor: "#C9A84C", cursor: "pointer" }}
+            style={{ marginTop: 3, width: 16, height: 16, flexShrink: 0, accentColor: isAuto ? SIGNAL : "#C9A84C", cursor: "pointer" }}
           />
-          <label htmlFor="terms" style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", lineHeight: 1.6, cursor: "pointer" }}>
+          <label htmlFor="terms" style={{ fontSize: 12, color: dimColor, lineHeight: 1.6, cursor: "pointer" }}>
             I have read and agree to the{" "}
             <a href="/terms" target="_blank" rel="noreferrer"
-              style={{ color: "#C9A84C", fontWeight: 800, textDecoration: "underline" }}>
+              style={{ color: accentColor, fontWeight: 800, textDecoration: "underline" }}>
               Terms & Conditions
             </a>
-            {" "}of Trimora POS. I understand the subscription plans, data ownership policy, and the 7-day grace period for late payments.
+            {" "}of Trimora {isAuto ? "Auto" : "POS"}. I understand the subscription plans, data ownership policy, and the 7-day grace period for late payments.
           </label>
         </div>
 
-        <GoldBtn onClick={handleSignup} disabled={loading || !termsAccepted} style={{ width: "100%", marginTop: 4, opacity: !termsAccepted ? 0.5 : 1 }}>
-          {loading ? "Setting up your salon..." : "Create my salon →"}
-        </GoldBtn>
+        {isAuto ? (
+          <button onClick={handleSignup} disabled={loading || !termsAccepted} style={{
+            width: "100%", marginTop: 4, padding: "13px 0", borderRadius: 10, border: "none",
+            background: (loading || !termsAccepted) ? CHROME + "55" : SIGNAL,
+            color: INK, fontWeight: 900, fontSize: 15,
+            cursor: (loading || !termsAccepted) ? "not-allowed" : "pointer",
+          }}>
+            {loading ? "Setting up your car wash..." : "Create my car wash →"}
+          </button>
+        ) : (
+          <GoldBtn onClick={handleSignup} disabled={loading || !termsAccepted} style={{ width: "100%", marginTop: 4, opacity: !termsAccepted ? 0.5 : 1 }}>
+            {loading ? "Setting up your salon..." : "Create my salon →"}
+          </GoldBtn>
+        )}
 
-        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", marginTop: 16 }}>
+        <div style={{ fontSize: 10, color: isAuto ? CHROME + "88" : "rgba(255,255,255,0.2)", marginTop: 16 }}>
           © 2026 Trimora Systems · Nairobi, Kenya
         </div>
       </div>
