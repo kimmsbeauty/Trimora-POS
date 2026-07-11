@@ -1,0 +1,23 @@
+-- Found while auditing the auto_onboarding_requests table (added in
+-- 031_auto_requests_manual_invite.sql) before proceeding with other
+-- work. Same excess-grant pattern found and fixed twice already
+-- tonight (platform_stats/salon_directory, feedback): anon had
+-- SELECT/INSERT/UPDATE/DELETE/TRUNCATE, but every RLS policy on this
+-- table is scoped to `authenticated` + is_sales_rep/is_super_admin --
+-- anon has no legitimate use for this table at all (unlike feedback,
+-- which genuinely needs anon INSERT for the public rating flow; this
+-- table has no public-facing submission path).
+--
+-- RLS is enabled and correctly blocks anon from SELECT/INSERT/UPDATE/
+-- DELETE in practice (no anon policy exists for any of them) -- but
+-- as with feedback, TRUNCATE is not governed by RLS at all in
+-- Postgres, so that grant had no protection. Not actively exploitable
+-- via the app (PostgREST doesn't expose TRUNCATE), same dormant-risk
+-- class as before.
+--
+-- Also found: salon_onboarding_requests (the pre-existing table this
+-- one mirrors) has the identical excess-grant pattern, predating this
+-- session entirely. Not fixed here -- flagged separately rather than
+-- silently expanding this migration's scope.
+
+revoke select, insert, update, delete, truncate on public.auto_onboarding_requests from anon;
