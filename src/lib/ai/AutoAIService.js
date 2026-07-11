@@ -34,7 +34,15 @@ export async function getRevenueSummary(options) {
   var rows = await fetchCompletedJobs(dateFrom, dateTo);
   if (rows === null) return null;
 
-  return AutoLocal.summarizeRevenue(rows, { dateFrom: dateFrom, dateTo: dateTo });
+  // Feature-parity item #8: summarizeRevenue sums whatever total_price
+  // it's given (that's its whole, still-correctly-tested contract) --
+  // discount is applied here, before handing rows over, rather than
+  // changing that pure function's behavior.
+  var discounted = rows.map(function (r) {
+    return Object.assign({}, r, { total_price: (r.total_price || 0) - (r.discount_amount || 0) });
+  });
+
+  return AutoLocal.summarizeRevenue(discounted, { dateFrom: dateFrom, dateTo: dateTo });
 }
 
 export async function getCustomerSummary(options) {
@@ -77,15 +85,33 @@ export async function getCommissionSummary(options) {
   var dateFrom = options.dateFrom || todayStr();
   var dateTo = options.dateTo || dateFrom;
 
-  var jobRows = await fetchCompletedJobs(dateFrom, dateTo, "commission,assigned_staff_id");
+  // Feature-parity item #8: commission is now attributed per service
+  // line (auto_job_services.staff_id/commission), not the job-level
+  // assigned_staff_id/commission -- different services on the same job
+  // can be credited to different people.
+  var jobRows = await fetchCompletedJobs(dateFrom, dateTo, "id");
   if (jobRows === null) return null;
+  if (jobRows.length === 0) {
+    return AutoLocal.summarizeCommission([], {}, { dateFrom: dateFrom, dateTo: dateTo });
+  }
+
+  var jobIds = jobRows.map(function (j) { return j.id; }).join(",");
+  var lineRows = await db("GET", "auto_job_services", null,
+    "?job_id=in.(" + jobIds + ")&select=commission,staff_id");
+  if (lineRows === null) return null;
 
   var staffRows = await db("GET", "staff", null, "?select=id,name");
   if (staffRows === null) return null;
   var staffById = {};
   staffRows.forEach(function (s) { staffById[s.id] = s; });
 
-  return AutoLocal.summarizeCommission(jobRows, staffById, { dateFrom: dateFrom, dateTo: dateTo });
+  // summarizeCommission expects job-shaped rows with commission/
+  // assigned_staff_id -- lineRows already match that shape closely
+  // enough (commission + a staff-id field) once renamed.
+  var asJobShaped = lineRows.map(function (l) {
+    return { commission: l.commission, assigned_staff_id: l.staff_id };
+  });
+  return AutoLocal.summarizeCommission(asJobShaped, staffById, { dateFrom: dateFrom, dateTo: dateTo });
 }
 
 export function classifyQuestion(question) {

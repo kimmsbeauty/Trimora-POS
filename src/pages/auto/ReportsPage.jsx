@@ -39,6 +39,14 @@ function money(n) {
   return "KSh " + (n || 0).toLocaleString();
 }
 
+// Feature-parity item #8: total_price stays the original, undiscounted
+// service total; discount_amount is the separate reduction. Revenue
+// reporting needs the actual amount charged, matching how the payment
+// modal and receipt already compute it in BoardPage.jsx.
+function payableAmount(job) {
+  return (job.total_price || 0) - (job.discount_amount || 0);
+}
+
 function startOfDay(d) { var x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
 
 function daysAgo(n) {
@@ -118,7 +126,7 @@ export default function ReportsPage({ isAdmin }) {
   var jobIdsInRange = {};
   jobsInRange.forEach(function (j) { jobIdsInRange[j.id] = true; });
 
-  var totalRevenue = jobsInRange.reduce(function (a, j) { return a + (j.total_price || 0); }, 0);
+  var totalRevenue = jobsInRange.reduce(function (a, j) { return a + payableAmount(j); }, 0);
   var totalCommission = jobsInRange.reduce(function (a, j) { return a + (j.commission || 0); }, 0);
   var jobCount = jobsInRange.length;
   var avgTicket = jobCount ? Math.round(totalRevenue / jobCount) : 0;
@@ -173,22 +181,28 @@ export default function ReportsPage({ isAdmin }) {
   var byMethod = { Cash: 0, Till: 0, unpaid: 0 };
   jobsInRange.forEach(function (j) {
     if (j.payment_status === "paid" && j.payment_method) {
-      byMethod[j.payment_method] = (byMethod[j.payment_method] || 0) + (j.total_price || 0);
+      byMethod[j.payment_method] = (byMethod[j.payment_method] || 0) + payableAmount(j);
     } else {
-      byMethod.unpaid += (j.total_price || 0);
+      byMethod.unpaid += payableAmount(j);
     }
   });
 
-  // Staff commission leaderboard -- new since Phase 4.
+  // Staff commission leaderboard -- since feature-parity item #8,
+  // sourced from per-line staff_id/commission on auto_job_services
+  // (different services on the same job can be credited to different
+  // people), not the job-level assigned_staff_id/commission, which
+  // only ever reflected a single flat rate applied to the whole job.
   var staffById = {};
   staff.forEach(function (s) { staffById[s.id] = s; });
   var staffAgg = {};
-  jobsInRange.forEach(function (j) {
-    if (!j.assigned_staff_id) return;
-    if (!staffAgg[j.assigned_staff_id]) staffAgg[j.assigned_staff_id] = { count: 0, commission: 0, revenue: 0 };
-    staffAgg[j.assigned_staff_id].count += 1;
-    staffAgg[j.assigned_staff_id].commission += j.commission || 0;
-    staffAgg[j.assigned_staff_id].revenue += j.total_price || 0;
+  jobServices.forEach(function (js) {
+    if (!jobIdsInRange[js.job_id]) return;
+    var staffId = js.staff_id;
+    if (!staffId) return;
+    if (!staffAgg[staffId]) staffAgg[staffId] = { count: 0, commission: 0, revenue: 0 };
+    staffAgg[staffId].count += 1;
+    staffAgg[staffId].commission += js.commission || 0;
+    staffAgg[staffId].revenue += js.price || 0;
   });
   var staffRows = Object.entries(staffAgg).map(function (e) {
     var s = staffById[e[0]];

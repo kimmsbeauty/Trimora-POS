@@ -6,9 +6,23 @@
 // separate data models). Tap a waiting job, pick a staff member (required
 // -- Phase 4), then tap a free bay, to start it. Tap an occupied bay to
 // advance its job through the in_bay -> ready_for_collection -> completed
-// sequence, or cancel it. Commission is auto-calculated from the
-// assigned staff member's commission_pct (40% fallback if unset) at the
-// ready_for_collection stage, and is editable before completing.
+// sequence, or cancel it.
+//
+// Feature-parity item #8: at ready_for_collection, commission is edited
+// per service line (each line gets its own staff picker and %/KSh,
+// defaulting to that line's assigned staff -- falling back to the job's
+// overall assigned_staff_id -- at their commission_pct), not as a
+// single flat rate on the whole job. A job-level discount (% or fixed,
+// matching POS's own cart-level discount -- POS's isn't per-line
+// either) is entered alongside it. Tapping "Complete" saves both
+// immediately (auto_jobs.discount_*, each line's staff_id/
+// commission_override/commission) before the Cash/Till/Pay-later choice
+// opens, since that choice needs the discounted payable amount, not
+// the raw total_price. total_price itself is never mutated -- it stays
+// the original, undiscounted service total for audit purposes;
+// payableAmount() computes total_price - discount_amount wherever the
+// actual charged amount is needed (payment modal, receipt, loyalty
+// credit, revenue reporting).
 //
 // Completing a job offers Cash, M-Pesa (Till), or Pay later -- matching
 // POS's own pay-later convention (explicit decision: Auto should not be
@@ -45,15 +59,42 @@ function vehicleLabel(job) {
   return v.reg_number + (v.make || v.model ? " · " + [v.make, v.model].filter(Boolean).join(" ") : "");
 }
 
-function defaultCommission(job, staffById) {
-  var staffMember = staffById[job.assigned_staff_id];
-  var pct = staffMember && staffMember.commission_pct != null ? staffMember.commission_pct : 40;
-  return Math.round((job.total_price || 0) * pct / 100);
+// Per-line commission rate: the line's own staff assignment if set,
+// falling back to the job's assigned_staff_id, falling back to 40% --
+// same fallback chain as POS's cartMath.js (item.stylist || selStaff,
+// then rateForStylistName's own 40% default).
+function defaultLineStaffId(line, job) {
+  return line.staff_id || job.assigned_staff_id || null;
+}
+function defaultLinePct(line, job, staffById) {
+  var staffId = defaultLineStaffId(line, job);
+  var staffMember = staffById[staffId];
+  return staffMember && staffMember.commission_pct != null ? staffMember.commission_pct : 40;
+}
+function defaultLineCommission(line, job, staffById) {
+  var pct = defaultLinePct(line, job, staffById);
+  return Math.round((line.price || 0) * pct / 100);
 }
 
-function defaultCommissionPct(job, staffById) {
-  var staffMember = staffById[job.assigned_staff_id];
-  return staffMember && staffMember.commission_pct != null ? staffMember.commission_pct : 40;
+// discount_amount is clamped to total_price -- a discount can never
+// make a job's payable amount negative, same clamp cartMath.js applies
+// (Math.min(serviceTotal, ...)).
+function computeDiscountAmount(job, discountType, discountValue) {
+  var total = job.total_price || 0;
+  var value = parseFloat(discountValue) || 0;
+  if (!discountType || value <= 0 || total <= 0) return 0;
+  var amount = discountType === "pct" ? total * (value / 100) : value;
+  return Math.min(total, Math.round(amount));
+}
+
+// The actual amount to charge/report/credit-to-loyalty -- total_price
+// stays the original, immutable service total (matches Check-In's
+// value, auditable); discount_amount is a separate, subtracted figure,
+// deliberately not baked back into total_price the way POS's cartTotal
+// bakes its discount in -- keeps "what services cost" and "what got
+// discounted" independently visible everywhere downstream.
+function payableAmount(job) {
+  return (job.total_price || 0) - (job.discount_amount || 0);
 }
 
 // Matches POSApp.jsx's generateFeedbackToken exactly -- same 12 random
@@ -78,10 +119,10 @@ export default function BoardPage() {
   var selectedJobId = selectedJobIdState[0]; var setSelectedJobId = selectedJobIdState[1];
   var selectedStaffIdState = useState(null);
   var selectedStaffId = selectedStaffIdState[0]; var setSelectedStaffId = selectedStaffIdState[1];
-  var commissionEditsState = useState({}); // job.id -> KSh amount being edited
+  var commissionEditsState = useState({}); // job.id -> { discountType, discountValue, lines: { lineId: { staffId, pct, amount } } }
   var commissionEdits = commissionEditsState[0]; var setCommissionEdits = commissionEditsState[1];
-  var commissionPctEditsState = useState({}); // job.id -> percentage being edited
-  var commissionPctEdits = commissionPctEditsState[0]; var setCommissionPctEdits = commissionPctEditsState[1];
+  var jobServicesState = useState({}); // job.id -> array of auto_job_services rows (with auto_services join)
+  var jobServicesByJobId = jobServicesState[0]; var setJobServicesByJobId = jobServicesState[1];
   var busyState = useState(false); var busy = busyState[0]; var setBusy = busyState[1];
   var salon = useSalon();
   // Phase 5: completing a job requires collecting payment first --
@@ -113,9 +154,31 @@ export default function BoardPage() {
         "&select=*,auto_vehicles(reg_number,make,model,color),customers(id,name,phone,visit_count,total_spend)"),
       db("GET", "staff", null, "?active=eq.true&order=name.asc"),
     ]);
-    setBays(results[0] || []);
-    setJobs(results[1] || []);
-    setStaff(results[2] || []);
+    var bayRows = results[0] || [];
+    var jobRows = results[1] || [];
+    var staffRows = results[2] || [];
+    setBays(bayRows);
+    setJobs(jobRows);
+    setStaff(staffRows);
+
+    // Line items -- needed for the per-line commission editor (feature-
+    // parity item #8). Only fetched for jobs that can reach the
+    // ready_for_collection editor, batched into one call rather than
+    // one request per job.
+    var jobIds = jobRows.map(function (j) { return j.id; });
+    if (jobIds.length > 0) {
+      var lineRows = await db("GET", "auto_job_services", null,
+        "?job_id=in.(" + jobIds.join(",") + ")&select=*,auto_services(name)");
+      var byJob = {};
+      (lineRows || []).forEach(function (row) {
+        if (!byJob[row.job_id]) byJob[row.job_id] = [];
+        byJob[row.job_id].push(row);
+      });
+      setJobServicesByJobId(byJob);
+    } else {
+      setJobServicesByJobId({});
+    }
+
     setLoading(false);
   }, []);
 
@@ -207,6 +270,43 @@ export default function BoardPage() {
     }
   }
 
+  // Shared by startCompleteFlow (writes the DB) and advanceJob (needs
+  // the summed total for auto_jobs.commission) -- computed once from
+  // the same in-memory edit state both read, so they can never disagree.
+  function computeLinePricing(job) {
+    var edits = commissionEdits[job.id] || {};
+    var lines = jobServicesByJobId[job.id] || [];
+    var discountType = edits.discountType || null;
+    var discountValue = edits.discountValue || "";
+    var discountAmount = computeDiscountAmount(job, discountType, discountValue);
+
+    var totalCommission = 0;
+    var lineResults = lines.map(function (line) {
+      var lineEdit = (edits.lines && edits.lines[line.id]) || {};
+      var staffId = lineEdit.staffId !== undefined ? lineEdit.staffId : defaultLineStaffId(line, job);
+      var pctStr = lineEdit.pct;
+      var amountStr = lineEdit.amount;
+      var commission;
+      if (amountStr !== undefined) {
+        var parsedAmount = parseInt(amountStr, 10);
+        commission = isNaN(parsedAmount) ? 0 : parsedAmount;
+      } else if (pctStr !== undefined) {
+        var parsedPct = parseInt(pctStr, 10);
+        commission = isNaN(parsedPct) ? 0 : Math.round((line.price || 0) * parsedPct / 100);
+      } else {
+        commission = defaultLineCommission(line, job, staffById);
+      }
+      totalCommission += commission;
+      var override = pctStr !== undefined ? (parseInt(pctStr, 10) || 0) : null;
+      return { lineId: line.id, staffId: staffId, commission_override: override, commission: commission };
+    });
+
+    return {
+      discountType: discountType, discountValue: discountValue ? parseInt(discountValue, 10) : null,
+      discountAmount: discountAmount, lineResults: lineResults, totalCommission: totalCommission,
+    };
+  }
+
   async function advanceJob(job, paymentMethod) {
     if (busy) return;
     var next = NEXT_STATUS[job.status];
@@ -218,9 +318,7 @@ export default function BoardPage() {
     if (next === "completed") {
       patch.completed_at = new Date().toISOString();
       patch.feedback_token = generateFeedbackToken();
-      var editedValue = commissionEdits[job.id];
-      var parsed = editedValue !== undefined ? parseInt(editedValue, 10) : NaN;
-      patch.commission = isNaN(parsed) ? defaultCommission(job, staffById) : parsed;
+      patch.commission = computeLinePricing(job).totalCommission;
       // Cash/Till pass a paymentMethod and mark the job paid immediately.
       // Pay later (explicit decision, matching POS's own convention)
       // calls advanceJob with no paymentMethod at all -- payment_status
@@ -245,17 +343,15 @@ export default function BoardPage() {
       await db("PATCH", "auto_bays", { current_job_id: null }, "?id=eq." + job.bay_id);
     }
 
-    // Loyalty (feature-parity item #7): increments the same shared
-    // customers.visit_count/total_spend columns POS's own completeSale()
-    // writes to -- matches POS's exact read-then-increment pattern
-    // (not atomic, same as POS, not a new risk introduced here). A
-    // customer's loyalty tier reflects their whole relationship with
-    // the business, salon and car-wash combined, same reasoning as
-    // Expenses being one shared ledger rather than a separate Auto copy.
+    // Loyalty (feature-parity item #7): credits the customer's total
+    // spend with what they actually paid (total_price - discount),
+    // not the pre-discount service total -- matches POS's own
+    // convention of crediting loyalty against the discounted cartTotal,
+    // not the undiscounted serviceTotal.
     if (next === "completed" && job.customer_id) {
       var cust = job.customers || {};
       var newVisits = (cust.visit_count || 0) + 1;
-      var newSpend = (cust.total_spend || 0) + (job.total_price || 0);
+      var newSpend = (cust.total_spend || 0) + payableAmount(job);
       await db("PATCH", "customers", { visit_count: newVisits, total_spend: newSpend }, "?id=eq." + job.customer_id);
     }
 
@@ -270,16 +366,11 @@ export default function BoardPage() {
         delete copy[job.id];
         return copy;
       });
-      setCommissionPctEdits(function (prev) {
-        var copy = Object.assign({}, prev);
-        delete copy[job.id];
-        return copy;
-      });
 
       var finalized = await db("GET", "auto_jobs", null,
         "?id=eq." + job.id + "&select=*,auto_vehicles(reg_number,make,model,color),customers(id,name,phone,visit_count,total_spend)");
       var services = await db("GET", "auto_job_services", null,
-        "?job_id=eq." + job.id + "&select=*,auto_services(name)");
+        "?job_id=eq." + job.id + "&select=*,auto_services(name),staff(name)");
       if (finalized && finalized[0]) {
         setReceiptJob(finalized[0]);
         setReceiptServices(services || []);
@@ -293,8 +384,32 @@ export default function BoardPage() {
   // Phase 5: "Complete" no longer advances the job directly -- it opens
   // the Cash/Till choice below. Cash completes immediately; Till opens
   // the STK-push modal and only completes once payment is confirmed.
-  function startCompleteFlow(job) {
+  //
+  // Feature-parity item #8: before opening that choice, the currently-
+  // edited discount and per-line staff/commission are saved to the DB
+  // immediately -- the payment modal needs the discounted payable
+  // amount (not the raw total_price), and per-line commission
+  // attribution is "finalizing the job's pricing", a genuinely
+  // different action from "recording how payment was received".
+  async function startCompleteFlow(job) {
     if (busy) return;
+    setBusy(true);
+    var pricing = computeLinePricing(job);
+
+    await db("PATCH", "auto_jobs", {
+      discount_type: pricing.discountType, discount_value: pricing.discountValue,
+      discount_amount: pricing.discountAmount,
+    }, "?id=eq." + job.id);
+
+    for (var i = 0; i < pricing.lineResults.length; i++) {
+      var lr = pricing.lineResults[i];
+      await db("PATCH", "auto_job_services", {
+        staff_id: lr.staffId, commission_override: lr.commission_override, commission: lr.commission,
+      }, "?id=eq." + lr.lineId);
+    }
+
+    await load();
+    setBusy(false);
     setPaymentJobId(job.id);
   }
 
@@ -500,18 +615,33 @@ export default function BoardPage() {
             {activeJobs.map(function (job) {
               var assignedStaff = staffById[job.assigned_staff_id];
               var isReadyForCollection = job.status === "ready_for_collection";
-              var commissionPctValue = commissionPctEdits[job.id] !== undefined
-                ? commissionPctEdits[job.id]
-                : String(defaultCommissionPct(job, staffById));
-              var commissionValue = commissionEdits[job.id] !== undefined
-                ? commissionEdits[job.id]
-                : String(defaultCommission(job, staffById));
+              var lines = jobServicesByJobId[job.id] || [];
+              var edits = commissionEdits[job.id] || {};
+              var lineEdits = edits.lines || {};
+
+              function setDiscount(patch) {
+                setCommissionEdits(function (prev) {
+                  var jobEdit = Object.assign({}, prev[job.id], patch);
+                  return Object.assign({}, prev, (function () { var o = {}; o[job.id] = jobEdit; return o; })());
+                });
+              }
+              function setLineEdit(lineId, patch) {
+                setCommissionEdits(function (prev) {
+                  var jobEdit = Object.assign({}, prev[job.id]);
+                  jobEdit.lines = Object.assign({}, jobEdit.lines);
+                  jobEdit.lines[lineId] = Object.assign({}, jobEdit.lines[lineId], patch);
+                  return Object.assign({}, prev, (function () { var o = {}; o[job.id] = jobEdit; return o; })());
+                });
+              }
+
+              var pricing = isReadyForCollection ? computeLinePricing(job) : null;
+
               return (
                 <div key={job.id} style={{
                   padding: "12px 14px", borderRadius: 10,
                   border: "1.5px solid rgba(143,166,184,0.2)", background: "rgba(255,255,255,0.02)",
                 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: isReadyForCollection ? 12 : 0 }}>
                     <div>
                       <div style={{ fontSize: 14, fontWeight: 700, color: PAPER }}>{vehicleLabel(job)}</div>
                       <div style={{ fontSize: 11, color: CHROME }}>
@@ -519,46 +649,6 @@ export default function BoardPage() {
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      {isReadyForCollection && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <input type="number" value={commissionPctValue}
-                            onChange={function (e) {
-                              var pctStr = e.target.value;
-                              var pctNum = parseInt(pctStr, 10);
-                              setCommissionPctEdits(function (prev) {
-                                var copy = Object.assign({}, prev);
-                                copy[job.id] = pctStr;
-                                return copy;
-                              });
-                              setCommissionEdits(function (prev) {
-                                var copy = Object.assign({}, prev);
-                                copy[job.id] = isNaN(pctNum) ? "0" : String(Math.round((job.total_price || 0) * pctNum / 100));
-                                return copy;
-                              });
-                            }}
-                            style={{
-                              width: 44, background: "rgba(255,255,255,0.04)", color: PAPER,
-                              border: "1px solid rgba(143,166,184,0.3)", borderRadius: 6,
-                              padding: "6px 6px", fontSize: 12, textAlign: "right",
-                            }} />
-                          <span style={{ fontSize: 11, color: CHROME }}>% =</span>
-                          <span style={{ fontSize: 11, color: CHROME }}>KSh</span>
-                          <input type="number" value={commissionValue}
-                            onChange={function (e) {
-                              var v = e.target.value;
-                              setCommissionEdits(function (prev) {
-                                var copy = Object.assign({}, prev);
-                                copy[job.id] = v;
-                                return copy;
-                              });
-                            }}
-                            style={{
-                              width: 64, background: "rgba(255,255,255,0.04)", color: PAPER,
-                              border: "1px solid rgba(143,166,184,0.3)", borderRadius: 6,
-                              padding: "6px 8px", fontSize: 12,
-                            }} />
-                        </div>
-                      )}
                       {NEXT_STATUS[job.status] && (
                         <button onClick={function () {
                           if (NEXT_STATUS[job.status] === "completed") { startCompleteFlow(job); }
@@ -578,6 +668,96 @@ export default function BoardPage() {
                       </button>
                     </div>
                   </div>
+
+                  {isReadyForCollection && (
+                    <div style={{ borderTop: "1px solid " + CHROME + "22", paddingTop: 10 }}>
+                      {lines.length === 0 && (
+                        <div style={{ fontSize: 11, color: CHROME, marginBottom: 8 }}>No line items on this job.</div>
+                      )}
+                      {lines.map(function (line) {
+                        var lineEdit = lineEdits[line.id] || {};
+                        var staffId = lineEdit.staffId !== undefined ? lineEdit.staffId : defaultLineStaffId(line, job);
+                        var pctValue = lineEdit.pct !== undefined ? lineEdit.pct : String(defaultLinePct(line, job, staffById));
+                        var amountValue = lineEdit.amount !== undefined ? lineEdit.amount : String(defaultLineCommission(line, job, staffById));
+                        var name = (line.auto_services && line.auto_services.name) || "Service";
+
+                        return (
+                          <div key={line.id} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: "1px solid " + CHROME + "15" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: PAPER }}>{name}</span>
+                              <span style={{ fontSize: 12, color: CHROME }}>KSh {(line.price || 0).toLocaleString()}</span>
+                            </div>
+                            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                              <select value={staffId || ""}
+                                onChange={function (e) { setLineEdit(line.id, { staffId: e.target.value || null }); }}
+                                style={{
+                                  flex: 1, minWidth: 100, background: "rgba(255,255,255,0.04)", color: PAPER,
+                                  border: "1px solid rgba(143,166,184,0.3)", borderRadius: 6, padding: "6px 6px", fontSize: 11,
+                                }}>
+                                <option value="">Unassigned</option>
+                                {staff.map(function (s) { return <option key={s.id} value={s.id}>{s.name}</option>; })}
+                              </select>
+                              <input type="number" value={pctValue}
+                                onChange={function (e) {
+                                  var pctStr = e.target.value;
+                                  var pctNum = parseInt(pctStr, 10);
+                                  setLineEdit(line.id, {
+                                    pct: pctStr,
+                                    amount: isNaN(pctNum) ? "0" : String(Math.round((line.price || 0) * pctNum / 100)),
+                                  });
+                                }}
+                                style={{
+                                  width: 40, background: "rgba(255,255,255,0.04)", color: PAPER,
+                                  border: "1px solid rgba(143,166,184,0.3)", borderRadius: 6,
+                                  padding: "6px 4px", fontSize: 11, textAlign: "right",
+                                }} />
+                              <span style={{ fontSize: 10, color: CHROME }}>% =</span>
+                              <input type="number" value={amountValue}
+                                onChange={function (e) { setLineEdit(line.id, { amount: e.target.value }); }}
+                                style={{
+                                  width: 56, background: "rgba(255,255,255,0.04)", color: PAPER,
+                                  border: "1px solid rgba(143,166,184,0.3)", borderRadius: 6,
+                                  padding: "6px 6px", fontSize: 11,
+                                }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 10 }}>
+                        <span style={{ fontSize: 11, color: CHROME, whiteSpace: "nowrap" }}>Discount</span>
+                        <select value={edits.discountType || ""}
+                          onChange={function (e) { setDiscount({ discountType: e.target.value || null }); }}
+                          style={{
+                            background: "rgba(255,255,255,0.04)", color: PAPER,
+                            border: "1px solid rgba(143,166,184,0.3)", borderRadius: 6, padding: "6px 6px", fontSize: 11,
+                          }}>
+                          <option value="">None</option>
+                          <option value="pct">%</option>
+                          <option value="fixed">KSh</option>
+                        </select>
+                        {edits.discountType && (
+                          <input type="number" value={edits.discountValue || ""}
+                            onChange={function (e) { setDiscount({ discountValue: e.target.value }); }}
+                            placeholder="0"
+                            style={{
+                              width: 64, background: "rgba(255,255,255,0.04)", color: PAPER,
+                              border: "1px solid rgba(143,166,184,0.3)", borderRadius: 6, padding: "6px 8px", fontSize: 11,
+                            }} />
+                        )}
+                        {pricing && pricing.discountAmount > 0 && (
+                          <span style={{ fontSize: 11, color: SIGNAL, fontWeight: 700 }}>−KSh {pricing.discountAmount.toLocaleString()}</span>
+                        )}
+                      </div>
+
+                      {pricing && (
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 800 }}>
+                          <span style={{ color: CHROME }}>Payable: <span style={{ color: PAPER }}>KSh {((job.total_price || 0) - pricing.discountAmount).toLocaleString()}</span></span>
+                          <span style={{ color: CHROME }}>Commission: <span style={{ color: SIGNAL }}>KSh {pricing.totalCommission.toLocaleString()}</span></span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -592,8 +772,18 @@ export default function BoardPage() {
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 1900, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
             <div style={{ background: STEEL, borderRadius: 16, padding: 28, maxWidth: 340, width: "100%", border: "1px solid " + CHROME + "44" }}>
               <div style={{ fontSize: 13, color: CHROME, marginBottom: 4 }}>Collect Payment</div>
+              {payJob.discount_amount > 0 && (
+                <div style={{ fontSize: 13, color: CHROME, textDecoration: "line-through", marginBottom: 2 }}>
+                  {"KSh " + (payJob.total_price || 0).toLocaleString()}
+                </div>
+              )}
               <div style={{ fontSize: 24, fontWeight: 900, color: PAPER, marginBottom: 20 }}>
-                {"KSh " + (payJob.total_price || 0).toLocaleString()}
+                {"KSh " + payableAmount(payJob).toLocaleString()}
+                {payJob.discount_amount > 0 && (
+                  <span style={{ fontSize: 12, color: SIGNAL, fontWeight: 700, marginLeft: 8 }}>
+                    (−KSh {payJob.discount_amount.toLocaleString()})
+                  </span>
+                )}
               </div>
               <button onClick={function () { payCash(payJob); }} disabled={busy} style={{
                 width: "100%", padding: "14px 0", borderRadius: 10, border: "none",
@@ -631,7 +821,7 @@ export default function BoardPage() {
         return (
           <AutoMpesaPaymentModal
             salon={salon}
-            job={payJob}
+            job={Object.assign({}, payJob, { total_price: payableAmount(payJob) })}
             onPaid={function (method) { handleMpesaPaid(payJob, method); }}
             onCancel={handleMpesaCancel}
           />

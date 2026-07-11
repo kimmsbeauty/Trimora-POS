@@ -35,15 +35,27 @@ function downloadCSV(filename, rows) {
 }
 
 function buildJobsCSV(jobs, jobServices, staffById, rangeLabel, salonName) {
-  var header = ["Date", "Time", "Vehicle", "Customer", "Staff", "Payment Method", "Payment Status", "Total (KSh)", "Commission (KSh)", "Services"];
+  var header = ["Date", "Time", "Vehicle", "Customer", "Staff", "Payment Method", "Payment Status",
+    "Subtotal (KSh)", "Discount (KSh)", "Total (KSh)", "Commission (KSh)", "Services"];
 
   var rows = jobs.map(function (j) {
     var completed = j.completed_at ? new Date(j.completed_at) : null;
     var vehicle = j.auto_vehicles || {};
     var vehicleLabel = [vehicle.reg_number, vehicle.make].filter(Boolean).join(" · ");
     var staffMember = staffById[j.assigned_staff_id];
-    var services = jobServices.filter(function (js) { return js.job_id === j.id; })
-      .map(function (js) { return (js.auto_services && js.auto_services.name) || "Service"; }).join(" | ");
+    var lines = jobServices.filter(function (js) { return js.job_id === j.id; });
+    // Feature-parity item #8: annotate each service with its own staff
+    // when it differs from the job's overall assignee -- a job can have
+    // different people credited for different services.
+    var services = lines.map(function (js) {
+      var name = (js.auto_services && js.auto_services.name) || "Service";
+      var lineStaff = staffById[js.staff_id];
+      if (lineStaff && (!staffMember || lineStaff.id !== staffMember.id)) {
+        return name + " (" + lineStaff.name + ")";
+      }
+      return name;
+    }).join(" | ");
+    var discountAmount = j.discount_amount || 0;
     return [
       completed ? completed.toLocaleDateString("en-KE") : "",
       completed ? completed.toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" }) : "",
@@ -53,6 +65,8 @@ function buildJobsCSV(jobs, jobServices, staffById, rangeLabel, salonName) {
       j.payment_method || "",
       j.payment_status || "",
       j.total_price != null ? j.total_price : "",
+      discountAmount || "",
+      (j.total_price || 0) - discountAmount,
       j.commission != null ? j.commission : "",
       services,
     ];
@@ -60,6 +74,8 @@ function buildJobsCSV(jobs, jobServices, staffById, rangeLabel, salonName) {
 
   var totalRow = ["TOTAL", "", "", "", "", "", "",
     jobs.reduce(function (a, j) { return a + (j.total_price || 0); }, 0),
+    jobs.reduce(function (a, j) { return a + (j.discount_amount || 0); }, 0),
+    jobs.reduce(function (a, j) { return a + ((j.total_price || 0) - (j.discount_amount || 0)); }, 0),
     jobs.reduce(function (a, j) { return a + (j.commission || 0); }, 0),
     "",
   ];

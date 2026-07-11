@@ -8,9 +8,13 @@
 // - Different data shape -- POS's sale.items is a jsonb array with a
 //   service/product type split and possible multi-stylist commission
 //   splits; Auto's line items come from the real auto_job_services join
-//   table (one row per service, price snapshotted at add-time), there
-//   are no products on a job, and Auto has no discount concept at all
-//   (auto_jobs has no discount column -- decision 7.2, not an oversight).
+//   table (one row per service, price snapshotted at add-time), and
+//   there are no products on a job.
+//
+// Feature-parity item #8: shows a per-line "attended by" when different
+// staff worked different services on the same job (falls back to the
+// job's overall assigned staff when a line has no override), and a
+// subtotal/discount/total breakdown when a discount was applied.
 //
 // Deliberately does NOT show commission or commission percentage --
 // that's internal staff-facing data (visible in Reports), not
@@ -42,7 +46,11 @@ function buildWhatsAppMessage(salon, job, lineItems, staffMember, dateLabel, veh
     lines.push(name + " — " + money(li.price));
   });
   lines.push("");
-  lines.push("*TOTAL: " + money(job.total_price) + "*");
+  if (job.discount_amount > 0) {
+    lines.push("Subtotal: " + money(job.total_price));
+    lines.push("Discount: −" + money(job.discount_amount));
+  }
+  lines.push("*TOTAL: " + money((job.total_price || 0) - (job.discount_amount || 0)) + "*");
   lines.push(job.payment_status === "paid" ? "Paid via " + (job.payment_method || "—") : "Payment not yet collected");
   return lines.join("\n");
 }
@@ -94,18 +102,35 @@ export default function AutoReceipt({ salon, job, jobServices, staffById, onClos
             <div style={{ fontSize: 12, color: CHROME }}>No service line items recorded.</div>
           ) : lineItems.map(function (li, i) {
             var name = (li.auto_services && li.auto_services.name) || "Service";
+            var lineStaffName = li.staff && li.staff.name;
             return (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: PAPER, marginBottom: 5 }}>
-                <span>{name}</span>
-                <span style={{ fontWeight: 700 }}>{money(li.price)}</span>
+              <div key={i} style={{ marginBottom: 5 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: PAPER }}>
+                  <span>{name}</span>
+                  <span style={{ fontWeight: 700 }}>{money(li.price)}</span>
+                </div>
+                {lineStaffName && lineStaffName !== (staffMember && staffMember.name) && (
+                  <div style={{ fontSize: 10, color: CHROME }}>by {lineStaffName}</div>
+                )}
               </div>
             );
           })}
         </div>
 
+        <div style={{ borderBottom: "1px dashed " + CHROME + "33", margin: "8px 0" }} />
+        {job.discount_amount > 0 && (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: CHROME }}>
+              <span>Subtotal</span><span>{money(job.total_price)}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: SIGNAL }}>
+              <span>Discount</span><span>−{money(job.discount_amount)}</span>
+            </div>
+          </div>
+        )}
         <div style={{ borderBottom: "2px dashed " + CHROME + "44", margin: "10px 0" }} />
         <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 900, fontSize: 16, color: PAPER }}>
-          <span>TOTAL</span><span style={{ color: SIGNAL }}>{money(job.total_price)}</span>
+          <span>TOTAL</span><span style={{ color: SIGNAL }}>{money((job.total_price || 0) - (job.discount_amount || 0))}</span>
         </div>
 
         <div style={{ fontSize: 12, color: CHROME, marginTop: 8 }}>
