@@ -118,6 +118,7 @@ export default function SuperAdminDashboard({ onLogout }) {
   var [manualName,   setManualName]   = useState("");
   var [manualEmail,  setManualEmail]  = useState("");
   var [manualModuleKey, setManualModuleKey] = useState(null); // null = regular salon, "auto" = car wash
+  var [addExistingSalonId, setAddExistingSalonId] = useState("");
   var [manualPass,   setManualPass]   = useState("");
   var [manualStaff,  setManualStaff]  = useState("");
   var [manualAdmin,  setManualAdmin]  = useState("");
@@ -1387,7 +1388,9 @@ export default function SuperAdminDashboard({ onLogout }) {
   // service-role-only action), so this is genuinely new capability, not
   // a UI wired onto something that already worked another way.
   if (view === "carwashes") {
-    var carwashEnabledCount = salons.filter(function(s) { return s.auto_enabled; }).length;
+    var onboardedCarWashes = salons.filter(function(s) { return s.auto_enabled; });
+    var notYetOnboarded = salons.filter(function(s) { return !s.auto_enabled; });
+
     return (
       <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
         <div style={{ background: BLACK, padding: "16px 20px" }}>
@@ -1397,7 +1400,7 @@ export default function SuperAdminDashboard({ onLogout }) {
           </button>
           <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>🚗 Car Washes (Trimora Auto)</div>
           <div style={{ fontSize: 11, color: GOLD_DIM + "aa", marginTop: 2, marginBottom: 10 }}>
-            {carwashEnabledCount} of {salons.length} salons onboarded · toggle to onboard or suspend a salon's Auto access
+            {onboardedCarWashes.length} onboarded car wash{onboardedCarWashes.length === 1 ? "" : "es"} · use + Onboard or + Invite below to add a new one
           </div>
           <div style={{ display: "flex", gap: 6 }}>
             {PRODUCTS.map(function(p) {
@@ -1437,39 +1440,75 @@ export default function SuperAdminDashboard({ onLogout }) {
         </div>
 
         <div style={{ padding: 16 }}>
-          {salons.map(function(s) {
-            return (
-              <div key={s.id} style={{ background: WHITE, borderRadius: 14, padding: 14, marginBottom: 10, border: "1.5px solid " + GOLD_DIM + "33" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                      {s.salon_number && <span style={{ fontSize: 10, fontWeight: 900, color: WHITE, background: GOLD_DIM, borderRadius: 6, padding: "2px 7px", letterSpacing: "0.03em" }}>#{String(s.salon_number).padStart(3, "0")}</span>}
-                      <div style={{ fontSize: 14, fontWeight: 800, color: DARK }}>{s.name}</div>
-                      <Badge color={s.auto_enabled ? GREEN : "#999"}>{s.auto_enabled ? "Onboarded" : "Not onboarded"}</Badge>
-                      {s.suspended && <Badge color={RED}>Account suspended</Badge>}
+          {onboardedCarWashes.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "50px 20px", color: "#999" }}>
+              <div style={{ fontSize: 34, marginBottom: 10 }}>🚗</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: DARK, marginBottom: 6 }}>No car washes onboarded yet</div>
+              <div style={{ fontSize: 12 }}>Use <b>+ Onboard</b> or <b>+ Invite</b> above to create one from scratch, or approve a request under <b>Requests</b>.</div>
+            </div>
+          ) : (
+            onboardedCarWashes.map(function(s) {
+              return (
+                <div key={s.id} style={{ background: WHITE, borderRadius: 14, padding: 14, marginBottom: 10, border: "1.5px solid " + GOLD_DIM + "33" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                        {s.salon_number && <span style={{ fontSize: 10, fontWeight: 900, color: WHITE, background: GOLD_DIM, borderRadius: 6, padding: "2px 7px", letterSpacing: "0.03em" }}>#{String(s.salon_number).padStart(3, "0")}</span>}
+                        <div style={{ fontSize: 14, fontWeight: 800, color: DARK }}>{s.name}</div>
+                        <Badge color={GREEN}>Onboarded</Badge>
+                        {s.suspended && <Badge color={RED}>Account suspended</Badge>}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#888" }}>
+                        /{s.slug}
+                        {s.auto_enabled_at ? " · enabled " + new Date(s.auto_enabled_at).toLocaleDateString() : ""}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 11, color: "#888" }}>
-                      /{s.slug}
-                      {s.auto_enabled && s.auto_enabled_at ? " · enabled " + new Date(s.auto_enabled_at).toLocaleDateString() : ""}
-                    </div>
+                    <button
+                      disabled={actionLoading}
+                      onClick={function() { toggleAutoModule(s, false); }}
+                      style={{
+                        background: "#FEE2E2", color: RED,
+                        border: "none", borderRadius: 8, padding: "8px 14px",
+                        fontSize: 12, fontWeight: 800, cursor: actionLoading ? "default" : "pointer",
+                        opacity: actionLoading ? 0.6 : 1,
+                      }}
+                    >
+                      Suspend
+                    </button>
                   </div>
-                  <button
-                    disabled={actionLoading}
-                    onClick={function() { toggleAutoModule(s, !s.auto_enabled); }}
-                    style={{
-                      background: s.auto_enabled ? "#FEE2E2" : GOLD_DIM,
-                      color: s.auto_enabled ? RED : BLACK,
-                      border: "none", borderRadius: 8, padding: "8px 14px",
-                      fontSize: 12, fontWeight: 800, cursor: actionLoading ? "default" : "pointer",
-                      opacity: actionLoading ? 0.6 : 1,
-                    }}
-                  >
-                    {s.auto_enabled ? "Suspend" : "Onboard"}
-                  </button>
                 </div>
+              );
+            })
+          )}
+
+          {notYetOnboarded.length > 0 && (
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid " + GOLD_DIM + "33" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#999", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>
+                Add an existing salon instead
               </div>
-            );
-          })}
+              <div style={{ display: "flex", gap: 8 }}>
+                <select value={addExistingSalonId} onChange={function(e) { setAddExistingSalonId(e.target.value); }}
+                  style={{ flex: 1, padding: "10px 12px", borderRadius: 8, border: "1.5px solid " + GOLD_DIM + "44", fontSize: 13, background: WHITE }}>
+                  <option value="">Select a salon…</option>
+                  {notYetOnboarded.map(function(s) { return <option key={s.id} value={s.id}>{s.name}</option>; })}
+                </select>
+                <button
+                  disabled={actionLoading || !addExistingSalonId}
+                  onClick={function() {
+                    var target = notYetOnboarded.filter(function(s) { return s.id === addExistingSalonId; })[0];
+                    if (target) { toggleAutoModule(target, true); setAddExistingSalonId(""); }
+                  }}
+                  style={{
+                    background: addExistingSalonId ? GOLD_DIM : "#E5E0D5", color: addExistingSalonId ? BLACK : "#999",
+                    border: "none", borderRadius: 8, padding: "10px 16px", fontSize: 12, fontWeight: 800,
+                    cursor: addExistingSalonId && !actionLoading ? "pointer" : "default",
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
