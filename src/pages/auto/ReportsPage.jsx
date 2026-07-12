@@ -70,6 +70,7 @@ export default function ReportsPage({ isAdmin }) {
   var baysState = useState([]); var bays = baysState[0]; var setBays = baysState[1];
   var staffState = useState([]); var staff = staffState[0]; var setStaff = staffState[1];
   var stockMovesState = useState([]); var stockMoves = stockMovesState[0]; var setStockMoves = stockMovesState[1];
+  var queueCountState = useState(0); var queueCount = queueCountState[0]; var setQueueCount = queueCountState[1];
   var rangeState = useState("7d"); var range = rangeState[0]; var setRange = rangeState[1];
   var customFromState = useState(""); var customFrom = customFromState[0]; var setCustomFrom = customFromState[1];
   var customToState = useState(""); var customTo = customToState[0]; var setCustomTo = customToState[1];
@@ -81,12 +82,19 @@ export default function ReportsPage({ isAdmin }) {
       db("GET", "auto_bays", null, "?order=label.asc"),
       db("GET", "staff", null, "?order=name.asc"),
       db("GET", "auto_stock_movements", null, "?order=created_at.desc&limit=200&select=*,stock(name)"),
+      // Queue length -- same definition BoardPage.jsx uses for its
+      // "Waiting (n)" count: status === 'waiting' specifically (not the
+      // full ACTIVE_STATUSES set, which also includes in_bay and
+      // ready_for_collection -- those aren't "waiting"). id-only select
+      // since only the count is needed here, not full job rows.
+      db("GET", "auto_jobs", null, "?status=eq.waiting&select=id"),
     ]);
     setJobs(results[0] || []);
     setJobServices(results[1] || []);
     setBays(results[2] || []);
     setStaff(results[3] || []);
     setStockMoves(results[4] || []);
+    setQueueCount((results[5] || []).length);
     setLoading(false);
   }, []);
 
@@ -388,11 +396,12 @@ export default function ReportsPage({ isAdmin }) {
       </Card>
 
       <Card>
-        <CardTitle>Bays — Right Now</CardTitle>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <CardTitle>Right Now</CardTitle>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
           {[
             { label: "Occupied Now", value: occupiedBaysNow + " / " + totalBaysCount },
             { label: "Active Bays", value: activeBaysCount + " / " + totalBaysCount },
+            { label: "Queue Length", value: queueCount },
           ].map(function (m, i) {
             return (
               <div key={i} style={{ background: INK, borderRadius: 8, padding: "10px 8px", textAlign: "center", border: "1px solid " + CHROME + "22" }}>
