@@ -72,6 +72,7 @@ export default function SuperAdminDashboard({ onLogout }) {
   var [salons,       setSalons]       = useState([]);
   var [stats,        setStats]        = useState(null);
   var [selectedSalon,setSelectedSalon]= useState(null);
+  var [detailReturnView, setDetailReturnView] = useState("salons");
   var [loading,      setLoading]      = useState(true);
   var [actionLoading,setActionLoading]= useState(false);
   var [suspendModal, setSuspendModal] = useState(null);
@@ -772,8 +773,9 @@ export default function SuperAdminDashboard({ onLogout }) {
     }
   }
 
-  async function openSalonDetail(salon) {
+  async function openSalonDetail(salon, returnView) {
     setSelectedSalon(salon);
+    setDetailReturnView(returnView || "salons");
     setView("detail");
     setHistoryLoading(true);
     var history = await saFetch("GET", "salon_subscription_payments",
@@ -1345,7 +1347,7 @@ export default function SuperAdminDashboard({ onLogout }) {
               var s = item.salon;
               return (
                 <div key={s.id}
-                  onClick={function() { openSalonDetail(s); }}
+                  onClick={function() { openSalonDetail(s, "health"); }}
                   style={{ background: WHITE, borderRadius: 14, padding: 14, marginBottom: 10, border: "1.5px solid " + GOLD_DIM + "33", cursor: "pointer" }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -1449,7 +1451,8 @@ export default function SuperAdminDashboard({ onLogout }) {
           ) : (
             onboardedCarWashes.map(function(s) {
               return (
-                <div key={s.id} style={{ background: WHITE, borderRadius: 14, padding: 14, marginBottom: 10, border: "1.5px solid " + GOLD_DIM + "33" }}>
+                <div key={s.id} onClick={function() { openSalonDetail(s, "carwashes"); }}
+                  style={{ background: WHITE, borderRadius: 14, padding: 14, marginBottom: 10, border: "1.5px solid " + GOLD_DIM + "33", cursor: "pointer" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
@@ -1465,7 +1468,7 @@ export default function SuperAdminDashboard({ onLogout }) {
                     </div>
                     <button
                       disabled={actionLoading}
-                      onClick={function() { toggleAutoModule(s, false); }}
+                      onClick={function(e) { e.stopPropagation(); toggleAutoModule(s, false); }}
                       style={{
                         background: "#FEE2E2", color: RED,
                         border: "none", borderRadius: 8, padding: "8px 14px",
@@ -1546,7 +1549,7 @@ export default function SuperAdminDashboard({ onLogout }) {
             autoFlagged.map(function(item) {
               var s = item.salon;
               return (
-                <div key={s.id} onClick={function() { openSalonDetail(s); }}
+                <div key={s.id} onClick={function() { openSalonDetail(s, "autohealth"); }}
                   style={{ background: WHITE, borderRadius: 14, padding: 14, marginBottom: 10, border: "1.5px solid " + GOLD_DIM + "33", cursor: "pointer" }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -1920,7 +1923,7 @@ export default function SuperAdminDashboard({ onLogout }) {
       <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
         {/* Header */}
         <div style={{ background: BLACK, padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
-          <button onClick={function() { setView("salons"); setSelectedSalon(null); }}
+          <button onClick={function() { setView(detailReturnView); setSelectedSalon(null); }}
             style={{ background: "none", border: "none", color: GOLD, fontSize: 18, cursor: "pointer", padding: 0 }}>
             ←
           </button>
@@ -2226,7 +2229,7 @@ export default function SuperAdminDashboard({ onLogout }) {
         ) : filteredSalons.map(function(s) {
           return (
             <div key={s.id}
-              onClick={function() { openSalonDetail(s); }}
+              onClick={function() { openSalonDetail(s, "salons"); }}
               style={{
                 background: WHITE, borderRadius: 14, padding: "14px 16px",
                 marginBottom: 10, border: "1.5px solid " + (s.suspended ? RED + "33" : GOLD_DIM + "22"),
