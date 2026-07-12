@@ -194,8 +194,31 @@ export default function BoardPage() {
   var staffById = {};
   staff.forEach(function (s) { staffById[s.id] = s; });
 
-  var waitingJobs = jobs.filter(function (j) { return j.status === "waiting"; });
+  // Priority queue: high-priority jobs surface first, FIFO within each
+  // tier. jobs is already fetched order=checked_in_at.asc (see load()
+  // above), and Array.prototype.sort is a stable sort in every modern
+  // JS engine (guaranteed by spec since ES2019), so this preserves
+  // check-in order within the "high" group and within the "normal"
+  // group -- it doesn't need a secondary checked_in_at comparator.
+  var waitingJobs = jobs
+    .filter(function (j) { return j.status === "waiting"; })
+    .sort(function (a, b) {
+      var aHigh = a.priority === "high" ? 0 : 1;
+      var bHigh = b.priority === "high" ? 0 : 1;
+      return aHigh - bHigh;
+    });
   var activeJobs = jobs.filter(function (j) { return j.status !== "waiting"; });
+
+  async function togglePriority(job, e) {
+    e.stopPropagation();
+    if (busy) return;
+    setBusy(true);
+    var next = job.priority === "high" ? "normal" : "high";
+    await db("PATCH", "auto_jobs", { priority: next }, "?id=eq." + job.id);
+    await db("POST", "auto_job_events", { job_id: job.id, event_type: "priority_changed", payload: { priority: next } });
+    setBusy(false);
+    load();
+  }
 
   async function assignBay(bayId) {
     if (!selectedJobId || !selectedStaffId || busy) return;
@@ -552,6 +575,7 @@ export default function BoardPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {waitingJobs.map(function (job) {
               var isSelected = selectedJobId === job.id;
+              var isHigh = job.priority === "high";
               return (
                 <div key={job.id}
                   onClick={function () {
@@ -561,16 +585,33 @@ export default function BoardPage() {
                   style={{
                     display: "flex", justifyContent: "space-between", alignItems: "center",
                     padding: "12px 14px", borderRadius: 10, cursor: "pointer",
-                    border: "1.5px solid " + (isSelected ? SIGNAL : "rgba(143,166,184,0.2)"),
+                    border: "1.5px solid " + (isSelected ? SIGNAL : (isHigh ? ALERT + "88" : "rgba(143,166,184,0.2)")),
                     background: isSelected ? "rgba(61,220,151,0.1)" : "rgba(255,255,255,0.02)",
                   }}>
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: PAPER }}>{vehicleLabel(job)}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: PAPER }}>
+                      {isHigh && <span style={{ color: ALERT, marginRight: 6 }}>⚡</span>}
+                      {vehicleLabel(job)}
+                    </div>
                     <div style={{ fontSize: 11, color: CHROME }}>
                       {job.customers ? job.customers.name + " · " : ""}waiting {elapsedMinutes(job.checked_in_at)}
                     </div>
                   </div>
-                  {isSelected && <div style={{ fontSize: 11, fontWeight: 800, color: SIGNAL }}>Selected</div>}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <button
+                      onClick={function (e) { togglePriority(job, e); }}
+                      disabled={busy}
+                      style={{
+                        fontSize: 10, fontWeight: 800, padding: "5px 9px", borderRadius: 8,
+                        border: "1.5px solid " + (isHigh ? ALERT : CHROME + "55"),
+                        background: isHigh ? ALERT : "transparent",
+                        color: isHigh ? INK : CHROME,
+                        cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
+                      }}>
+                      {isHigh ? "★ Priority" : "Mark priority"}
+                    </button>
+                    {isSelected && <div style={{ fontSize: 11, fontWeight: 800, color: SIGNAL }}>Selected</div>}
+                  </div>
                 </div>
               );
             })}
