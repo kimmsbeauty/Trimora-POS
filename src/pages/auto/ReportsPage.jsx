@@ -131,6 +131,18 @@ export default function ReportsPage({ isAdmin }) {
   var jobCount = jobsInRange.length;
   var avgTicket = jobCount ? Math.round(totalRevenue / jobCount) : 0;
 
+  // Average wash time -- checked_in_at -> completed_at, i.e. total time
+  // a customer's vehicle was in the system end to end (distinct from
+  // Bay Utilization's per-bay avgMinutes below, which measures
+  // in_bay_at -> completed_at, the narrower "actually in the bay" span).
+  // Only counts jobs that have both timestamps -- older/malformed rows
+  // without checked_in_at are excluded rather than skewing the average.
+  var washTimeJobs = jobsInRange.filter(function (j) { return j.checked_in_at && j.completed_at; });
+  var totalWashMinutes = washTimeJobs.reduce(function (a, j) {
+    return a + (new Date(j.completed_at) - new Date(j.checked_in_at)) / 60000;
+  }, 0);
+  var avgWashMinutes = washTimeJobs.length ? Math.round(totalWashMinutes / washTimeJobs.length) : 0;
+
   // 7-day trend, always by calendar day regardless of the selected
   // range filter -- matches POS Dashboard's convention of the trend
   // chart being independent of the summary cards' range.
@@ -325,11 +337,12 @@ export default function ReportsPage({ isAdmin }) {
 
       <Card>
         <CardTitle>Summary — {rangeLabel}</CardTitle>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           {[
             { label: "Revenue", value: money(totalRevenue) },
             { label: "Jobs", value: jobCount },
             { label: "Avg Ticket", value: money(avgTicket) },
+            { label: "Avg Wash Time", value: washTimeJobs.length ? (avgWashMinutes + " min") : "—" },
           ].map(function (m, i) {
             return (
               <div key={i} style={{ background: INK, borderRadius: 8, padding: "10px 8px", textAlign: "center", border: "1px solid " + CHROME + "22" }}>
