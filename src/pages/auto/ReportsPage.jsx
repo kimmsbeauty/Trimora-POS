@@ -29,6 +29,7 @@
 // yet), but that's since been built, so this reports on real data now.
 
 import { useState, useEffect, useCallback } from "react";
+import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { db } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
 import AutoExportButton from "../../components/AutoExportButton";
@@ -179,7 +180,8 @@ export default function ReportsPage({ isAdmin }) {
       count: dayJobs.length,
     });
   }
-  var maxDayRev = Math.max.apply(null, last7.map(function (d) { return d.revenue; }).concat([1]));
+  // maxDayRev removed -- was only used by the old hand-rolled div bars,
+  // now replaced by recharts (which auto-scales its own Y axis).
 
   // Top services -- via the real join table, not a jsonb parse.
   var svcAgg = {};
@@ -415,18 +417,29 @@ export default function ReportsPage({ isAdmin }) {
 
       <Card>
         <CardTitle>Last 7 days</CardTitle>
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 90 }}>
-          {last7.map(function (d, i) {
-            var h = Math.max(4, Math.round((d.revenue / maxDayRev) * 74));
-            return (
-              <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center" }}>
-                <div style={{ width: "100%", height: h, background: d.revenue > 0 ? SIGNAL : CHROME + "33", borderRadius: 4 }} title={money(d.revenue)} />
-                <div style={{ fontSize: 10, color: CHROME, marginTop: 4 }}>{d.label}</div>
-              </div>
-            );
-          })}
+        <div style={{ height: 180, marginLeft: -12 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={last7} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={CHROME + "22"} vertical={false} />
+              <XAxis dataKey="label" tick={{ fill: CHROME, fontSize: 10 }} axisLine={{ stroke: CHROME + "33" }} tickLine={false} />
+              <YAxis tick={{ fill: CHROME, fontSize: 10 }} axisLine={false} tickLine={false} width={40}
+                tickFormatter={function (v) { return v >= 1000 ? Math.round(v / 1000) + "k" : v; }} />
+              <Tooltip
+                cursor={{ fill: CHROME + "11" }}
+                contentStyle={{ background: INK, border: "1px solid " + CHROME + "33", borderRadius: 8, fontSize: 12 }}
+                labelStyle={{ color: PAPER, fontWeight: 700 }}
+                itemStyle={{ color: SIGNAL }}
+                formatter={function (value) { return [money(value), "Revenue"]; }}
+              />
+              <Bar dataKey="revenue" radius={[4, 4, 0, 0]}>
+                {last7.map(function (d, i) {
+                  return <Cell key={i} fill={d.revenue > 0 ? SIGNAL : CHROME + "33"} />;
+                })}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </div>
-        <div style={{ fontSize: 11, color: CHROME, marginTop: 10 }}>
+        <div style={{ fontSize: 11, color: CHROME, marginTop: 4 }}>
           Total: {money(last7.reduce(function (a, d) { return a + d.revenue; }, 0))}
         </div>
       </Card>
