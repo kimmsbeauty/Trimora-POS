@@ -400,6 +400,43 @@ export default function ReportsPage({ isAdmin }) {
       </Card>
 
       <Card>
+        <CardTitle>Jobs — {rangeLabel}</CardTitle>
+        {jobsInRange.length === 0 && (
+          <div style={{ fontSize: 13, color: CHROME }}>No completed jobs in this period.</div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 420, overflowY: "auto" }}>
+          {jobsInRange.map(function (j) {
+            var completed = j.completed_at ? new Date(j.completed_at) : null;
+            var vehicle = j.auto_vehicles || {};
+            var vehicleText = [vehicle.reg_number, vehicle.make].filter(Boolean).join(" · ") || "Vehicle";
+            var staffMember = staffById[j.assigned_staff_id];
+            var lines = jobServices.filter(function (js) { return js.job_id === j.id; });
+            var servicesText = lines.map(function (js) { return (js.auto_services && js.auto_services.name) || "Service"; }).join(", ");
+            return (
+              <div key={j.id} style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid " + CHROME + "22", background: "rgba(255,255,255,0.02)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: PAPER }}>{vehicleText}</div>
+                    <div style={{ fontSize: 11, color: CHROME }}>
+                      {(j.customers && j.customers.name) || "Walk-in"}
+                      {completed ? " · " + completed.toLocaleDateString("en-KE") + " " + completed.toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" }) : ""}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: SIGNAL }}>{money(payableAmount(j))}</div>
+                    <div style={{ fontSize: 10, color: CHROME }}>{j.payment_method || "—"}</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: CHROME, marginTop: 6 }}>
+                  {servicesText || "No services"}{staffMember ? " · " + staffMember.name : ""}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      <Card>
         <CardTitle>Right Now</CardTitle>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
           {[
