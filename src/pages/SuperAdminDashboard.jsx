@@ -535,12 +535,20 @@ export default function SuperAdminDashboard({ onLogout }) {
     return revenueByMonthLib(allPayments);
   }
 
+  // realSalons excludes car washes (business_type='auto') -- these three
+  // consumers are all reached from the Salons product tab specifically
+  // (Analytics, Health), so they should reflect salons only, same as
+  // filteredSalons and platform_stats above. The Car Washes view and
+  // its own Auto Health/Analytics continue to use the full `salons`
+  // array (or auto_enabled) directly -- unaffected by this.
+  var realSalons = salons.filter(function(s) { return s.business_type !== "auto"; });
+
   function salonsByMonth() {
-    return salonsByMonthLib(salons);
+    return salonsByMonthLib(realSalons);
   }
 
   function revenueBySalon() {
-    return revenueBySalonLib(allPayments, salons);
+    return revenueBySalonLib(allPayments, realSalons);
   }
 
   // ── Health check — flags salons that likely need attention, using
@@ -551,7 +559,7 @@ export default function SuperAdminDashboard({ onLogout }) {
   }
 
   function salonsNeedingAttention() {
-    return salonsNeedingAttentionLib(salons);
+    return salonsNeedingAttentionLib(realSalons);
   }
 
   function autoSalonsNeedingAttention() {
@@ -980,7 +988,11 @@ export default function SuperAdminDashboard({ onLogout }) {
   }
 
   // Filter + search
+  // Car washes (business_type='auto') are a genuinely separate business
+  // from salons -- per explicit instruction, they must never appear on
+  // the Salons side at all, only under the Auto product tab.
   var filteredSalons = salons.filter(function(s) {
+    if (s.business_type === "auto") return false;
     var matchesFilter =
       filter === "all" ||
       (filter === "active"    && !s.suspended) ||

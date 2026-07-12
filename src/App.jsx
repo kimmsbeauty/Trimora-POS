@@ -1,5 +1,5 @@
 // src/App.jsx
-import { BrowserRouter, Routes, Route, useParams } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useParams, Navigate } from "react-router-dom";
 import { useState, useEffect, lazy, Suspense } from "react";
 import BookingPage from "./pages/BookingPage";
 import POSApp from "./pages/POSApp";
@@ -10,7 +10,7 @@ import RatingPage from "./pages/RatingPage";
 import AutoRatingPage from "./pages/AutoRatingPage";
 import TrimoraLandingPage from "./pages/TrimoraLandingPage";
 import { getDeviceLoginStatus, silentDeviceLogin, clearDeviceAuth } from "./lib/deviceAuth";
-import { SalonGate, fetchPublicSalonBranding } from "./lib/SalonContext";
+import { SalonGate, useSalon, fetchPublicSalonBranding } from "./lib/SalonContext";
 
 // Lazily loaded: each of these is visited far less often than booking/POS
 // (recovery flows, one-time onboarding, terms, and the super admin console
@@ -191,6 +191,18 @@ function DeviceGate({ children }) {
 function StaffRoute() {
   var loggedInState = useState(false); var loggedIn = loggedInState[0]; var setLoggedIn = loggedInState[1];
   var userRoleState = useState("staff"); var userRole = userRoleState[0]; var setUserRole = userRoleState[1];
+  var salon = useSalon();
+  var params = useParams();
+
+  // Car washes (business_type='auto') are a genuinely separate business
+  // from salons, not just a module toggle -- per explicit instruction,
+  // an /pos visit for one of these must never render the salon login or
+  // POS UI, even briefly. Redirect happens here, before the login-check
+  // below, so there's no flash of salon-themed content first.
+  if (salon && salon.business_type === "auto") {
+    return <Navigate to={"/" + params.slug + "/auto"} replace />;
+  }
+
   if (!loggedIn) {
     return <LoginPage onLogin={function(role) { setUserRole(role); setLoggedIn(true); }} />;
   }

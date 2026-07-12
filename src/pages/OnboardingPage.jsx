@@ -221,9 +221,14 @@ export default function OnboardingPage() {
       // the new owner's first login transparently sets it up with zero
       // manual steps and zero broken state in between.
 
-      // Step 4: Persist device session and redirect
+      // Step 4: Persist device session and redirect. Car-wash invites go
+      // straight to /auto -- never through /pos, even briefly -- since
+      // complete_salon_onboarding (migration below) sets business_type=
+      // 'auto' for these salons, and /pos itself now redirects business_
+      // type='auto' salons to /auto anyway. Redirecting directly here
+      // just skips that extra round-trip rather than depending on it.
       persistSession(signupData);
-      window.location.href = "/" + slug_result + "/pos";
+      window.location.href = "/" + slug_result + (isAuto ? "/auto" : "/pos");
 
     } catch (e) {
       setLoading(false);
