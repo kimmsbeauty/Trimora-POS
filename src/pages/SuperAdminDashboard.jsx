@@ -1432,7 +1432,7 @@ export default function SuperAdminDashboard({ onLogout }) {
             })}
           </div>
 
-          <div style={{ display: "flex", gap: 8, marginTop: 12, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+          <div className="carwash-nav-scroll" style={{ display: "flex", gap: 8, marginTop: 12, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
             {[
               { label: "📊 Analytics",  onClick: function() { setView("autoanalytics"); loadAutoAnalytics(); } },
               { label: "📋 Audit Log",  onClick: function() { setView("autoaudit"); loadAuditLog(); } },
@@ -1442,7 +1442,7 @@ export default function SuperAdminDashboard({ onLogout }) {
               { label: "+ Invite",      onClick: function() { setInviteModuleKey("auto"); setInviteModal(true); setInviteLink(""); setInviteEmail(""); setInviteName(""); } },
             ].map(function(btn) {
               return (
-                <button key={btn.label} onClick={btn.onClick} style={{
+                <button key={btn.label} className="carwash-nav-item" onClick={btn.onClick} style={{
                   flexShrink: 0, background: "rgba(255,255,255,0.1)", border: "1px solid " + GOLD_DIM + "44",
                   color: WHITE, borderRadius: 20, padding: "7px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
                 }}>
@@ -1451,6 +1451,12 @@ export default function SuperAdminDashboard({ onLogout }) {
               );
             })}
           </div>
+          <style>{`
+            .carwash-nav-scroll::-webkit-scrollbar { display: none; }
+            @media (min-width: 640px) {
+              .carwash-nav-item { flex: 1 1 0 !important; white-space: normal !important; }
+            }
+          `}</style>
         </div>
 
         <div style={{ padding: 16 }}>
