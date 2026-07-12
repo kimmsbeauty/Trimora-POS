@@ -115,10 +115,15 @@ function AutoStaffRoute() {
         overflowX: "auto", WebkitOverflowScrolling: "touch", scrollbarWidth: "none",
       }}>
         {visibleTabs.map(function (t) {
-          return <div key={t.key} style={tabStyle(t.key)} onClick={function () { setTab(t.key); }}>{t.label}</div>;
+          return <div key={t.key} className="auto-tab-item" style={tabStyle(t.key)} onClick={function () { setTab(t.key); }}>{t.label}</div>;
         })}
       </div>
-      <style>{".auto-tab-scroll::-webkit-scrollbar { display: none; }"}</style>
+      <style>{`
+        .auto-tab-scroll::-webkit-scrollbar { display: none; }
+        @media (min-width: 640px) {
+          .auto-tab-item { flex: 1 1 0 !important; white-space: normal !important; }
+        }
+      `}</style>
       {page}
     </div>
   );
