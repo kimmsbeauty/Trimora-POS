@@ -12,6 +12,7 @@ import { useState, useEffect } from "react";
 import { useSalon } from "../../lib/SalonContext";
 import { db } from "../../lib/db";
 import LoyaltyBadge from "../../components/LoyaltyBadge";
+import VehiclePhotoUpload from "../../components/VehiclePhotoUpload";
 import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "./theme";
 
 function normalizeReg(raw) {
@@ -52,6 +53,12 @@ export default function CheckInPage() {
   var resultState = useState(null); // null | "success" | "error"
   var result = resultState[0]; var setResult = resultState[1];
 
+  // Only used for the optional "add photos" section on the success
+  // screen -- a new vehicle's id doesn't exist until check-in is
+  // actually submitted, so it can't be shown any earlier for that path.
+  var lastVehicleIdState = useState(null);
+  var lastVehicleId = lastVehicleIdState[0]; var setLastVehicleId = lastVehicleIdState[1];
+
   useEffect(function () {
     db("GET", "auto_services", null, "?active=eq.true&order=name.asc").then(function (rows) {
       setServices(rows || []);
@@ -61,7 +68,7 @@ export default function CheckInPage() {
   function resetForm() {
     setRegInput(""); setSearchStatus("idle"); setVehicle(null);
     setCustName(""); setCustPhone(""); setVMake(""); setVModel(""); setVColor("");
-    setSelected({}); setResult(null);
+    setSelected({}); setResult(null); setLastVehicleId(null);
   }
 
   async function handleSearch() {
@@ -145,6 +152,7 @@ export default function CheckInPage() {
     });
 
     setSubmitting(false);
+    setLastVehicleId(vehicleId);
     setResult("success");
   }
 
@@ -168,9 +176,14 @@ export default function CheckInPage() {
         alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "system-ui, -apple-system, sans-serif" }}>
         <div style={{ fontSize: 40, marginBottom: 12 }}>✓</div>
         <div style={{ fontSize: 18, fontWeight: 800, color: PAPER, marginBottom: 6 }}>Checked in</div>
-        <div style={{ fontSize: 13, color: CHROME, marginBottom: 28, textAlign: "center" }}>
+        <div style={{ fontSize: 13, color: CHROME, marginBottom: 20, textAlign: "center" }}>
           Vehicle is now waiting in the queue.
         </div>
+        {lastVehicleId && (
+          <div style={{ width: "100%", maxWidth: 380, background: STEEL, borderRadius: 14, padding: 16, marginBottom: 20, border: "1px solid rgba(143,166,184,0.15)" }}>
+            <VehiclePhotoUpload vehicleId={lastVehicleId} />
+          </div>
+        )}
         <button onClick={resetForm} style={{
           background: SIGNAL, color: INK, border: "none", borderRadius: 12, padding: "14px 28px",
           fontSize: 15, fontWeight: 800, cursor: "pointer",
@@ -242,10 +255,11 @@ export default function CheckInPage() {
             <div style={{ fontSize: 16, fontWeight: 800, color: PAPER, marginBottom: 4 }}>
               {[vehicle.make, vehicle.model, vehicle.color].filter(Boolean).join(" · ") || "Vehicle"}
             </div>
-            <div style={{ fontSize: 13, color: CHROME, display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ fontSize: 13, color: CHROME, display: "flex", alignItems: "center", gap: 6, marginBottom: 14 }}>
               {vehicle.customers ? (vehicle.customers.name + " · " + vehicle.customers.phone) : "Customer on file"}
               {vehicle.customers && <LoyaltyBadge customer={vehicle.customers} size="sm" />}
             </div>
+            <VehiclePhotoUpload vehicleId={vehicle.id} />
           </div>
         )}
 

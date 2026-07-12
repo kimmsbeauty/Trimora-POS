@@ -43,6 +43,7 @@ import { useSalon } from "../../lib/SalonContext";
 import AutoMpesaPaymentModal from "../../components/AutoMpesaPaymentModal";
 import AutoReceipt from "../../components/AutoReceipt";
 import AutoFeedbackModal from "../../components/AutoFeedbackModal";
+import VehiclePhotoUpload from "../../components/VehiclePhotoUpload";
 import { computeStockAfterDeduction } from "../../lib/saleLogic";
 import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "./theme";
 
@@ -119,6 +120,11 @@ export default function BoardPage() {
   var selectedJobId = selectedJobIdState[0]; var setSelectedJobId = selectedJobIdState[1];
   var selectedStaffIdState = useState(null);
   var selectedStaffId = selectedStaffIdState[0]; var setSelectedStaffId = selectedStaffIdState[1];
+  // One-at-a-time expanded photo panel -- same pattern as selectedJobId,
+  // works for any job (waiting or in-progress) since the panel is keyed
+  // off vehicle_id, not job status.
+  var expandedPhotosJobIdState = useState(null);
+  var expandedPhotosJobId = expandedPhotosJobIdState[0]; var setExpandedPhotosJobId = expandedPhotosJobIdState[1];
   var commissionEditsState = useState({}); // job.id -> { discountType, discountValue, lines: { lineId: { staffId, pct, amount } } }
   var commissionEdits = commissionEditsState[0]; var setCommissionEdits = commissionEditsState[1];
   var jobServicesState = useState({}); // job.id -> array of auto_job_services rows (with auto_services join)
@@ -577,7 +583,8 @@ export default function BoardPage() {
               var isSelected = selectedJobId === job.id;
               var isHigh = job.priority === "high";
               return (
-                <div key={job.id}
+                <div key={job.id} style={{ display: "contents" }}>
+                <div
                   onClick={function () {
                     setSelectedJobId(isSelected ? null : job.id);
                     setSelectedStaffId(null);
@@ -599,6 +606,15 @@ export default function BoardPage() {
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <button
+                      onClick={function (e) { e.stopPropagation(); setExpandedPhotosJobId(expandedPhotosJobId === job.id ? null : job.id); }}
+                      style={{
+                        fontSize: 10, fontWeight: 700, padding: "5px 9px", borderRadius: 8,
+                        border: "1.5px solid " + CHROME + "55", background: "transparent", color: CHROME,
+                        cursor: "pointer",
+                      }}>
+                      📷 Photos
+                    </button>
+                    <button
                       onClick={function (e) { togglePriority(job, e); }}
                       disabled={busy}
                       style={{
@@ -612,6 +628,12 @@ export default function BoardPage() {
                     </button>
                     {isSelected && <div style={{ fontSize: 11, fontWeight: 800, color: SIGNAL }}>Selected</div>}
                   </div>
+                </div>
+                {expandedPhotosJobId === job.id && (
+                  <div onClick={function (e) { e.stopPropagation(); }} style={{ marginTop: -4, marginBottom: 4, padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.02)", border: "1.5px solid rgba(143,166,184,0.2)" }}>
+                    <VehiclePhotoUpload vehicleId={job.vehicle_id} />
+                  </div>
+                )}
                 </div>
               );
             })}
@@ -690,6 +712,12 @@ export default function BoardPage() {
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <button onClick={function () { setExpandedPhotosJobId(expandedPhotosJobId === job.id ? null : job.id); }} style={{
+                        background: "transparent", color: CHROME, border: "1.5px solid " + CHROME + "55",
+                        borderRadius: 8, padding: "8px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                      }}>
+                        📷
+                      </button>
                       {NEXT_STATUS[job.status] && (
                         <button onClick={function () {
                           if (NEXT_STATUS[job.status] === "completed") { startCompleteFlow(job); }
@@ -797,6 +825,11 @@ export default function BoardPage() {
                           <span style={{ color: CHROME }}>Commission: <span style={{ color: SIGNAL }}>KSh {pricing.totalCommission.toLocaleString()}</span></span>
                         </div>
                       )}
+                    </div>
+                  )}
+                  {expandedPhotosJobId === job.id && (
+                    <div style={{ borderTop: "1px solid " + CHROME + "22", paddingTop: 10, marginTop: 10 }}>
+                      <VehiclePhotoUpload vehicleId={job.vehicle_id} />
                     </div>
                   )}
                 </div>
