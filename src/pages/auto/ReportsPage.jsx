@@ -221,6 +221,13 @@ export default function ReportsPage({ isAdmin }) {
     return Object.assign({ name: (s && s.name) || "Unknown staff" }, e[1]);
   }).sort(function (a, b) { return b.commission - a.commission; });
 
+  // Active Staff -- distinct staff who worked at least one service line
+  // in the selected range. Not an attendance/clock-in metric (no such
+  // system exists in this codebase, POS side either) -- "active" here
+  // means "credited with a job," same definition as the Staff
+  // Commission leaderboard already uses via staffAgg.
+  var activeStaffCount = Object.keys(staffAgg).length;
+
   // Inventory usage -- joined against stock(name) for readability,
   // same pattern as Top Services joining auto_services(name).
   var stockAgg = {};
@@ -337,12 +344,13 @@ export default function ReportsPage({ isAdmin }) {
 
       <Card>
         <CardTitle>Summary — {rangeLabel}</CardTitle>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
           {[
             { label: "Revenue", value: money(totalRevenue) },
             { label: "Jobs", value: jobCount },
             { label: "Avg Ticket", value: money(avgTicket) },
             { label: "Avg Wash Time", value: washTimeJobs.length ? (avgWashMinutes + " min") : "—" },
+            { label: "Active Staff", value: activeStaffCount },
           ].map(function (m, i) {
             return (
               <div key={i} style={{ background: INK, borderRadius: 8, padding: "10px 8px", textAlign: "center", border: "1px solid " + CHROME + "22" }}>
