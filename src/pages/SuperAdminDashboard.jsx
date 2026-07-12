@@ -1738,8 +1738,16 @@ export default function SuperAdminDashboard({ onLogout }) {
             style={{ background: "none", border: "none", color: GOLD_DIM, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 8, padding: 0 }}>
             ← Back
           </button>
-          <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>🧑‍💼 Auto Requests</div>
-          <div style={{ fontSize: 11, color: GOLD_DIM + "aa", marginTop: 2 }}>Car wash onboarding requests, separate from salon requests</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>🧑‍💼 Auto Requests</div>
+              <div style={{ fontSize: 11, color: GOLD_DIM + "aa", marginTop: 2 }}>Car wash onboarding requests, separate from salon requests</div>
+            </div>
+            <button onClick={function() { setAddRepModal(true); setAddRepEmail(""); setAddRepPass(""); setAddRepError(""); }}
+              style={{ background: "none", border: "1px solid " + GOLD_DIM + "66", color: GOLD, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+              + Add Sales Rep
+            </button>
+          </div>
         </div>
 
         <div style={{ padding: 16 }}>
