@@ -143,6 +143,16 @@ export default function ReportsPage({ isAdmin }) {
   }, 0);
   var avgWashMinutes = washTimeJobs.length ? Math.round(totalWashMinutes / washTimeJobs.length) : 0;
 
+  // Bays -- Right Now. Deliberately NOT range-filtered, unlike every
+  // other Summary stat: current_job_id/active reflect live bay state,
+  // not historical data for whatever date range happens to be
+  // selected. Kept as its own card (below) rather than folded into the
+  // range-scoped Summary card so a selected range never implies these
+  // numbers are somehow scoped to it too.
+  var occupiedBaysNow = bays.filter(function (b) { return b.current_job_id; }).length;
+  var activeBaysCount = bays.filter(function (b) { return b.active; }).length;
+  var totalBaysCount = bays.length;
+
   // 7-day trend, always by calendar day regardless of the selected
   // range filter -- matches POS Dashboard's convention of the trend
   // chart being independent of the summary cards' range.
@@ -375,6 +385,23 @@ export default function ReportsPage({ isAdmin }) {
             📲 Share End-of-Day Summary
           </a>
         )}
+      </Card>
+
+      <Card>
+        <CardTitle>Bays — Right Now</CardTitle>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          {[
+            { label: "Occupied Now", value: occupiedBaysNow + " / " + totalBaysCount },
+            { label: "Active Bays", value: activeBaysCount + " / " + totalBaysCount },
+          ].map(function (m, i) {
+            return (
+              <div key={i} style={{ background: INK, borderRadius: 8, padding: "10px 8px", textAlign: "center", border: "1px solid " + CHROME + "22" }}>
+                <div style={{ fontSize: 10, color: CHROME, fontWeight: 700, textTransform: "uppercase" }}>{m.label}</div>
+                <div style={{ fontSize: 15, fontWeight: 900, color: SIGNAL, marginTop: 2 }}>{m.value}</div>
+              </div>
+            );
+          })}
+        </div>
       </Card>
 
       <Card>
