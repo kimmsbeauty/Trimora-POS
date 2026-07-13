@@ -447,6 +447,14 @@ export default function BoardPage() {
     advanceJob(job, "Cash");
   }
 
+  // Paybill, Send Money, and Card are all recorded the same way Cash
+  // already is -- a manual, staff-attested label, no processing behind
+  // it. Only Till is different (real STK push, see payTill below).
+  function payManual(job, method) {
+    setPaymentJobId(null);
+    advanceJob(job, method);
+  }
+
   function payLater(job) {
     setPaymentJobId(null);
     advanceJob(job);
@@ -859,18 +867,32 @@ export default function BoardPage() {
                   </span>
                 )}
               </div>
-              <button onClick={function () { payCash(payJob); }} disabled={busy} style={{
-                width: "100%", padding: "14px 0", borderRadius: 10, border: "none",
-                background: SIGNAL, color: INK, fontWeight: 800, fontSize: 15, cursor: "pointer", marginBottom: 10,
-              }}>
-                Cash
-              </button>
-              <button onClick={payTill} disabled={busy} style={{
-                width: "100%", padding: "14px 0", borderRadius: 10, border: "1px solid " + SIGNAL,
-                background: "transparent", color: SIGNAL, fontWeight: 800, fontSize: 15, cursor: "pointer", marginBottom: 10,
-              }}>
-                M-Pesa (Till)
-              </button>
+              {(function () {
+                var enabled = (salon && salon.enabled_payment_methods) || ["Cash", "Till"];
+                // Cash always available regardless of settings, matching
+                // POS's own checkout convention (see POSApp.jsx) and this
+                // page's pre-existing behavior before this change.
+                var methods = ["Cash"].concat(enabled.filter(function (m) { return m !== "Cash"; }));
+                var icons = { Cash: "💵", Till: "📲", Paybill: "🏦", "Send Money": "📱", Card: "💳" };
+                var labels = { Cash: "Cash", Till: "M-Pesa (Till)", Paybill: "Paybill", "Send Money": "Send Money", Card: "Card" };
+                return methods.map(function (m) {
+                  var isPrimary = m === "Cash";
+                  var onClick = m === "Cash" ? function () { payCash(payJob); }
+                    : m === "Till" ? payTill
+                    : function () { payManual(payJob, m); };
+                  return (
+                    <button key={m} onClick={onClick} disabled={busy} style={{
+                      width: "100%", padding: isPrimary ? "14px 0" : "12px 0", borderRadius: 10,
+                      border: isPrimary ? "none" : "1px solid " + SIGNAL,
+                      background: isPrimary ? SIGNAL : "transparent",
+                      color: isPrimary ? INK : SIGNAL,
+                      fontWeight: 800, fontSize: isPrimary ? 15 : 14, cursor: "pointer", marginBottom: 10,
+                    }}>
+                      {icons[m] || "💳"} {labels[m] || m}
+                    </button>
+                  );
+                });
+              })()}
               <button onClick={function () { payLater(payJob); }} disabled={busy} style={{
                 width: "100%", padding: "10px 0", borderRadius: 10, border: "none",
                 background: "transparent", color: CHROME, fontWeight: 700, fontSize: 13, cursor: "pointer", marginBottom: 10,

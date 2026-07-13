@@ -155,6 +155,93 @@ export default function AutoSettingsPage() {
     autoResetSaved(setStkSaved);
   }
 
+  // ── Contact & Payments fields -- ported from SalonSettingsPage ──────
+  // Fetched directly from salon_settings rather than relying on
+  // useSalon() context, consistent with the M-Pesa STK section above --
+  // context's merge (see SalonContext.jsx) doesn't include
+  // receipt_footer, so a dedicated fetch keeps every field here sourced
+  // the same way rather than mixing context + fetch for related fields.
+  var [contactPhone, setContactPhone] = useState("");
+  var [mpesaTill, setMpesaTill] = useState("");
+  var [mpesaName, setMpesaName] = useState("");
+  var [mpesaPaybill, setMpesaPaybill] = useState("");
+  var [mpesaAccount, setMpesaAccount] = useState("");
+  var [mpesaSendMoneyPhone, setMpesaSendMoneyPhone] = useState("");
+  // "Card" is a new value added here per explicit direction -- a
+  // recordable/manual payment method label only, same as how Till/
+  // Paybill/Send Money already work in POS's own checkout (shown as
+  // instructions, not real processing). No schema change needed:
+  // enabled_payment_methods is a plain text[] with no CHECK constraint
+  // (confirmed live before adding this), so "Card" is just a new string
+  // value, not a new column or migration.
+  var [enabledPaymentMethods, setEnabledPaymentMethods] = useState(["Cash", "Till"]);
+  var [receiptFooter, setReceiptFooter] = useState("");
+  var [contactSaving, setContactSaving] = useState(false);
+  var [contactSaved, setContactSaved] = useState(false);
+  var [contactError, setContactError] = useState("");
+
+  useEffect(function () {
+    if (!salon || !salon.id) return;
+    (async function () {
+      var rows = await db("GET", "salon_settings", null, "?salon_id=eq." + salon.id + "&limit=1");
+      var s = rows && rows[0];
+      if (!s) return;
+      setContactPhone(s.contact_phone || "");
+      setMpesaTill(s.mpesa_till || "");
+      setMpesaName(s.mpesa_name || "");
+      setMpesaPaybill(s.mpesa_paybill || "");
+      setMpesaAccount(s.mpesa_account || "");
+      setMpesaSendMoneyPhone(s.mpesa_send_money_phone || "");
+      setEnabledPaymentMethods(s.enabled_payment_methods || ["Cash", "Till"]);
+      setReceiptFooter(s.receipt_footer || "");
+    })();
+  }, [salon && salon.id]);
+
+  function togglePaymentMethod(method) {
+    setEnabledPaymentMethods(function (prev) {
+      if (method === "Cash") return prev; // Cash always stays
+      return prev.includes(method)
+        ? prev.filter(function (m) { return m !== method; })
+        : prev.concat(method);
+    });
+    setContactSaved(false);
+  }
+
+  async function saveContact() {
+    setContactError("");
+    if (mpesaTill && !/^\d{5,10}$/.test(mpesaTill)) {
+      setContactError("Till number should be 5–10 digits.");
+      return;
+    }
+    if (mpesaPaybill && !/^\d{5,10}$/.test(mpesaPaybill)) {
+      setContactError("Paybill number should be 5–10 digits.");
+      return;
+    }
+    if (mpesaSendMoneyPhone && !/^(0|254|\+254)\d{9}$/.test(mpesaSendMoneyPhone.replace(/\s/g, ""))) {
+      setContactError("Send Money phone should be a valid Kenyan number (e.g. 0712345678).");
+      return;
+    }
+    if (contactPhone && !/^(0|254|\+254)\d{9}$/.test(contactPhone.replace(/\s/g, ""))) {
+      setContactError("Enter a valid Kenyan phone number (e.g. 0712345678).");
+      return;
+    }
+    setContactSaving(true);
+    var ok = await db("PATCH", "salon_settings", {
+      contact_phone: contactPhone || null,
+      mpesa_till: mpesaTill || null,
+      mpesa_name: mpesaName || null,
+      mpesa_paybill: mpesaPaybill || null,
+      mpesa_account: mpesaAccount || null,
+      mpesa_send_money_phone: mpesaSendMoneyPhone || null,
+      enabled_payment_methods: enabledPaymentMethods,
+      receipt_footer: receiptFooter || null,
+    }, "?salon_id=eq." + (salon && salon.id));
+    setContactSaving(false);
+    if (ok === null) { setContactError("Save failed. Check your connection."); return; }
+    setContactSaved(true);
+    autoResetSaved(setContactSaved);
+  }
+
   // ── PIN fields -- ported from SalonSettingsPage, identical RPC call ──
   var [newStaffPin, setNewStaffPin] = useState("");
   var [newAdminPin, setNewAdminPin] = useState("");
@@ -223,10 +310,72 @@ export default function AutoSettingsPage() {
       <div style={{ padding: "20px 20px 4px" }}>
         <div style={{ fontSize: 20, fontWeight: 800, color: PAPER }}>Settings</div>
         <div style={{ fontSize: 12, color: CHROME, marginTop: 2 }}>
-          Branding, Preferences, and Subscription coming in a follow-up pass.
+          Branding, Preferences, and Subscription still to come.
         </div>
       </div>
       <div style={{ padding: 20, maxWidth: 480, margin: "0 auto" }}>
+
+        {/* ── CONTACT & PAYMENTS ───────────────────────────────── */}
+        <div style={sectionStyle}>
+          <div style={sectionTitleStyle}><span>💳</span> Contact & Payments</div>
+
+          <Field label="Contact Phone">
+            <input value={contactPhone} onChange={function (e) { setContactPhone(e.target.value); setContactSaved(false); }} placeholder="0712345678" style={inputStyle} />
+          </Field>
+
+          <Field label="M-Pesa Till Number">
+            <input value={mpesaTill} onChange={function (e) { setMpesaTill(e.target.value); setContactSaved(false); }} placeholder="5927571" style={inputStyle} />
+          </Field>
+
+          <Field label="M-Pesa Registered Name">
+            <input value={mpesaName} onChange={function (e) { setMpesaName(e.target.value); setContactSaved(false); }} placeholder="Business name on M-Pesa" style={inputStyle} />
+          </Field>
+
+          <Field label="Paybill Number">
+            <input value={mpesaPaybill} onChange={function (e) { setMpesaPaybill(e.target.value); setContactSaved(false); }} placeholder="Optional" style={inputStyle} />
+          </Field>
+
+          <Field label="Paybill Account Number">
+            <input value={mpesaAccount} onChange={function (e) { setMpesaAccount(e.target.value); setContactSaved(false); }} placeholder="Optional" style={inputStyle} />
+          </Field>
+
+          <Field label="Send Money Phone Number">
+            <input value={mpesaSendMoneyPhone} onChange={function (e) { setMpesaSendMoneyPhone(e.target.value); setContactSaved(false); }} placeholder="Optional, 0712345678" style={inputStyle} />
+          </Field>
+
+          <Field label="Payment Methods at Checkout">
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {["Cash", "Till", "Paybill", "Send Money", "Card"].map(function (m) {
+                var isOn = enabledPaymentMethods.includes(m);
+                var isCash = m === "Cash";
+                return (
+                  <button key={m} onClick={function () { togglePaymentMethod(m); }} disabled={isCash}
+                    style={{
+                      padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700,
+                      border: "1.5px solid " + (isOn ? SIGNAL : CHROME + "55"),
+                      background: isOn ? SIGNAL + "22" : "transparent",
+                      color: isOn ? SIGNAL : CHROME,
+                      cursor: isCash ? "default" : "pointer", opacity: isCash ? 0.7 : 1,
+                    }}>
+                    {m}{isCash ? " (always on)" : ""}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 10, color: CHROME, marginTop: 6 }}>
+              Till still triggers a real M-Pesa payment prompt if STK Push is set up below. Paybill, Send Money, and Card are recorded manually at checkout — staff marks the job paid by that method, nothing is verified automatically.
+            </div>
+          </Field>
+
+          <Field label="Receipt Footer">
+            <textarea value={receiptFooter} onChange={function (e) { setReceiptFooter(e.target.value); setContactSaved(false); }}
+              placeholder="e.g. Thank you for choosing us!" rows={2}
+              style={Object.assign({}, inputStyle, { resize: "vertical" })} />
+          </Field>
+
+          {contactError && <div style={{ color: ALERT, fontSize: 12, marginBottom: 8 }}>{contactError}</div>}
+          <SaveBtn onClick={saveContact} saving={contactSaving} saved={contactSaved} />
+        </div>
 
         {/* ── M-PESA STK PUSH ──────────────────────────────────── */}
         <div style={sectionStyle}>
