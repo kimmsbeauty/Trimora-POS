@@ -84,12 +84,150 @@ function SaveBtn({ onClick, saving, saved, disabled }) {
   );
 }
 
+function ColorPicker({ label, value, onChange }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <label style={labelStyle}>{label}</label>
+      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <input type="color" value={value} onChange={function (e) { onChange(e.target.value); }}
+          style={{ width: 44, height: 44, borderRadius: 8, border: "1.5px solid " + CHROME + "66", cursor: "pointer", padding: 2, background: "rgba(255,255,255,0.04)" }} />
+        <input value={value} onChange={function (e) { onChange(e.target.value); }} placeholder="#C9A84C"
+          style={Object.assign({}, inputStyle, { flex: 1 })} />
+      </div>
+    </div>
+  );
+}
+
 function autoResetSaved(setter) {
   setTimeout(function () { setter(false); }, 3000);
 }
 
 export default function AutoSettingsPage() {
   var salon = useSalon();
+
+  // ── Branding fields -- ported from SalonSettingsPage ────────────────
+  // primary_color genuinely matters for Auto: AutoReceipt.jsx reuses
+  // the shared SalonBrandmark component as-is (confirmed before writing
+  // this -- SalonBrandmark is generic, no POS-specific styling baked
+  // in), and SalonBrandmark falls back to salon.primary_color for its
+  // crest when no logo is set. secondary_color/name/tagline/logo are
+  // Core data too, same reasoning. None of this affects Auto's own app
+  // chrome (nav, buttons, etc.) -- that stays the fixed Auto theme
+  // regardless, same as before this section existed.
+  var [salonDisplayName, setSalonDisplayName] = useState("");
+  var [tagline, setTagline] = useState("");
+  var [logoUrl, setLogoUrl] = useState("");
+  var [primaryColor, setPrimaryColor] = useState("#C9A84C");
+  var [secondaryColor, setSecondaryColor] = useState("#1A1A1A");
+  var [brandingSaving, setBrandingSaving] = useState(false);
+  var [brandingSaved, setBrandingSaved] = useState(false);
+  var [brandingError, setBrandingError] = useState("");
+
+  // ── Preferences fields -- ported from SalonSettingsPage ─────────────
+  // Honest caveat, unlike Branding: nothing in Auto currently reads
+  // currency_symbol or timezone -- money() throughout this session's
+  // own Auto work hardcodes "KSh", and no date/time formatting reads
+  // salon.timezone anywhere in src/pages/auto/. Included anyway because
+  // it's the same shared Core field POS reads and because leaving a
+  // salon's currency/timezone unset here while POS's own Settings page
+  // can set it would be a confusing asymmetry -- but this section
+  // currently only affects POS-side display, not Auto's, until/unless a
+  // future pass wires Auto's own formatting to read it too.
+  var [currency, setCurrency] = useState("KSh");
+  var [timezone, setTimezone] = useState("Africa/Nairobi");
+  var [prefSaving, setPrefSaving] = useState(false);
+  var [prefSaved, setPrefSaved] = useState(false);
+  var [prefError, setPrefError] = useState("");
+
+  useEffect(function () {
+    if (!salon || !salon.id) return;
+    (async function () {
+      var rows = await db("GET", "salon_settings", null, "?salon_id=eq." + salon.id + "&limit=1");
+      var s = rows && rows[0];
+      if (!s) return;
+      setTagline(s.tagline || "");
+      setLogoUrl(s.logo_url || "");
+      setPrimaryColor(s.primary_color || "#C9A84C");
+      setSecondaryColor(s.secondary_color || "#1A1A1A");
+      setCurrency(s.currency_symbol || "KSh");
+      setTimezone(s.timezone || "Africa/Nairobi");
+    })();
+    setSalonDisplayName(salon.name || "");
+  }, [salon && salon.id]);
+
+  async function saveBranding() {
+    setBrandingError("");
+    setBrandingSaving(true);
+    var ok = await db("PATCH", "salon_settings", {
+      tagline: tagline || null,
+      logo_url: logoUrl || null,
+      primary_color: primaryColor,
+      secondary_color: secondaryColor,
+    }, "?salon_id=eq." + (salon && salon.id));
+
+    // Also update the salon name in the salons table -- identical
+    // direct-fetch pattern to the source (salons isn't in db.js's
+    // TENANT_TABLES for client writes; this relies on RLS allowing an
+    // authenticated device to update its own salon's name field).
+    if (salonDisplayName && salon && salonDisplayName !== salon.name) {
+      var token = await getValidAccessToken();
+      await fetch(SUPABASE_URL + "/rest/v1/salons?id=eq." + salon.id, {
+        method: "PATCH",
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: "Bearer " + (token || SUPABASE_KEY),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: salonDisplayName }),
+      });
+    }
+
+    setBrandingSaving(false);
+    if (ok === null) { setBrandingError("Save failed. Check your connection."); return; }
+    setBrandingSaved(true);
+    autoResetSaved(setBrandingSaved);
+  }
+
+  async function savePreferences() {
+    setPrefError("");
+    setPrefSaving(true);
+    var ok = await db("PATCH", "salon_settings", {
+      currency_symbol: currency,
+      timezone: timezone,
+    }, "?salon_id=eq." + (salon && salon.id));
+    setPrefSaving(false);
+    if (ok === null) { setPrefError("Save failed."); return; }
+    setPrefSaved(true);
+    autoResetSaved(setPrefSaved);
+  }
+
+  // ── Subscription -- ported from SalonSettingsPage ────────────────────
+  // Read-only display + plan prices from the public subscription_plans
+  // table (apikey-only fetch, no auth needed, matches source exactly)
+  // and a mailto-based manual payment-notification flow -- no direct
+  // subscription writes from the client at all, same as the source.
+  var [selectedPlan, setSelectedPlan] = useState("");
+  var [planPrices, setPlanPrices] = useState(null);
+
+  function fetchPlanPrices() {
+    fetch(SUPABASE_URL + "/rest/v1/subscription_plans?order=sort_order.asc", {
+      headers: { apikey: SUPABASE_KEY },
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (rows) {
+        if (!Array.isArray(rows)) return;
+        var map = {};
+        rows.forEach(function (r) { map[r.key] = r; });
+        setPlanPrices(map);
+      })
+      .catch(function () {});
+  }
+
+  useEffect(function () {
+    fetchPlanPrices();
+    window.addEventListener("focus", fetchPlanPrices);
+    return function () { window.removeEventListener("focus", fetchPlanPrices); };
+  }, []);
 
   // ── M-Pesa STK Push (Daraja) fields -- ported from SalonSettingsPage ──
   var [mpesaConfigId, setMpesaConfigId] = useState(null);
@@ -310,10 +448,47 @@ export default function AutoSettingsPage() {
       <div style={{ padding: "20px 20px 4px" }}>
         <div style={{ fontSize: 20, fontWeight: 800, color: PAPER }}>Settings</div>
         <div style={{ fontSize: 12, color: CHROME, marginTop: 2 }}>
-          Branding, Preferences, and Subscription still to come.
+          Branding, Contact & Payments, M-Pesa, PIN Management, Business Info, Preferences, Subscription.
         </div>
       </div>
       <div style={{ padding: 20, maxWidth: 480, margin: "0 auto" }}>
+
+        {/* ── BRANDING ─────────────────────────────────────────── */}
+        <div style={sectionStyle}>
+          <div style={sectionTitleStyle}><span>🎨</span> Branding</div>
+
+          <Field label="Business Display Name">
+            <input value={salonDisplayName} onChange={function (e) { setSalonDisplayName(e.target.value); setBrandingSaved(false); }}
+              placeholder="High Point Carwash" style={inputStyle} />
+          </Field>
+
+          <Field label="Tagline">
+            <input value={tagline} onChange={function (e) { setTagline(e.target.value); setBrandingSaved(false); }}
+              placeholder="Where your car meets its shine" style={inputStyle} />
+          </Field>
+
+          <Field label="Logo URL">
+            <input value={logoUrl} onChange={function (e) { setLogoUrl(e.target.value); setBrandingSaved(false); }}
+              placeholder="https://your-site.com/logo.png" style={inputStyle} />
+            {logoUrl && (
+              <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10 }}>
+                <img src={logoUrl} alt="Logo preview" style={{ width: 48, height: 48, borderRadius: 8, objectFit: "contain", border: "1px solid " + CHROME + "44", background: PAPER }}
+                  onError={function (e) { e.target.style.display = "none"; }} />
+                <span style={{ fontSize: 11, color: CHROME }}>Logo preview</span>
+              </div>
+            )}
+          </Field>
+
+          <ColorPicker label="Primary Color (used on receipts)" value={primaryColor} onChange={function (v) { setPrimaryColor(v); setBrandingSaved(false); }} />
+          <ColorPicker label="Secondary Color" value={secondaryColor} onChange={function (v) { setSecondaryColor(v); setBrandingSaved(false); }} />
+
+          <div style={{ fontSize: 10, color: CHROME, marginBottom: 12, lineHeight: 1.5 }}>
+            These colors don't change the look of this app — Auto keeps its own fixed theme throughout. Primary Color does show up on your Auto receipts (via the shared brandmark), same as it does on POS's.
+          </div>
+
+          {brandingError && <div style={{ color: ALERT, fontSize: 12, marginBottom: 8 }}>{brandingError}</div>}
+          <SaveBtn onClick={saveBranding} saving={brandingSaving} saved={brandingSaved} />
+        </div>
 
         {/* ── CONTACT & PAYMENTS ───────────────────────────────── */}
         <div style={sectionStyle}>
@@ -410,6 +585,138 @@ export default function AutoSettingsPage() {
 
           {stkError && <div style={{ color: ALERT, fontSize: 12, marginBottom: 8 }}>{stkError}</div>}
           <SaveBtn onClick={saveStkConfig} saving={stkSaving} saved={stkSaved} />
+        </div>
+
+        {/* ── PREFERENCES ──────────────────────────────────────── */}
+        <div style={sectionStyle}>
+          <div style={sectionTitleStyle}><span>🌍</span> Preferences</div>
+          <div style={{ fontSize: 10, color: CHROME, marginBottom: 12, marginTop: -8 }}>
+            Currently only affects POS's own display — Auto's own screens hardcode KSh and don't yet read this.
+          </div>
+
+          <Field label="Currency Symbol">
+            <select value={currency} onChange={function (e) { setCurrency(e.target.value); setPrefSaved(false); }} style={inputStyle}>
+              <option value="KSh">KSh — Kenyan Shilling</option>
+              <option value="UGX">UGX — Ugandan Shilling</option>
+              <option value="TZS">TZS — Tanzanian Shilling</option>
+              <option value="RWF">RWF — Rwandan Franc</option>
+              <option value="ETB">ETB — Ethiopian Birr</option>
+              <option value="USD">USD — US Dollar</option>
+              <option value="GBP">GBP — British Pound</option>
+            </select>
+          </Field>
+
+          <Field label="Timezone">
+            <select value={timezone} onChange={function (e) { setTimezone(e.target.value); setPrefSaved(false); }} style={inputStyle}>
+              <option value="Africa/Nairobi">Africa/Nairobi (EAT, UTC+3)</option>
+              <option value="Africa/Kampala">Africa/Kampala (EAT, UTC+3)</option>
+              <option value="Africa/Dar_es_Salaam">Africa/Dar es Salaam (EAT, UTC+3)</option>
+              <option value="Africa/Kigali">Africa/Kigali (CAT, UTC+2)</option>
+              <option value="Africa/Addis_Ababa">Africa/Addis Ababa (EAT, UTC+3)</option>
+              <option value="Africa/Lagos">Africa/Lagos (WAT, UTC+1)</option>
+              <option value="UTC">UTC</option>
+            </select>
+          </Field>
+
+          {prefError && <div style={{ color: ALERT, fontSize: 12, marginBottom: 8 }}>{prefError}</div>}
+          <SaveBtn onClick={savePreferences} saving={prefSaving} saved={prefSaved} />
+        </div>
+
+        {/* ── SUBSCRIPTION ─────────────────────────────────────── */}
+        <div style={Object.assign({}, sectionStyle, { background: "#2A2410", border: "1.5px solid #92400E55" })}>
+          <div style={sectionTitleStyle}><span>💳</span> Subscription</div>
+
+          {salon && salon.subscription_plan ? (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 900, color: PAPER, textTransform: "capitalize" }}>
+                    {(salon.subscription_plan || "").replace("_", " ")} Plan
+                  </div>
+                  <div style={{ fontSize: 11, color: CHROME, marginTop: 2 }}>
+                    {salon.subscription_status === "lifetime"
+                      ? "✓ Lifetime access — never expires"
+                      : salon.subscription_expires_at
+                        ? (new Date(salon.subscription_expires_at) > new Date()
+                            ? "Expires " + new Date(salon.subscription_expires_at).toLocaleDateString("en-KE", { day: "numeric", month: "long", year: "numeric" })
+                            : "⚠️ Expired " + new Date(salon.subscription_expires_at).toLocaleDateString("en-KE", { day: "numeric", month: "long", year: "numeric" }))
+                        : ""}
+                  </div>
+                </div>
+                <div style={{
+                  background: salon.subscription_status === "lifetime" ? "#FCD34D22" :
+                    salon.subscription_status === "active" ? "#22C55E22" :
+                    salon.subscription_status === "grace" ? "#F59E0B22" : ALERT + "22",
+                  color: salon.subscription_status === "lifetime" ? "#FCD34D" :
+                    salon.subscription_status === "active" ? "#22C55E" :
+                    salon.subscription_status === "grace" ? "#F59E0B" : ALERT,
+                  borderRadius: 20, padding: "4px 12px", fontSize: 11, fontWeight: 800, textTransform: "uppercase",
+                }}>
+                  {salon.subscription_status || "active"}
+                </div>
+              </div>
+              {salon.subscription_grace && (
+                <div style={{ background: "#F59E0B22", borderRadius: 8, padding: "8px 12px", fontSize: 11, color: "#F59E0B", marginTop: 8 }}>
+                  ⏰ Grace period: {salon.subscription_days_overdue} day{salon.subscription_days_overdue !== 1 ? "s" : ""} overdue.
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: CHROME, marginBottom: 14 }}>No active subscription. Choose a plan below to get started.</div>
+          )}
+
+          {salon && salon.subscription_status !== "lifetime" && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "#F59E0B", textTransform: "uppercase", marginBottom: 8 }}>
+                {salon.subscription_plan ? "Renew or Upgrade" : "Choose a Plan"}
+              </div>
+              {planPrices === null ? (
+                <div style={{ fontSize: 12, color: CHROME, padding: "10px 0" }}>Loading plans...</div>
+              ) : (
+                Object.values(planPrices).map(function (plan) {
+                  return (
+                    <div key={plan.key} onClick={function () { setSelectedPlan(plan.key === selectedPlan ? "" : plan.key); }} style={{
+                      background: selectedPlan === plan.key ? "#FCD34D18" : "rgba(255,255,255,0.03)",
+                      border: "1.5px solid " + (selectedPlan === plan.key ? "#FCD34D" : CHROME + "33"),
+                      borderRadius: 10, padding: "10px 14px", marginBottom: 8,
+                      cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center",
+                    }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: PAPER }}>{plan.label}</div>
+                        <div style={{ fontSize: 11, color: CHROME }}>{plan.period_days ? plan.period_days + " days" : "Forever"}</div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: 14, fontWeight: 900, color: "#FCD34D" }}>KES {plan.price_kes.toLocaleString()}</div>
+                        {plan.save_label && <div style={{ fontSize: 10, color: "#22C55E", fontWeight: 700 }}>{plan.save_label}</div>}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+
+              {selectedPlan && (
+                <div style={{ background: "#22C55E18", border: "1.5px solid #22C55E55", borderRadius: 12, padding: 14, marginTop: 6 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: "#22C55E", marginBottom: 8 }}>Pay via M-Pesa to activate</div>
+                  <div style={{ fontSize: 12, color: "#86EFAC", marginBottom: 4 }}>📱 <b>Lipa na M-Pesa → Buy Goods</b></div>
+                  <div style={{ fontSize: 12, color: "#86EFAC", marginBottom: 4 }}>Till Number: <b style={{ fontSize: 14 }}>— Contact admin —</b></div>
+                  <div style={{ fontSize: 12, color: "#86EFAC", marginBottom: 10 }}>
+                    Amount: <b>KES {planPrices && planPrices[selectedPlan] ? planPrices[selectedPlan].price_kes.toLocaleString() : "—"}</b>
+                  </div>
+                  <div style={{ fontSize: 11, color: CHROME, lineHeight: 1.6, marginBottom: 10 }}>
+                    After payment, send your M-Pesa confirmation SMS screenshot to <b>admin@trimorasystems.com</b> or WhatsApp us. We'll activate your subscription within 2 hours.
+                  </div>
+                  <a href={"mailto:admin@trimorasystems.com?subject=Subscription Payment — " + (salon && salon.name) + "&body=Hi Trimora Team,%0D%0A%0D%0AI have made a payment for the " + selectedPlan.replace("_", " ") + " plan.%0D%0A%0D%0ASalon: " + (salon && salon.name) + "%0D%0APlan: " + selectedPlan.replace("_", " ") + "%0D%0A%0D%0APlease find my M-Pesa confirmation attached.%0D%0A%0D%0AThank you."}
+                    style={{ display: "block", background: "#22C55E", color: INK, borderRadius: 10, padding: "11px 0", fontWeight: 900, fontSize: 13, textAlign: "center", textDecoration: "none" }}>
+                    📧 Notify Trimora of Payment
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div style={{ marginTop: 12, fontSize: 11, color: "#F59E0B", lineHeight: 1.5 }}>
+            Questions? Contact: <a href="mailto:admin@trimorasystems.com" style={{ color: "#FCD34D", fontWeight: 800 }}>admin@trimorasystems.com</a>
+          </div>
         </div>
 
         {/* ── PIN MANAGEMENT ───────────────────────────────────── */}
