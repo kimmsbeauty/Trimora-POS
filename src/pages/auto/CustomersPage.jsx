@@ -26,8 +26,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { db } from "../../lib/db";
+import { useSalon } from "../../lib/SalonContext";
 import LoyaltyBadge from "../../components/LoyaltyBadge";
 import VehiclePhotoUpload from "../../components/VehiclePhotoUpload";
+import AutoBirthdayReminders from "../../components/AutoBirthdayReminders";
 import { INK, STEEL, CHROME, SIGNAL, PAPER } from "./theme";
 
 function money(n) {
@@ -35,10 +37,12 @@ function money(n) {
 }
 
 export default function CustomersPage() {
+  var salon = useSalon();
   var vehiclesState = useState([]); var vehicles = vehiclesState[0]; var setVehicles = vehiclesState[1];
   var jobsState = useState([]); var jobs = jobsState[0]; var setJobs = jobsState[1];
   var jobServicesState = useState([]); var jobServices = jobServicesState[0]; var setJobServices = jobServicesState[1];
   var staffState = useState([]); var staff = staffState[0]; var setStaff = staffState[1];
+  var birthdayCampaignState = useState(null); var birthdayCampaign = birthdayCampaignState[0]; var setBirthdayCampaign = birthdayCampaignState[1];
   var loadingState = useState(true); var loading = loadingState[0]; var setLoading = loadingState[1];
   var searchState = useState(""); var search = searchState[0]; var setSearch = searchState[1];
   var selectedIdState = useState(null); var selectedId = selectedIdState[0]; var setSelectedId = selectedIdState[1];
@@ -50,11 +54,13 @@ export default function CustomersPage() {
       db("GET", "auto_jobs", null, "?status=eq.completed&order=completed_at.desc&select=*,auto_vehicles(reg_number,make)"),
       db("GET", "auto_job_services", null, "?select=*,auto_services(name)"),
       db("GET", "staff", null, "?order=name.asc"),
+      db("GET", "marketing_campaigns", null, "?type=eq.birthday&is_active=eq.true&limit=1"),
     ]);
     setVehicles(results[0] || []);
     setJobs(results[1] || []);
     setJobServices(results[2] || []);
     setStaff(results[3] || []);
+    if (Array.isArray(results[4]) && results[4][0]) setBirthdayCampaign(results[4][0]);
     setLoading(false);
   }, []);
 
@@ -209,6 +215,12 @@ export default function CustomersPage() {
         <div style={{ fontSize: 20, fontWeight: 800, color: PAPER }}>Customers</div>
       </div>
       <div style={{ padding: 20, maxWidth: 560, margin: "0 auto" }}>
+        <AutoBirthdayReminders
+          customers={customerRows.map(function (row) { return row.customer; })}
+          salonName={salon && salon.name}
+          salon={salon}
+          birthdayCampaign={birthdayCampaign}
+        />
         <input value={search} onChange={function (e) { setSearch(e.target.value); }}
           placeholder="Search name, phone, or plate"
           style={{
