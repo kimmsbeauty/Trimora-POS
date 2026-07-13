@@ -23,6 +23,7 @@ import StaffPage from "./auto/StaffPage";
 import ServicesPage from "./auto/ServicesPage";
 import ReportsPage from "./auto/ReportsPage";
 import ExpensesPage from "./auto/ExpensesPage";
+import CustomersPage from "./auto/CustomersPage";
 import AutoSetupChecklist from "../components/AutoSetupChecklist";
 import { useSalon } from "../lib/SalonContext";
 import { db } from "../lib/db";
@@ -92,6 +93,7 @@ function AutoStaffRoute() {
   var TABS = [
     { key: "checkin", label: "Check-In", adminOnly: false },
     { key: "board", label: "Queue & Bays", adminOnly: false },
+    { key: "customers", label: "Customers", adminOnly: true },
     { key: "staff", label: "Staff", adminOnly: true },
     { key: "services", label: "Services", adminOnly: true },
     { key: "reports", label: "Reports", adminOnly: true },
@@ -102,6 +104,7 @@ function AutoStaffRoute() {
   var page;
   if (tab === "checkin") page = <CheckInPage />;
   else if (tab === "board") page = <BoardPage />;
+  else if (tab === "customers") page = <CustomersPage />;
   else if (tab === "staff") page = <StaffPage isAdmin={isAdmin} />;
   else if (tab === "services") page = <ServicesPage isAdmin={isAdmin} />;
   else if (tab === "reports") page = <ReportsPage isAdmin={isAdmin} />;
