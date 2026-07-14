@@ -16,6 +16,10 @@ import LoyaltyBadge from "../components/LoyaltyBadge.jsx";
 import NotificationBell from "../components/NotificationBell.jsx";
 import FeedbackModal from "../components/FeedbackModal.jsx";
 import ReviewsPage from "./ReviewsPage.jsx";
+import StaffView from "./pos/StaffView.jsx";
+import ServicesView from "./pos/ServicesView.jsx";
+import InventoryView from "./pos/InventoryView.jsx";
+import ShareView from "./pos/ShareView.jsx";
 import {
   calculateCartTotals,
   calculateCommission,
@@ -24,7 +28,6 @@ import {
   rateForStylistName as rateForStylistNameLib,
 } from "../lib/cartMath.js";
 import { buildSaleData, computeStockAfterDeduction } from "../lib/saleLogic.js";
-import ShareBookingPanel from "../components/ShareBookingPanel.jsx";
 import TomorrowReminders from "../components/TomorrowReminders.jsx";
 import BirthdayReminders from "../components/BirthdayReminders.jsx";
 import CampaignEditorCard from "../components/CampaignEditorCard.jsx";
@@ -36,7 +39,7 @@ import { lighten, darken } from "../lib/colorUtils";
 import {
   CATS,
   BLACK, GOLD, GOLD_LT, GOLD_DIM, CREAM, DARK, WHITE,
-  GREEN, RED, AMBER, MPESA_GREEN,
+  GREEN, RED, MPESA_GREEN,
   SUPABASE_URL, SUPABASE_KEY,
 } from "../lib/constants.js";
 
@@ -1570,132 +1573,32 @@ export default function POSApp({ onLogout, userRole }) {
 
         {/* ── STAFF ── */}
         {page === "staff" && (
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-              <div style={{ fontWeight: 900, fontSize: 18, color: DARK }}>Staff & Commissions</div>
-              <GoldBtn onClick={function() { setShowAddStaff(true); setNewStaff({ name: "", role: "Stylist", commission_pct: 40 }); }} style={{ padding: "8px 16px", fontSize: 12 }}>+ Add Staff</GoldBtn>
-            </div>
-            <div style={{ fontSize: 11, color: "#888", marginBottom: 16 }}>
-              📅 Today's figures only · resets automatically at midnight{loadingStaffStats ? " · refreshing..." : ""}
-            </div>
-            {showAddStaff && (
-              <div style={{ background: WHITE, borderRadius: 14, padding: 16, marginBottom: 16, border: "1.5px solid " + GOLD }}>
-                <div style={{ fontWeight: 800, fontSize: 14, color: DARK, marginBottom: 12 }}>New Staff Member</div>
-                <input placeholder="Full name" value={newStaff.name} onChange={function(e) { setNewStaff(function(p) { return Object.assign({}, p, { name: e.target.value }); }); }} style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
-                <select value={newStaff.role} onChange={function(e) { setNewStaff(function(p) { return Object.assign({}, p, { role: e.target.value }); }); }} style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 8 }}>
-                  <option>Stylist</option><option>Barber</option><option>Nail Technician</option><option>Makeup Artist</option><option>Receptionist</option>
-                </select>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                  <span style={{ fontSize: 12, color: "#888", whiteSpace: "nowrap" }}>Commission %:</span>
-                  <input type="number" value={newStaff.commission_pct} onChange={function(e) { setNewStaff(function(p) { return Object.assign({}, p, { commission_pct: parseInt(e.target.value) || 0 }); }); }} style={{ flex: 1, borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none" }} />
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <GoldBtn onClick={async function() { if (!newStaff.name) return alert("Please enter staff name"); var saved = await db("POST", "staff", Object.assign({}, newStaff, { active: true })); setStaffList(function(p) { return p.concat([(saved && saved[0]) || Object.assign({}, newStaff, { id: Date.now() })]); }); setShowAddStaff(false); setNewStaff({ name: "", role: "Stylist", commission_pct: 40 }); }} style={{ flex: 1, padding: "10px 0", fontSize: 13 }}>Save Staff</GoldBtn>
-                  <button onClick={function() { setShowAddStaff(false); }} style={{ flex: 1, background: "none", border: "1px solid " + GOLD_DIM, borderRadius: 10, padding: "10px 0", fontSize: 13, color: GOLD_DIM, cursor: "pointer", fontWeight: 700 }}>Cancel</button>
-                </div>
-              </div>
-            )}
-            {staffStats.map(function(s) {
-              return (
-                <div key={s.id} style={{ background: WHITE, borderRadius: 14, padding: 16, marginBottom: 12, border: "1px solid " + GOLD_DIM + "44" }}>
-                  {editingStaff && editingStaff.id === s.id ? (
-                    <div>
-                      <input value={editingStaff.name} onChange={function(e) { setEditingStaff(function(p) { return Object.assign({}, p, { name: e.target.value }); }); }} style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
-                      <select value={editingStaff.role} onChange={function(e) { setEditingStaff(function(p) { return Object.assign({}, p, { role: e.target.value }); }); }} style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 8 }}>
-                        <option>Stylist</option><option>Barber</option><option>Nail Technician</option><option>Makeup Artist</option><option>Receptionist</option>
-                      </select>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                        <span style={{ fontSize: 12, color: "#888" }}>Commission %:</span>
-                        <input type="number" value={editingStaff.commission_pct} onChange={function(e) { setEditingStaff(function(p) { return Object.assign({}, p, { commission_pct: parseInt(e.target.value) || 0 }); }); }} style={{ flex: 1, borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none" }} />
-                      </div>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <GoldBtn onClick={async function() { await db("PATCH", "staff", { name: editingStaff.name, role: editingStaff.role, commission_pct: editingStaff.commission_pct }, "?id=eq." + editingStaff.id); setStaffList(function(p) { return p.map(function(x) { return x.id === editingStaff.id ? Object.assign({}, x, editingStaff) : x; }); }); setEditingStaff(null); }} style={{ flex: 1, padding: "9px 0", fontSize: 12 }}>Save</GoldBtn>
-                        <button onClick={function() { setEditingStaff(null); }} style={{ flex: 1, background: "none", border: "1px solid " + GOLD_DIM, borderRadius: 10, padding: "9px 0", fontSize: 12, color: GOLD_DIM, cursor: "pointer", fontWeight: 700 }}>Cancel</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-                        <div style={{ width: 44, height: 44, borderRadius: "50%", background: "linear-gradient(135deg," + BLACK + ",#2C1F00)", border: "2px solid " + GOLD, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, color: GOLD_LT, fontSize: 18, flexShrink: 0 }}>{s.name[0]}</div>
-                        <div style={{ flex: 1 }}><div style={{ fontWeight: 800, fontSize: 15, color: DARK }}>{s.name}</div><div style={{ fontSize: 12, color: "#888" }}>{s.role} · {s.commission_pct || 40}% commission</div></div>
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <button onClick={function() { setEditingStaff(Object.assign({}, s)); }} style={{ background: CREAM, border: "1px solid " + GOLD_DIM, borderRadius: 8, padding: "6px 10px", fontSize: 11, color: GOLD_DIM, cursor: "pointer", fontWeight: 700 }}>✏️ Edit</button>
-                          <button onClick={async function() { if (!window.confirm("Deactivate " + s.name + "?")) return; await db("PATCH", "staff", { active: false }, "?id=eq." + s.id); setStaffList(function(p) { return p.filter(function(x) { return x.id !== s.id; }); }); }} style={{ background: "#FEE2E2", border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 11, color: RED, cursor: "pointer", fontWeight: 700 }}>Remove</button>
-                        </div>
-                      </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                        {[{ label: "Services", value: s.salesCount }, { label: "Revenue", value: fmt(s.revenue) }, { label: "Commission", value: fmt(s.commission) }].map(function(m, i) {
-                          return <div key={i} style={{ background: CREAM, borderRadius: 8, padding: "8px 10px", textAlign: "center", border: "1px solid " + GOLD_DIM + "33" }}><div style={{ fontSize: 10, color: "#888", fontWeight: 700, textTransform: "uppercase" }}>{m.label}</div><div style={{ fontSize: 13, fontWeight: 900, color: GOLD_DIM, marginTop: 2 }}>{m.value}</div></div>;
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          <StaffView
+            staffStats={staffStats}
+            loadingStaffStats={loadingStaffStats}
+            showAddStaff={showAddStaff}
+            setShowAddStaff={setShowAddStaff}
+            newStaff={newStaff}
+            setNewStaff={setNewStaff}
+            editingStaff={editingStaff}
+            setEditingStaff={setEditingStaff}
+            setStaffList={setStaffList}
+          />
         )}
 
         {/* ── SERVICES ── */}
         {page === "services" && (
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div style={{ fontWeight: 900, fontSize: 18, color: DARK }}>Services</div>
-              <GoldBtn onClick={function() { setShowAddService(true); setNewService({ name: "", cat: "Hair", price: "" }); }} style={{ padding: "8px 16px", fontSize: 12 }}>+ Add Service</GoldBtn>
-            </div>
-            {showAddService && (
-              <div style={{ background: WHITE, borderRadius: 14, padding: 16, marginBottom: 16, border: "1.5px solid " + GOLD }}>
-                <div style={{ fontWeight: 800, fontSize: 14, color: DARK, marginBottom: 12 }}>New Service</div>
-                <input placeholder="Service name" value={newService.name} onChange={function(e) { setNewService(function(p) { return Object.assign({}, p, { name: e.target.value }); }); }} style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
-                <select value={newService.cat} onChange={function(e) { setNewService(function(p) { return Object.assign({}, p, { cat: e.target.value }); }); }} style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 8 }}>
-                  {categories.map(function(c) { return <option key={c}>{c}</option>; })}
-                </select>
-                <input placeholder="Price (KES)" type="number" value={newService.price} onChange={function(e) { setNewService(function(p) { return Object.assign({}, p, { price: e.target.value }); }); }} style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 12 }} />
-                <div style={{ display: "flex", gap: 8 }}>
-                  <GoldBtn onClick={async function() { if (!newService.name || !newService.price) return alert("Please enter name and price"); var saved = await db("POST", "services", Object.assign({}, newService, { price: parseInt(newService.price), active: true })); setServicesList(function(p) { return p.concat([(saved && saved[0]) || Object.assign({}, newService, { price: parseInt(newService.price), id: Date.now() })]); }); setShowAddService(false); setNewService({ name: "", cat: "Hair", price: "" }); }} style={{ flex: 1, padding: "10px 0", fontSize: 13 }}>Save Service</GoldBtn>
-                  <button onClick={function() { setShowAddService(false); }} style={{ flex: 1, background: "none", border: "1px solid " + GOLD_DIM, borderRadius: 10, padding: "10px 0", fontSize: 13, color: GOLD_DIM, cursor: "pointer", fontWeight: 700 }}>Cancel</button>
-                </div>
-              </div>
-            )}
-            {categories.map(function(cat) {
-              var catServices = servicesList.filter(function(s) { return s.cat === cat; });
-              if (catServices.length === 0) return null;
-              return (
-                <div key={cat} style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8, paddingLeft: 4 }}>{cat}</div>
-                  {catServices.map(function(s) {
-                    return (
-                      <div key={s.id} style={{ background: WHITE, borderRadius: 12, padding: "12px 14px", marginBottom: 6, border: "1px solid " + GOLD_DIM + "33" }}>
-                        {editingService && editingService.id === s.id ? (
-                          <div>
-                            <input value={editingService.name} onChange={function(e) { setEditingService(function(p) { return Object.assign({}, p, { name: e.target.value }); }); }} style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD, padding: "9px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
-                            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                              <select value={editingService.cat} onChange={function(e) { setEditingService(function(p) { return Object.assign({}, p, { cat: e.target.value }); }); }} style={{ flex: 1, borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "9px 12px", fontSize: 13, fontFamily: "inherit", outline: "none" }}>
-                                {categories.map(function(c) { return <option key={c}>{c}</option>; })}
-                              </select>
-                              <input type="number" value={editingService.price} onChange={function(e) { setEditingService(function(p) { return Object.assign({}, p, { price: parseInt(e.target.value) || 0 }); }); }} style={{ flex: 1, borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "9px 12px", fontSize: 13, fontFamily: "inherit", outline: "none" }} />
-                            </div>
-                            <div style={{ display: "flex", gap: 8 }}>
-                              <GoldBtn onClick={async function() { await db("PATCH", "services", { name: editingService.name, cat: editingService.cat, price: editingService.price }, "?id=eq." + editingService.id); setServicesList(function(p) { return p.map(function(x) { return x.id === editingService.id ? Object.assign({}, x, editingService) : x; }); }); setEditingService(null); }} style={{ flex: 1, padding: "8px 0", fontSize: 12 }}>Save</GoldBtn>
-                              <button onClick={function() { setEditingService(null); }} style={{ flex: 1, background: "none", border: "1px solid " + GOLD_DIM, borderRadius: 10, padding: "8px 0", fontSize: 12, color: GOLD_DIM, cursor: "pointer", fontWeight: 700 }}>Cancel</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <div><div style={{ fontSize: 13, fontWeight: 700, color: DARK }}>{s.name}</div><div style={{ fontSize: 12, fontWeight: 900, color: GOLD_DIM, marginTop: 2 }}>{fmt(s.price)}</div></div>
-                            <div style={{ display: "flex", gap: 6 }}>
-                              <button onClick={function() { setEditingService(Object.assign({}, s)); }} style={{ background: CREAM, border: "1px solid " + GOLD_DIM, borderRadius: 8, padding: "6px 10px", fontSize: 11, color: GOLD_DIM, cursor: "pointer", fontWeight: 700 }}>✏️ Edit</button>
-                              <button onClick={async function() { if (!window.confirm("Remove " + s.name + "?")) return; await db("PATCH", "services", { active: false }, "?id=eq." + s.id); setServicesList(function(p) { return p.filter(function(x) { return x.id !== s.id; }); }); }} style={{ background: "#FEE2E2", border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 11, color: RED, cursor: "pointer", fontWeight: 700 }}>Remove</button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
+          <ServicesView
+            categories={categories}
+            servicesList={servicesList}
+            setServicesList={setServicesList}
+            showAddService={showAddService}
+            setShowAddService={setShowAddService}
+            newService={newService}
+            setNewService={setNewService}
+            editingService={editingService}
+            setEditingService={setEditingService}
+          />
         )}
 
         {/* ── EXPENSES ── */}
@@ -1705,9 +1608,7 @@ export default function POSApp({ onLogout, userRole }) {
 
         {/* ── SHARE ── */}
         {page === "share" && (
-          <div style={{ padding: "4px 0" }}>
-            <ShareBookingPanel salon={salon} />
-          </div>
+          <ShareView salon={salon} />
         )}
 
         {page === "marketing" && (
@@ -1842,54 +1743,15 @@ export default function POSApp({ onLogout, userRole }) {
 
         {/* ── INVENTORY ── */}
         {page === "inventory" && (
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-              <div style={{ fontWeight: 900, fontSize: 18, color: DARK }}>Product Stock</div>
-              <GoldBtn onClick={function() { setShowAddProduct(function(p) { return !p; }); }} style={{ padding: "8px 16px", fontSize: 12 }}>+ Add Product</GoldBtn>
-            </div>
-            <div style={{ fontSize: 12, color: "#888", marginBottom: 14 }}>Tap + or − to adjust stock</div>
-            {showAddProduct && (
-              <div style={{ background: WHITE, borderRadius: 14, padding: 16, marginBottom: 16, border: "1.5px solid " + GOLD }}>
-                <div style={{ fontWeight: 800, fontSize: 14, color: DARK, marginBottom: 12 }}>New Product</div>
-                <input placeholder="Product name" value={newProduct.name} onChange={function(e) { setNewProduct(function(p) { return Object.assign({}, p, { name: e.target.value }); }); }} style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
-                <select value={newProduct.cat} onChange={function(e) { setNewProduct(function(p) { return Object.assign({}, p, { cat: e.target.value }); }); }} style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 8 }}>
-                  <option>Hair</option><option>Nails</option><option>Beauty</option><option>Spa</option>
-                </select>
-                <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                  <input placeholder="Price (KES)" type="number" value={newProduct.price} onChange={function(e) { setNewProduct(function(p) { return Object.assign({}, p, { price: e.target.value }); }); }} style={{ flex: 1, borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none" }} />
-                  <input placeholder="Stock qty" type="number" value={newProduct.stock} onChange={function(e) { setNewProduct(function(p) { return Object.assign({}, p, { stock: e.target.value }); }); }} style={{ flex: 1, borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none" }} />
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <GoldBtn onClick={async function() { if (!newProduct.name || !newProduct.price) return alert("Please enter name and price"); var prod = { id: "PRD" + Date.now(), name: newProduct.name, cat: newProduct.cat, price: parseInt(newProduct.price), stock: parseInt(newProduct.stock) || 0 }; var saved = await db("POST", "stock", prod); setProducts(function(p) { return p.concat([(saved && saved[0]) || prod]); }); setShowAddProduct(false); setNewProduct({ name: "", cat: "Hair", price: "", stock: "" }); }} style={{ flex: 1, padding: "10px 0", fontSize: 13 }}>Save Product</GoldBtn>
-                  <button onClick={function() { setShowAddProduct(false); }} style={{ flex: 1, background: "none", border: "1px solid " + GOLD_DIM, borderRadius: 10, padding: "10px 0", fontSize: 13, color: GOLD_DIM, cursor: "pointer", fontWeight: 700 }}>Cancel</button>
-                </div>
-              </div>
-            )}
-            {products.map(function(p) {
-              var isCritical = p.stock <= 3;
-              var isLow      = p.stock > 3 && p.stock <= 5;
-              return (
-                <div key={p.id} style={{ background: WHITE, borderRadius: 12, padding: "12px 14px", marginBottom: 8, border: "1.5px solid " + (isCritical ? RED : isLow ? "#FEE2E2" : GOLD_DIM + "44") }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: DARK, display: "flex", alignItems: "center", gap: 6 }}>
-                        {p.name}
-                        {isCritical && <span style={{ fontSize: 9, background: RED, color: WHITE, padding: "2px 6px", borderRadius: 20, fontWeight: 800 }}>🔔 CRITICAL</span>}
-                      </div>
-                      <div style={{ fontSize: 11, color: "#888" }}>{p.cat} · <span style={{ color: GOLD_DIM, fontWeight: 700 }}>{fmt(p.price)}</span></div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <button onClick={function() { adjustStock(p.id, -1); }} style={{ width: 30, height: 30, borderRadius: "50%", border: "1.5px solid " + RED, background: WHITE, color: RED, fontSize: 18, fontWeight: 900, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
-                      <div style={{ textAlign: "center", minWidth: 36 }}><div style={{ fontSize: 18, fontWeight: 900, color: isCritical ? RED : isLow ? AMBER : GREEN }}>{p.stock}</div><div style={{ fontSize: 9, color: "#aaa", textTransform: "uppercase" }}>units</div></div>
-                      <button onClick={function() { adjustStock(p.id, 1); }} style={{ width: 30, height: 30, borderRadius: "50%", border: "1.5px solid " + GREEN, background: WHITE, color: GREEN, fontSize: 18, fontWeight: 900, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
-                    </div>
-                  </div>
-                  {isCritical && <div style={{ marginTop: 8, background: "#FEE2E2", borderRadius: 6, padding: "5px 8px", fontSize: 11, color: RED, fontWeight: 700 }}>🔔 Critical — appears in notification bell, reorder now</div>}
-                  {isLow && <div style={{ marginTop: 8, background: "#FFF5F5", borderRadius: 6, padding: "5px 8px", fontSize: 11, color: RED, fontWeight: 700 }}>⚠️ Low stock — consider reordering</div>}
-                </div>
-              );
-            })}
-          </div>
+          <InventoryView
+            products={products}
+            setProducts={setProducts}
+            showAddProduct={showAddProduct}
+            setShowAddProduct={setShowAddProduct}
+            newProduct={newProduct}
+            setNewProduct={setNewProduct}
+            adjustStock={adjustStock}
+          />
         )}
 
       </div>
