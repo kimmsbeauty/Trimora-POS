@@ -9,7 +9,6 @@ import MpesaInstructions from "../components/MpesaInstructions";
 import Receipt from "../components/Receipt";
 import Dashboard from "./Dashboard";
 import ExpensesPage from "./ExpensesPage.jsx";
-import CalendarView from "./CalendarView.jsx";
 import SalonSettingsPage from "./SalonSettingsPage.jsx";
 import SetupChecklist from "../components/SetupChecklist.jsx";
 import LoyaltyBadge from "../components/LoyaltyBadge.jsx";
@@ -20,6 +19,9 @@ import StaffView from "./pos/StaffView.jsx";
 import ServicesView from "./pos/ServicesView.jsx";
 import InventoryView from "./pos/InventoryView.jsx";
 import ShareView from "./pos/ShareView.jsx";
+import AppointmentsView from "./pos/AppointmentsView.jsx";
+import CustomersView from "./pos/CustomersView.jsx";
+import MarketingView from "./pos/MarketingView.jsx";
 import {
   calculateCartTotals,
   calculateCommission,
@@ -28,9 +30,6 @@ import {
   rateForStylistName as rateForStylistNameLib,
 } from "../lib/cartMath.js";
 import { buildSaleData, computeStockAfterDeduction } from "../lib/saleLogic.js";
-import TomorrowReminders from "../components/TomorrowReminders.jsx";
-import BirthdayReminders from "../components/BirthdayReminders.jsx";
-import CampaignEditorCard from "../components/CampaignEditorCard.jsx";
 import { db, offlineQueue, syncOfflineQueue } from "../lib/db.js";
 import { fmt, todayStr, nowTime } from "../lib/utils.js";
 import { useSalon, fetchPublicSalonBranding } from "../lib/SalonContext";
@@ -1373,195 +1372,45 @@ export default function POSApp({ onLogout, userRole }) {
 
         {/* ── APPOINTMENTS ── */}
         {page === "appointments" && (
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <div style={{ fontWeight: 900, fontSize: 18, color: DARK }}>Bookings</div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={function(){ setCalView(function(v){ return !v; }); }} style={{ background: calView ? "linear-gradient(135deg," + GOLD + "," + GOLD_LT + ")" : CREAM, color: calView ? BLACK : GOLD_DIM, border: "1px solid " + GOLD_DIM, borderRadius: 20, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                  {calView ? "📋 List" : "📅 Calendar"}
-                </button>
-                <button onClick={loadAppointments} style={{ background: CREAM, color: GOLD_DIM, border: "1px solid " + GOLD_DIM, borderRadius: 20, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>↻</button>
-              </div>
-            </div>
-
-            <TomorrowReminders appointments={appointments} salonName={salonName} customers={customers} salon={salon} appointmentCampaign={appointmentCampaign} />
-
-            <BirthdayReminders customers={customers} salonName={salonName} salon={salon} birthdayCampaign={birthdayCampaign} />
-
-            {!calView && (
-              <div style={{ background: WHITE, borderRadius: 12, padding: "12px 14px", marginBottom: 14, border: "1px solid " + GOLD_DIM + "44" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 160 }}>
-                    <span style={{ fontSize: 11, color: "#888", fontWeight: 700, whiteSpace: "nowrap" }}>📅 Date</span>
-                    <input type="date" value={apptDate} onChange={function(e) { setApptDate(e.target.value); setShowAllAppts(false); }} style={{ flex: 1, borderRadius: 8, border: "1.5px solid " + GOLD_DIM, padding: "6px 10px", fontSize: 13, fontFamily: "inherit", outline: "none", color: DARK }} />
-                  </div>
-                  <button onClick={function() { var t = new Date(); setApptDate(t.getFullYear() + "-" + String(t.getMonth()+1).padStart(2,"0") + "-" + String(t.getDate()).padStart(2,"0")); setShowAllAppts(false); }} style={{ padding: "6px 12px", borderRadius: 20, border: "1.5px solid " + GOLD, background: "linear-gradient(135deg," + GOLD + "," + GOLD_LT + ")", color: BLACK, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Today</button>
-                  <button onClick={function() { setShowAllAppts(function(v) { return !v; }); }} style={{ padding: "6px 12px", borderRadius: 20, border: "1.5px solid " + (showAllAppts ? GOLD_DIM : GOLD_DIM + "66"), background: showAllAppts ? GOLD_DIM : "transparent", color: showAllAppts ? WHITE : GOLD_DIM, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{showAllAppts ? "Showing All" : "Show All"}</button>
-                </div>
-                <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-                  {[{ label: "Pending", color: "#92400E", bg: "#FEF3C7", status: "pending" }, { label: "Done", color: "#065F46", bg: "#D1FAE5", status: "done" }, { label: "Cancelled", color: "#991B1B", bg: "#FEE2E2", status: "cancelled" }].map(function(s, i) {
-                    return <div key={i} style={{ padding: "4px 10px", borderRadius: 20, background: s.bg, color: s.color, fontSize: 11, fontWeight: 800 }}>{s.label}: {visibleAppointments.filter(function(a) { return a.status === s.status; }).length}</div>;
-                  })}
-                </div>
-              </div>
-            )}
-
-            {calView && (
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ background: WHITE, borderRadius: 12, padding: "10px 14px", marginBottom: 10, border: "1px solid " + GOLD_DIM + "44", display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 11, color: "#888", fontWeight: 700, whiteSpace: "nowrap" }}>📅 Date</span>
-                  <input type="date" value={apptDate} onChange={function(e) { setApptDate(e.target.value); }} style={{ flex: 1, borderRadius: 8, border: "1.5px solid " + GOLD_DIM, padding: "6px 10px", fontSize: 13, fontFamily: "inherit", outline: "none", color: DARK }} />
-                </div>
-                <CalendarView
-                  appointments={appointments}
-                  staffList={staffList}
-                  date={apptDate}
-                  salonName={salonName}
-                  onAction={function(action, a) {
-                    if (action === "convert") convertToSale(a);
-                    if (action === "done")    markDone(a.id);
-                    if (action === "cancel")  markCancelled(a.id);
-                  }}
-                />
-              </div>
-            )}
-
-            {!calView && (
-              <div>
-                {loadingAppts && <div style={{ textAlign: "center", padding: "40px 0", color: "#aaa" }}><div style={{ fontSize: 24 }}>⏳</div><div style={{ fontSize: 13 }}>Loading...</div></div>}
-                {!loadingAppts && visibleAppointments.length === 0 && (
-                  <div style={{ textAlign: "center", padding: "40px 20px", color: "#aaa" }}>
-                    <div style={{ fontSize: 36, marginBottom: 8 }}>📅</div>
-                    <div style={{ fontSize: 14, marginBottom: 8 }}>{showAllAppts ? "No bookings found" : "No bookings for this date"}</div>
-                    {!showAllAppts && <button onClick={function() { setShowAllAppts(true); }} style={{ background: "none", border: "1px solid " + GOLD_DIM, borderRadius: 20, padding: "8px 16px", color: GOLD_DIM, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Show all bookings</button>}
-                  </div>
-                )}
-                {!loadingAppts && visibleAppointments.map(function(a) {
-                  return (
-                    <div key={a.id} style={{ background: WHITE, borderRadius: 14, padding: 16, marginBottom: 10, border: "1.5px solid " + (a.status === "pending" ? GOLD_DIM + "88" : a.status === "done" ? "#BBF7D0" : "#FEE2E2") }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                        <div><div style={{ fontWeight: 800, fontSize: 15, color: DARK }}>{a.name}</div><div style={{ fontSize: 12, color: "#888" }}>📞 {a.phone}</div></div>
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-                          <div style={{ padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 800, background: a.status === "pending" ? "#FEF3C7" : a.status === "done" ? "#D1FAE5" : "#FEE2E2", color: a.status === "pending" ? "#92400E" : a.status === "done" ? "#065F46" : "#991B1B" }}>
-                            {a.status === "pending" ? "⏳ Pending" : a.status === "done" ? "✅ Done" : "❌ Cancelled"}
-                          </div>
-                          <div style={{ padding: "3px 8px", borderRadius: 20, fontSize: 10, fontWeight: 800, background: a.payment_status === "paid_upfront" ? "#D1FAE5" : a.payment_status === "awaiting_confirmation" ? "#FEF9C3" : "#FEF3C7", color: a.payment_status === "paid_upfront" ? "#065F46" : a.payment_status === "awaiting_confirmation" ? "#854D0E" : "#92400E" }}>
-                            {a.payment_status === "paid_upfront" ? "💚 Paid" : a.payment_status === "awaiting_confirmation" ? "🕓 Confirm Payment" : "🕐 Pay at Salon"}
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{ fontSize: 13, color: DARK, marginBottom: 4 }}>💇 <b>{a.service}</b> {a.price ? "· KES " + Number(a.price).toLocaleString() : ""}</div>
-                      <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>👩‍💼 {a.stylist}</div>
-                      <div style={{ fontSize: 12, color: "#888", marginBottom: 10 }}>📅 {a.date} at {a.time}</div>
-                      {a.status === "pending" && (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                          {a.payment_status === "awaiting_confirmation" && (
-                            <button onClick={function() { confirmPayment(a.id); }} style={{ width: "100%", background: "#FEF9C3", color: "#854D0E", border: "1.5px solid #EAB308", borderRadius: 8, padding: "10px 0", fontWeight: 900, fontSize: 13, cursor: "pointer" }}>🕓 Confirm Payment Received (check your M-Pesa)</button>
-                          )}
-                          <button onClick={function() { convertToSale(a); }} style={{ width: "100%", background: "linear-gradient(135deg," + GOLD + "," + GOLD_LT + ")", color: BLACK, border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 900, fontSize: 13, cursor: "pointer" }}>🛒 Client Arrived — Convert to Sale</button>
-                          <div style={{ display: "flex", gap: 8 }}>
-                            <button onClick={function() { markDone(a.id); }} style={{ flex: 1, background: "#D1FAE5", color: "#065F46", border: "none", borderRadius: 8, padding: "8px 0", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>✅ Mark Done</button>
-                            <button onClick={function() { markCancelled(a.id); }} style={{ flex: 1, background: "#FEE2E2", color: "#991B1B", border: "none", borderRadius: 8, padding: "8px 0", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>❌ Cancel</button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <AppointmentsView
+            appointments={appointments}
+            salonName={salonName}
+            customers={customers}
+            salon={salon}
+            appointmentCampaign={appointmentCampaign}
+            birthdayCampaign={birthdayCampaign}
+            calView={calView}
+            setCalView={setCalView}
+            loadAppointments={loadAppointments}
+            apptDate={apptDate}
+            setApptDate={setApptDate}
+            showAllAppts={showAllAppts}
+            setShowAllAppts={setShowAllAppts}
+            visibleAppointments={visibleAppointments}
+            staffList={staffList}
+            convertToSale={convertToSale}
+            markDone={markDone}
+            markCancelled={markCancelled}
+            confirmPayment={confirmPayment}
+            loadingAppts={loadingAppts}
+          />
         )}
 
         {/* ── CUSTOMERS ── */}
         {page === "customers" && (
-          <div>
-            <div style={{ fontWeight: 900, fontSize: 18, color: DARK, marginBottom: 4 }}>Clients</div>
-            <div style={{ fontSize: 12, color: "#888", marginBottom: 14 }}>{customers.length} total · {frequentCustomers.length} regulars · {atRiskCustomers.length} not seen in {winbackThreshold}+ days</div>
-
-            {/* Loyalty tier summary */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
-              {[
-                { tier: "Bronze", icon: "🥉", color: "#92400E", bg: "#FFF7ED", min: 1, max: 3 },
-                { tier: "Silver", icon: "🥈", color: "#475569", bg: "#F1F5F9", min: 4, max: 7 },
-                { tier: "Gold",   icon: "🥇", color: "#92400E", bg: "#FEF3C7", min: 8, max: 14 },
-                { tier: "VIP",    icon: "💎", color: "#7C3AED", bg: "#F3E8FF", min: 15, max: Infinity },
-              ].map(function(t, i) {
-                var count = customers.filter(function(c) {
-                  var v = c.visit_count || 0; var sp = c.total_spend || 0;
-                  if (t.tier === "VIP") return v >= 15 || sp >= 30000;
-                  return v >= t.min && v <= t.max;
-                }).length;
-                return (
-                  <div key={i} style={{ background: t.bg, borderRadius: 10, padding: "10px 6px", textAlign: "center", border: "1px solid " + t.color + "33" }}>
-                    <div style={{ fontSize: 16 }}>{t.icon}</div>
-                    <div style={{ fontSize: 16, fontWeight: 900, color: t.color, marginTop: 2 }}>{count}</div>
-                    <div style={{ fontSize: 9, color: t.color, fontWeight: 700, marginTop: 1 }}>{t.tier}</div>
-                  </div>
-                );
-              })}
-            </div>
-            {atRiskCustomers.length > 0 && (
-              <div style={{ background: "#FFF5F5", borderRadius: 12, padding: 14, marginBottom: 14, border: "1.5px solid #FEE2E2" }}>
-                <div style={{ fontWeight: 800, fontSize: 13, color: RED, marginBottom: 10 }}>⚠️ Not seen in {winbackThreshold}+ days</div>
-                {atRiskCustomers.map(function(c) {
-                  var wbStatus = winbackSmsStatus[c.id] || "idle";
-                  var canSendWinbackSms = !!(winbackCampaign && c.id && !c.marketing_opt_out);
-                  return (
-                    <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, padding: "8px 10px", background: WHITE, borderRadius: 8, border: "1px solid #FEE2E2" }}>
-                      <div><div style={{ fontSize: 13, fontWeight: 700, color: DARK }}>{c.name}</div><div style={{ fontSize: 11, color: "#888" }}>{c.phone} · Last: {c.last_visit || "unknown"}</div></div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                        {canSendWinbackSms && (
-                          <button
-                            onClick={function() { sendWinbackSms(c); }}
-                            disabled={wbStatus === "sending" || wbStatus === "sent"}
-                            title={wbStatus === "error" ? "Failed — tap to retry" : "Send winback SMS"}
-                            style={{
-                              background: wbStatus === "sent" ? "#D1FAE5" : wbStatus === "error" ? "#FEE2E2" : GOLD,
-                              color: wbStatus === "sent" ? "#065F46" : wbStatus === "error" ? "#991B1B" : BLACK,
-                              border: "none", borderRadius: 20, padding: "7px 12px", fontSize: 11, fontWeight: 800,
-                              cursor: (wbStatus === "sending" || wbStatus === "sent") ? "default" : "pointer", whiteSpace: "nowrap",
-                            }}
-                          >
-                            {wbStatus === "sent" ? "✅ Sent" : wbStatus === "error" ? "⚠️ Retry" : wbStatus === "sending" ? "Sending…" : "📩 SMS"}
-                          </button>
-                        )}
-                        {c.phone && <a href={"https://wa.me/254" + c.phone.replace(/^0/,"").replace(/\D/g,"") + "?text=" + encodeURIComponent("Hi " + c.name + "! We miss you at " + salonName + " 💕\nBook: " + window.location.origin + bookingHref)} target="_blank" rel="noreferrer" style={{ background: "#25D366", color: WHITE, borderRadius: 20, padding: "7px 12px", fontSize: 11, fontWeight: 800, textDecoration: "none", whiteSpace: "nowrap" }}>📲 WhatsApp</a>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            <div style={{ fontWeight: 800, fontSize: 14, color: DARK, marginBottom: 10 }}>All Clients</div>
-            {customers.length === 0 && <div style={{ textAlign: "center", padding: "40px 20px", color: "#aaa" }}><div style={{ fontSize: 36, marginBottom: 8 }}>👤</div><div>No clients yet.</div></div>}
-            {customers.map(function(c) {
-              return (
-                <div key={c.id} style={{ background: WHITE, borderRadius: 12, padding: "12px 14px", marginBottom: 8, border: "1px solid " + GOLD_DIM + "33" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 13, color: DARK, display: "flex", alignItems: "center", gap: 6 }}>
-                        {c.name}
-                        <LoyaltyBadge customer={c} size="sm" />
-                      </div>
-                      <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>{c.phone} · Last: {c.last_visit || "—"}</div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ textAlign: "right" }}><div style={{ fontSize: 13, fontWeight: 800, color: GOLD_DIM }}>{fmt(c.total_spend)}</div><div style={{ fontSize: 10, color: "#aaa" }}>{c.visit_count} visit{c.visit_count !== 1 ? "s" : ""}</div></div>
-                      {c.phone && <a href={"https://wa.me/254" + c.phone.replace(/^0/,"").replace(/\D/g,"") + "?text=" + encodeURIComponent("Hi " + c.name + "! 💕 Book: " + window.location.origin + bookingHref)} target="_blank" rel="noreferrer" style={{ background: "#25D366", color: WHITE, borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, textDecoration: "none", flexShrink: 0 }}>📲</a>}
-                      {isAdmin && (
-                        <button
-                          onClick={function() { deleteCustomer(c); }}
-                          style={{ background: "none", border: "1px solid #fca5a5", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, cursor: "pointer", flexShrink: 0, color: RED }}
-                          title="Delete customer"
-                        >🗑</button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <CustomersView
+            customers={customers}
+            frequentCustomers={frequentCustomers}
+            atRiskCustomers={atRiskCustomers}
+            winbackThreshold={winbackThreshold}
+            winbackSmsStatus={winbackSmsStatus}
+            winbackCampaign={winbackCampaign}
+            sendWinbackSms={sendWinbackSms}
+            salonName={salonName}
+            bookingHref={bookingHref}
+            isAdmin={isAdmin}
+            deleteCustomer={deleteCustomer}
+          />
         )}
 
         {/* ── DASHBOARD ── */}
@@ -1612,126 +1461,24 @@ export default function POSApp({ onLogout, userRole }) {
         )}
 
         {page === "marketing" && (
-          <div style={{ padding: "4px 0" }}>
-
-            <div style={{ background: WHITE, borderRadius: 14, padding: 18, border: "1.5px solid " + GOLD_DIM + "66", marginBottom: 16 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                <div style={{ fontSize: 16, fontWeight: 800, color: DARK }}>⚙️ Automated Messages</div>
-                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 800, color: (marketingConfig && marketingConfig.is_sms_active) ? "#065F46" : "#999", cursor: "pointer" }}>
-                  SMS Marketing: {(marketingConfig && marketingConfig.is_sms_active) ? "ON" : "OFF"}
-                  <input type="checkbox" checked={!!(marketingConfig && marketingConfig.is_sms_active)} onChange={toggleSmsActive} />
-                </label>
-              </div>
-              <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>
-                Master switch for all automated SMS below. Turning this off stops every automated and manual SMS send for this salon, instantly.
-              </div>
-
-              <CampaignEditorCard
-                type="post_sale" label="Post-Sale Thank You" icon="💬"
-                placeholder="Thanks for visiting {{salon_name}} today, {{customer_name}}! We hope you loved your visit 💛"
-                existingCampaign={allCampaigns.find(function(c) { return c.type === "post_sale"; })}
-                onSave={function(t, a, e) { return saveCampaignSettings("post_sale", "Post-Sale Thank You", t, a, e); }}
-              />
-              <CampaignEditorCard
-                type="appointment_reminder" label="Appointment Reminder" icon="📅"
-                placeholder="Hi {{customer_name}}! Friendly reminder of your appointment tomorrow at {{salon_name}}. See you then 💛"
-                existingCampaign={allCampaigns.find(function(c) { return c.type === "appointment_reminder"; })}
-                onSave={function(t, a, e) { return saveCampaignSettings("appointment_reminder", "Appointment Reminder", t, a, e); }}
-              />
-              <CampaignEditorCard
-                type="birthday" label="Birthday Wishes" icon="🎂"
-                placeholder="Happy Birthday, {{customer_name}}! 🎉 Everyone at {{salon_name}} wishes you a wonderful day."
-                existingCampaign={allCampaigns.find(function(c) { return c.type === "birthday"; })}
-                onSave={function(t, a, e) { return saveCampaignSettings("birthday", "Birthday Wishes", t, a, e); }}
-              />
-              <CampaignEditorCard
-                type="winback" label="Winback (lapsed customers)" icon="💔" showWinbackDays
-                placeholder="Hi {{customer_name}}, we miss you at {{salon_name}}! Come back soon, we'd love to see you again 💕"
-                existingCampaign={allCampaigns.find(function(c) { return c.type === "winback"; })}
-                onSave={function(t, a, e) { return saveCampaignSettings("winback", "Winback", t, a, e); }}
-              />
-            </div>
-
-            <div style={{ background: WHITE, borderRadius: 14, padding: 18, border: "1.5px solid " + GOLD_DIM + "66" }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: DARK, marginBottom: 4 }}>📣 Send a Broadcast Message</div>
-              <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>Write a one-off message and send it to a group of customers via SMS, right now.</div>
-
-              <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-                {[
-                  { id: "all", label: "All Customers (" + eligibleFor("all").length + ")" },
-                  { id: "frequent", label: "Frequent (" + eligibleFor("frequent").length + ")" },
-                  { id: "atrisk", label: "At-Risk (" + eligibleFor("atrisk").length + ")" },
-                ].map(function(seg) {
-                  return (
-                    <button
-                      key={seg.id}
-                      onClick={function() { setBroadcastSegment(seg.id); }}
-                      disabled={broadcastSending}
-                      style={{
-                        padding: "8px 14px", borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: broadcastSending ? "default" : "pointer",
-                        border: "1.5px solid " + (broadcastSegment === seg.id ? GOLD : GOLD_DIM),
-                        background: broadcastSegment === seg.id ? GOLD : WHITE,
-                        color: broadcastSegment === seg.id ? BLACK : DARK,
-                      }}
-                    >
-                      {seg.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div style={{ fontSize: 12, color: "#888", marginBottom: 10 }}>
-                This will reach <b>{broadcastRecipients.length}</b> {broadcastRecipients.length === 1 ? "customer" : "customers"} (customers with no phone on file or who have opted out are automatically excluded).
-              </div>
-
-              <textarea
-                value={broadcastMessage}
-                onChange={function(e) { setBroadcastMessage(e.target.value); }}
-                disabled={broadcastSending}
-                placeholder="e.g. We are running a 20% off special this weekend — come treat yourself! 💛"
-                rows={4}
-                style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM, padding: "12px", fontSize: 13, fontFamily: "inherit", outline: "none", resize: "vertical", marginBottom: 14, boxSizing: "border-box" }}
-              />
-
-              {!broadcastSending && !broadcastDone && (
-                <button
-                  onClick={sendBroadcast}
-                  disabled={!broadcastMessage.trim() || broadcastRecipients.length === 0}
-                  style={{
-                    background: (!broadcastMessage.trim() || broadcastRecipients.length === 0) ? "#E5E7EB" : GOLD,
-                    color: (!broadcastMessage.trim() || broadcastRecipients.length === 0) ? "#999" : BLACK,
-                    border: "none", borderRadius: 10, padding: "12px 24px", fontWeight: 800, fontSize: 13,
-                    cursor: (!broadcastMessage.trim() || broadcastRecipients.length === 0) ? "default" : "pointer",
-                  }}
-                >
-                  Send to {broadcastRecipients.length} {broadcastRecipients.length === 1 ? "Customer" : "Customers"}
-                </button>
-              )}
-
-              {broadcastSending && (
-                <div style={{ fontSize: 13, fontWeight: 700, color: DARK }}>
-                  Sending… {broadcastProgress.sent + broadcastProgress.failed} / {broadcastProgress.total}
-                  {broadcastProgress.failed > 0 && <span style={{ color: "#991B1B" }}> ({broadcastProgress.failed} failed)</span>}
-                </div>
-              )}
-
-              {broadcastDone && !broadcastSending && (
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: broadcastProgress.failed === 0 ? "#065F46" : "#991B1B", marginBottom: 10 }}>
-                    {broadcastProgress.failed === 0
-                      ? "✅ Done — " + broadcastProgress.sent + " sent."
-                      : "⚠️ Done — " + broadcastProgress.sent + " sent, " + broadcastProgress.failed + " failed."}
-                  </div>
-                  <button
-                    onClick={function() { setBroadcastMessage(""); setBroadcastDone(false); setBroadcastProgress({ sent: 0, failed: 0, total: 0 }); }}
-                    style={{ background: WHITE, border: "1.5px solid " + GOLD_DIM, borderRadius: 10, padding: "10px 18px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
-                  >
-                    Send Another
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+          <MarketingView
+            marketingConfig={marketingConfig}
+            toggleSmsActive={toggleSmsActive}
+            allCampaigns={allCampaigns}
+            saveCampaignSettings={saveCampaignSettings}
+            broadcastSegment={broadcastSegment}
+            setBroadcastSegment={setBroadcastSegment}
+            broadcastSending={broadcastSending}
+            eligibleFor={eligibleFor}
+            broadcastRecipients={broadcastRecipients}
+            broadcastMessage={broadcastMessage}
+            setBroadcastMessage={setBroadcastMessage}
+            broadcastDone={broadcastDone}
+            setBroadcastDone={setBroadcastDone}
+            broadcastProgress={broadcastProgress}
+            setBroadcastProgress={setBroadcastProgress}
+            sendBroadcast={sendBroadcast}
+          />
         )}
 
                 {page === "settings" && (
