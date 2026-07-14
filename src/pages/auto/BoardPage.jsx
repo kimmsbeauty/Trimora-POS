@@ -38,7 +38,7 @@
 // this screen honest about what it actually does.
 
 import { useState, useEffect, useCallback } from "react";
-import { db } from "../../lib/db";
+import { db, dbRpcAuth } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
 import AutoMpesaPaymentModal from "../../components/AutoMpesaPaymentModal";
 import AutoReceipt from "../../components/AutoReceipt";
@@ -142,6 +142,18 @@ export default function BoardPage() {
   // on top of that choice.
   var paymentJobIdState = useState(null);
   var paymentJobId = paymentJobIdState[0]; var setPaymentJobId = paymentJobIdState[1];
+  // How much of this job's payable amount the staff has chosen to draw
+  // from the customer's wallet, at the Cash/Till choice step. Reset to 0
+  // whenever a new job enters the payment step (see startCompleteFlow).
+  // Actually deducting it happens in spendWalletAndAdvance() below, right
+  // before the remaining balance (if any) is charged via the normal
+  // Cash/Till/M-Pesa path -- wallet spend is applied first so a failed
+  // wallet call (e.g. a race against another concurrent spend) never
+  // completes the job while silently skipping the wallet debit.
+  var walletAmountState = useState(0);
+  var walletAmount = walletAmountState[0]; var setWalletAmount = walletAmountState[1];
+  var walletErrorState = useState("");
+  var walletError = walletErrorState[0]; var setWalletError = walletErrorState[1];
   var showMpesaModalState = useState(false);
   var showMpesaModal = showMpesaModalState[0]; var setShowMpesaModal = showMpesaModalState[1];
   // Receipt: shown automatically right after a job completes, matching
@@ -162,7 +174,7 @@ export default function BoardPage() {
       db("GET", "auto_bays", null, "?order=label.asc"),
       db("GET", "auto_jobs", null,
         "?status=in.(" + ACTIVE_STATUSES + ")&order=checked_in_at.asc" +
-        "&select=*,auto_vehicles(reg_number,make,model,color),customers(id,name,phone,visit_count,total_spend)"),
+        "&select=*,auto_vehicles(reg_number,make,model,color),customers(id,name,phone,visit_count,total_spend,wallet_balance)"),
       db("GET", "staff", null, "?active=eq.true&order=name.asc"),
     ]);
     var bayRows = results[0] || [];
@@ -376,7 +388,7 @@ export default function BoardPage() {
     };
   }
 
-  async function advanceJob(job, paymentMethod) {
+  async function advanceJob(job, paymentMethod, walletAmountUsed) {
     if (busy) return;
     var next = NEXT_STATUS[job.status];
     if (!next) return;
@@ -388,6 +400,7 @@ export default function BoardPage() {
       patch.completed_at = new Date().toISOString();
       patch.feedback_token = generateFeedbackToken();
       patch.commission = computeLinePricing(job).totalCommission;
+      patch.wallet_amount_used = walletAmountUsed || 0;
       // Cash/Till pass a paymentMethod and mark the job paid immediately.
       // Pay later (explicit decision, matching POS's own convention)
       // calls advanceJob with no paymentMethod at all -- payment_status
@@ -437,7 +450,7 @@ export default function BoardPage() {
       });
 
       var finalized = await db("GET", "auto_jobs", null,
-        "?id=eq." + job.id + "&select=*,auto_vehicles(reg_number,make,model,color),customers(id,name,phone,visit_count,total_spend)");
+        "?id=eq." + job.id + "&select=*,auto_vehicles(reg_number,make,model,color),customers(id,name,phone,visit_count,total_spend,wallet_balance)");
       var services = await db("GET", "auto_job_services", null,
         "?job_id=eq." + job.id + "&select=*,auto_services(name),staff(name)");
       if (finalized && finalized[0]) {
@@ -479,25 +492,61 @@ export default function BoardPage() {
 
     await load();
     setBusy(false);
+    setWalletAmount(0);
+    setWalletError("");
     setPaymentJobId(job.id);
   }
 
-  function payCash(job) {
+  // Applies the chosen wallet amount via the atomic RPC (reference_type/id
+  // point back at this job so the ledger is traceable from either side),
+  // then either completes the job outright (wallet covered it in full) or
+  // hands off to whichever remainder-payment path the staff picked. If the
+  // wallet call fails (insufficient balance -- e.g. another concurrent
+  // spend beat this one to it -- or a network error), the job is NOT
+  // completed and the modal stays open with the error shown, exactly like
+  // a declined M-Pesa payment already behaves.
+  async function spendWalletThenAdvance(job, remainderMethod) {
+    var amount = walletAmount;
+    if (amount > 0) {
+      setBusy(true);
+      var result = await dbRpcAuth("apply_wallet_transaction", {
+        p_customer_id: job.customer_id, p_type: "spend", p_amount: amount,
+        p_reference_type: "auto_job", p_reference_id: job.id,
+        p_created_by: job.assigned_staff_id || null,
+      });
+      setBusy(false);
+      if (result.error) { setWalletError(result.error); return; }
+    }
     setPaymentJobId(null);
-    advanceJob(job, "Cash");
+    setWalletError("");
+    var walletUsed = amount;
+    setWalletAmount(0);
+    if (remainderMethod === "wallet_full") {
+      advanceJob(job, "Wallet", walletUsed);
+    } else if (remainderMethod === "later") {
+      advanceJob(job, undefined, walletUsed);
+    } else {
+      advanceJob(job, remainderMethod, walletUsed);
+    }
+  }
+
+  function payCash(job) {
+    spendWalletThenAdvance(job, "Cash");
   }
 
   // Paybill, Send Money, and Card are all recorded the same way Cash
   // already is -- a manual, staff-attested label, no processing behind
   // it. Only Till is different (real STK push, see payTill below).
   function payManual(job, method) {
-    setPaymentJobId(null);
-    advanceJob(job, method);
+    spendWalletThenAdvance(job, method);
+  }
+
+  function payWalletFull(job) {
+    spendWalletThenAdvance(job, "wallet_full");
   }
 
   function payLater(job) {
-    setPaymentJobId(null);
-    advanceJob(job);
+    spendWalletThenAdvance(job, "later");
   }
 
   function payTill() {
@@ -540,8 +589,7 @@ export default function BoardPage() {
 
   function handleMpesaPaid(job, method) {
     setShowMpesaModal(false);
-    setPaymentJobId(null);
-    advanceJob(job, method);
+    spendWalletThenAdvance(job, method);
   }
 
   function handleMpesaCancel() {
@@ -933,6 +981,51 @@ export default function BoardPage() {
                 )}
               </div>
               {(function () {
+                var cust = payJob.customers || {};
+                var balance = cust.wallet_balance || 0;
+                var payable = payableAmount(payJob);
+                var maxApplicable = Math.min(balance, payable);
+                var remaining = payable - walletAmount;
+                if (balance <= 0) return null;
+                return (
+                  <div style={{ marginBottom: 16, padding: 12, borderRadius: 10, border: "1px solid " + SIGNAL + "55", background: "rgba(61,220,151,0.06)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                      <span style={{ fontSize: 12, color: CHROME }}>Wallet balance</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: SIGNAL }}>KSh {balance.toLocaleString()}</span>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <input type="number" min="0" max={maxApplicable} value={walletAmount || ""}
+                        onChange={function (e) {
+                          var v = parseInt(e.target.value, 10);
+                          if (isNaN(v) || v < 0) v = 0;
+                          if (v > maxApplicable) v = maxApplicable;
+                          setWalletAmount(v);
+                        }}
+                        placeholder="0"
+                        style={{ width: 90, background: "rgba(255,255,255,0.06)", color: PAPER, border: "1px solid " + SIGNAL + "55", borderRadius: 6, padding: "6px 8px", fontSize: 13 }} />
+                      <span onClick={function () { setWalletAmount(maxApplicable); }} style={{ fontSize: 11, color: SIGNAL, fontWeight: 700, cursor: "pointer", textDecoration: "underline" }}>
+                        Use max (KSh {maxApplicable.toLocaleString()})
+                      </span>
+                    </div>
+                    {walletAmount > 0 && (
+                      <div style={{ fontSize: 11, color: CHROME, marginTop: 6 }}>
+                        {remaining > 0 ? "KSh " + remaining.toLocaleString() + " remaining after wallet" : "Fully covered by wallet"}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+              {walletError && (
+                <div style={{ fontSize: 12, color: ALERT, marginBottom: 12 }}>{walletError}</div>
+              )}
+              {walletAmount > 0 && walletAmount >= payableAmount(payJob) ? (
+                <button onClick={function () { payWalletFull(payJob); }} disabled={busy} style={{
+                  width: "100%", padding: "14px 0", borderRadius: 10, border: "none",
+                  background: SIGNAL, color: INK, fontWeight: 800, fontSize: 15, cursor: "pointer", marginBottom: 10,
+                }}>
+                  ✓ Complete with Wallet
+                </button>
+              ) : (function () {
                 var enabled = (salon && salon.enabled_payment_methods) || ["Cash", "Till"];
                 // Cash always available regardless of settings, matching
                 // POS's own checkout convention (see POSApp.jsx) and this
@@ -953,19 +1046,21 @@ export default function BoardPage() {
                       color: isPrimary ? INK : SIGNAL,
                       fontWeight: 800, fontSize: isPrimary ? 15 : 14, cursor: "pointer", marginBottom: 10,
                     }}>
-                      {icons[m] || "💳"} {labels[m] || m}
+                      {icons[m] || "💳"} {labels[m] || m}{walletAmount > 0 ? " (KSh " + (payableAmount(payJob) - walletAmount).toLocaleString() + ")" : ""}
                     </button>
                   );
                 });
               })()}
-              <button onClick={function () { payLater(payJob); }} disabled={busy} style={{
-                width: "100%", padding: "10px 0", borderRadius: 10, border: "none",
-                background: "transparent", color: CHROME, fontWeight: 700, fontSize: 13, cursor: "pointer", marginBottom: 10,
-                textDecoration: "underline",
-              }}>
-                Pay later
-              </button>
-              <button onClick={function () { setPaymentJobId(null); }} style={{
+              {!(walletAmount > 0) && (
+                <button onClick={function () { payLater(payJob); }} disabled={busy} style={{
+                  width: "100%", padding: "10px 0", borderRadius: 10, border: "none",
+                  background: "transparent", color: CHROME, fontWeight: 700, fontSize: 13, cursor: "pointer", marginBottom: 10,
+                  textDecoration: "underline",
+                }}>
+                  Pay later
+                </button>
+              )}
+              <button onClick={function () { setPaymentJobId(null); setWalletAmount(0); setWalletError(""); }} style={{
                 width: "100%", padding: "12px 0", borderRadius: 10, border: "1px solid " + CHROME + "55",
                 background: "transparent", color: CHROME, fontWeight: 700, fontSize: 14, cursor: "pointer",
               }}>
@@ -982,7 +1077,7 @@ export default function BoardPage() {
         return (
           <AutoMpesaPaymentModal
             salon={salon}
-            job={Object.assign({}, payJob, { total_price: payableAmount(payJob) })}
+            job={Object.assign({}, payJob, { total_price: payableAmount(payJob) - walletAmount })}
             onPaid={function (method) { handleMpesaPaid(payJob, method); }}
             onCancel={handleMpesaCancel}
           />

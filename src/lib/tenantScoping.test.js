@@ -77,6 +77,22 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
                        // live FK-only reference to auto_services.price
   "auto_job_events", // ditto -- append-only (select/insert only), the
                      // data-logging hook for future AI/TIP work
+  "auto_membership_plans", // added 2026-07-14 alongside the Membership
+                          // Plans feature -- salon_id column, standard
+                          // select/insert/update/delete policies via
+                          // auth_salon_id(), queried through db() from
+                          // CustomersPage.jsx.
+  "customer_memberships", // ditto -- a customer's purchased membership
+                          // instance, same table shape/policies.
+  "customer_wallet_transactions", // added 2026-07-15 alongside Customer
+                          // Wallet -- salon_id column, but SELECT-only
+                          // policy for clients (all writes go through
+                          // the apply_wallet_transaction() RPC, not
+                          // direct POST, to keep the ledger and
+                          // customers.wallet_balance from drifting
+                          // apart). Still needs TENANT_TABLES' GET-side
+                          // salon_id filter for the transaction-history
+                          // list on the Customer detail page.
 ];
 
 // Tables confirmed live (2026-07-07) to have a salon_id column, but

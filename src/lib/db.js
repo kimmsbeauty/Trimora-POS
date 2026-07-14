@@ -13,6 +13,7 @@ export const TENANT_TABLES = new Set([
   "salon_enabled_modules", "auto_vehicles", "vehicle_photos",
   "auto_services", "auto_service_required_stock", "auto_stock_movements",
   "auto_bays", "auto_jobs", "auto_job_services", "auto_job_events",
+  "auto_membership_plans", "customer_memberships", "customer_wallet_transactions",
 ]);
 
 const QUEUE_STORAGE_KEY = "trimora_offline_queue";
@@ -106,6 +107,42 @@ async function dbDirect(method, table, data = null, filters = "") {
   } catch (e) {
     clearTimeout(timeout);
     return null;
+  }
+}
+
+// Calls a Postgres RPC function as the currently authenticated device/staff
+// session (Bearer deviceToken, same auth path as dbDirect's table writes) --
+// unlike dbRpc() below, which is deliberately anon-only for narrow public
+// lookups. Use this variant for any RPC whose Postgres body relies on
+// auth_salon_id()/auth.uid() to scope itself (e.g. apply_wallet_transaction),
+// since calling those with the anon key would always resolve to "no salon
+// session" and fail every time, not just when actually unauthorized.
+export async function dbRpcAuth(functionName, args = {}) {
+  const deviceToken = await getValidAccessToken();
+  const url = `${SUPABASE_URL}/rest/v1/rpc/${functionName}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${deviceToken || SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(args),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) {
+      const errBody = await res.json().catch(function () { return null; });
+      return { error: (errBody && (errBody.message || errBody.error)) || "Request failed" };
+    }
+    const result = await res.json();
+    return { data: result };
+  } catch (e) {
+    clearTimeout(timeout);
+    return { error: "Network error" };
   }
 }
 
