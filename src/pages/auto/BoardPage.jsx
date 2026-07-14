@@ -129,6 +129,11 @@ export default function BoardPage() {
   var commissionEdits = commissionEditsState[0]; var setCommissionEdits = commissionEditsState[1];
   var jobServicesState = useState({}); // job.id -> array of auto_job_services rows (with auto_services join)
   var jobServicesByJobId = jobServicesState[0]; var setJobServicesByJobId = jobServicesState[1];
+  // customer_id -> array of active customer_memberships rows (with auto_membership_plans join),
+  // used to offer "Apply Membership" at ready_for_collection when a job's line matches the
+  // membership's covered_service_id. Fetched fresh each load() so an expiry crossing midnight
+  // between visits is never stale.
+  var membershipsState = useState({}); var membershipsByCustomerId = membershipsState[0]; var setMembershipsByCustomerId = membershipsState[1];
   var busyState = useState(false); var busy = busyState[0]; var setBusy = busyState[1];
   var salon = useSalon();
   // Phase 5: completing a job requires collecting payment first --
@@ -185,8 +190,43 @@ export default function BoardPage() {
       setJobServicesByJobId({});
     }
 
+    var custIds = jobRows.map(function (j) { return j.customer_id; }).filter(Boolean);
+    if (custIds.length > 0) {
+      var membershipRows = await db("GET", "customer_memberships", null,
+        "?customer_id=in.(" + custIds.join(",") + ")&status=eq.active&expires_at=gt." + new Date().toISOString() +
+        "&select=*,auto_membership_plans(id,name,covered_service_id)");
+      var byCustomer = {};
+      (membershipRows || []).forEach(function (row) {
+        if (!byCustomer[row.customer_id]) byCustomer[row.customer_id] = [];
+        byCustomer[row.customer_id].push(row);
+      });
+      setMembershipsByCustomerId(byCustomer);
+    } else {
+      setMembershipsByCustomerId({});
+    }
+
     setLoading(false);
   }, []);
+
+  // Finds whether this job qualifies for a membership discount: the
+  // customer must hold an active membership whose plan's covered_service_id
+  // matches one of this job's line items. Returns the matching line (so its
+  // price becomes the flat discount amount -- other, non-covered lines on
+  // the same job stay charged in full) or null. First match wins; a
+  // customer stacking two memberships covering the same service is an edge
+  // case not handled specially -- either one covers it.
+  function findMembershipMatch(job) {
+    var memberships = (job.customer_id && membershipsByCustomerId[job.customer_id]) || [];
+    if (memberships.length === 0) return null;
+    var lines = jobServicesByJobId[job.id] || [];
+    for (var i = 0; i < memberships.length; i++) {
+      var plan = memberships[i].auto_membership_plans;
+      if (!plan) continue;
+      var matchedLine = lines.filter(function (l) { return l.auto_service_id === plan.covered_service_id; })[0];
+      if (matchedLine) return { line: matchedLine, plan: plan };
+    }
+    return null;
+  }
 
   useEffect(function () {
     load();
@@ -706,6 +746,8 @@ export default function BoardPage() {
               }
 
               var pricing = isReadyForCollection ? computeLinePricing(job) : null;
+              var membershipMatch = isReadyForCollection ? findMembershipMatch(job) : null;
+              var membershipApplied = edits.discountType === "membership";
 
               return (
                 <div key={job.id} style={{
@@ -801,31 +843,54 @@ export default function BoardPage() {
                         );
                       })}
 
-                      <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 10 }}>
-                        <span style={{ fontSize: 11, color: CHROME, whiteSpace: "nowrap" }}>Discount</span>
-                        <select value={edits.discountType || ""}
-                          onChange={function (e) { setDiscount({ discountType: e.target.value || null }); }}
-                          style={{
-                            background: "rgba(255,255,255,0.04)", color: PAPER,
-                            border: "1px solid rgba(143,166,184,0.3)", borderRadius: 6, padding: "6px 6px", fontSize: 11,
-                          }}>
-                          <option value="">None</option>
-                          <option value="pct">%</option>
-                          <option value="fixed">KSh</option>
-                        </select>
-                        {edits.discountType && (
-                          <input type="number" value={edits.discountValue || ""}
-                            onChange={function (e) { setDiscount({ discountValue: e.target.value }); }}
-                            placeholder="0"
+                      {!membershipApplied && (
+                        <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 11, color: CHROME, whiteSpace: "nowrap" }}>Discount</span>
+                          <select value={edits.discountType || ""}
+                            onChange={function (e) { setDiscount({ discountType: e.target.value || null }); }}
                             style={{
-                              width: 64, background: "rgba(255,255,255,0.04)", color: PAPER,
-                              border: "1px solid rgba(143,166,184,0.3)", borderRadius: 6, padding: "6px 8px", fontSize: 11,
-                            }} />
-                        )}
-                        {pricing && pricing.discountAmount > 0 && (
-                          <span style={{ fontSize: 11, color: SIGNAL, fontWeight: 700 }}>−KSh {pricing.discountAmount.toLocaleString()}</span>
-                        )}
-                      </div>
+                              background: "rgba(255,255,255,0.04)", color: PAPER,
+                              border: "1px solid rgba(143,166,184,0.3)", borderRadius: 6, padding: "6px 6px", fontSize: 11,
+                            }}>
+                            <option value="">None</option>
+                            <option value="pct">%</option>
+                            <option value="fixed">KSh</option>
+                          </select>
+                          {edits.discountType && (
+                            <input type="number" value={edits.discountValue || ""}
+                              onChange={function (e) { setDiscount({ discountValue: e.target.value }); }}
+                              placeholder="0"
+                              style={{
+                                width: 64, background: "rgba(255,255,255,0.04)", color: PAPER,
+                                border: "1px solid rgba(143,166,184,0.3)", borderRadius: 6, padding: "6px 8px", fontSize: 11,
+                              }} />
+                          )}
+                          {pricing && pricing.discountAmount > 0 && (
+                            <span style={{ fontSize: 11, color: SIGNAL, fontWeight: 700 }}>−KSh {pricing.discountAmount.toLocaleString()}</span>
+                          )}
+                          {membershipMatch && (
+                            <button onClick={function () {
+                              setDiscount({ discountType: "membership", discountValue: String(membershipMatch.line.price || 0) });
+                            }} style={{
+                              background: "transparent", color: SIGNAL, border: "1.5px solid " + SIGNAL,
+                              borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                            }}>
+                              ✓ Apply Membership — {membershipMatch.plan.name}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {membershipApplied && (
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+                          <span style={{ fontSize: 11, color: SIGNAL, fontWeight: 700 }}>
+                            ✓ Membership applied{membershipMatch ? " — " + membershipMatch.plan.name : ""} (−KSh {(pricing ? pricing.discountAmount : 0).toLocaleString()})
+                          </span>
+                          <span onClick={function () { setDiscount({ discountType: null, discountValue: "" }); }}
+                            style={{ fontSize: 11, color: CHROME, textDecoration: "underline", cursor: "pointer" }}>
+                            Remove
+                          </span>
+                        </div>
+                      )}
 
                       {pricing && (
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 800 }}>

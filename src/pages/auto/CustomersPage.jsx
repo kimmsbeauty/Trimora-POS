@@ -48,6 +48,22 @@ export default function CustomersPage() {
   var selectedIdState = useState(null); var selectedId = selectedIdState[0]; var setSelectedId = selectedIdState[1];
   var selectedVehicleIdState = useState(null); var selectedVehicleId = selectedVehicleIdState[0]; var setSelectedVehicleId = selectedVehicleIdState[1];
 
+  // Membership plans (Customer Mgmt, phase 1: DB layer was added earlier
+  // this session -- this wires the admin UI on top of it). Plans are
+  // salon-defined and managed inline from this page rather than a new
+  // Settings section, since "who can buy what" and "here's who bought
+  // what" are the same screen's concern.
+  var plansState = useState([]); var plans = plansState[0]; var setPlans = plansState[1];
+  var membershipsState = useState([]); var memberships = membershipsState[0]; var setMemberships = membershipsState[1];
+  var autoServicesState = useState([]); var autoServices = autoServicesState[0]; var setAutoServices = autoServicesState[1];
+  var showPlanEditorState = useState(false); var showPlanEditor = showPlanEditorState[0]; var setShowPlanEditor = showPlanEditorState[1];
+  var planFormState = useState({ name: "", covered_service_id: "", term_days: "90", price: "" });
+  var planForm = planFormState[0]; var setPlanForm = planFormState[1];
+  var showSellModalState = useState(false); var showSellModal = showSellModalState[0]; var setShowSellModal = showSellModalState[1];
+  var sellFormState = useState({ plan_id: "", amount_paid: "", sold_by_staff_id: "" });
+  var sellForm = sellFormState[0]; var setSellForm = sellFormState[1];
+  var savingState = useState(false); var saving = savingState[0]; var setSaving = savingState[1];
+
   var load = useCallback(async function () {
     var results = await Promise.all([
       db("GET", "auto_vehicles", null, "?select=*,customers(*)&order=created_at.desc"),
@@ -55,12 +71,18 @@ export default function CustomersPage() {
       db("GET", "auto_job_services", null, "?select=*,auto_services(name)"),
       db("GET", "staff", null, "?order=name.asc"),
       db("GET", "marketing_campaigns", null, "?type=eq.birthday&is_active=eq.true&limit=1"),
+      db("GET", "auto_membership_plans", null, "?order=created_at.desc"),
+      db("GET", "customer_memberships", null, "?order=created_at.desc&select=*,auto_membership_plans(name,covered_service_id,term_days)"),
+      db("GET", "auto_services", null, "?order=name.asc"),
     ]);
     setVehicles(results[0] || []);
     setJobs(results[1] || []);
     setJobServices(results[2] || []);
     setStaff(results[3] || []);
     if (Array.isArray(results[4]) && results[4][0]) setBirthdayCampaign(results[4][0]);
+    setPlans(results[5] || []);
+    setMemberships(results[6] || []);
+    setAutoServices(results[7] || []);
     setLoading(false);
   }, []);
 
@@ -94,6 +116,63 @@ export default function CustomersPage() {
 
   var selected = selectedId ? customersById[selectedId] : null;
   var theirJobs = selected ? jobs.filter(function (j) { return j.customer_id === selectedId; }) : [];
+  var theirMemberships = selected ? memberships.filter(function (m) { return m.customer_id === selectedId; }) : [];
+  var activePlans = plans.filter(function (p) { return p.active; });
+  var servicesById = {};
+  autoServices.forEach(function (s) { servicesById[s.id] = s; });
+  var plansById = {};
+  plans.forEach(function (p) { plansById[p.id] = p; });
+
+  function membershipStatusLabel(m) {
+    if (m.status !== "active") return m.status;
+    return new Date(m.expires_at) < new Date() ? "expired" : "active";
+  }
+
+  async function savePlan() {
+    if (saving) return;
+    var name = planForm.name.trim();
+    var termDays = parseInt(planForm.term_days, 10);
+    var price = parseInt(planForm.price, 10);
+    if (!name || !planForm.covered_service_id || !termDays || termDays <= 0 || isNaN(price) || price < 0) return;
+    setSaving(true);
+    await db("POST", "auto_membership_plans", {
+      salon_id: salon.id, name: name, covered_service_id: planForm.covered_service_id,
+      term_days: termDays, price: price, active: true,
+    });
+    setPlanForm({ name: "", covered_service_id: "", term_days: "90", price: "" });
+    setShowPlanEditor(false);
+    setSaving(false);
+    load();
+  }
+
+  async function togglePlanActive(plan) {
+    if (saving) return;
+    setSaving(true);
+    await db("PATCH", "auto_membership_plans", { active: !plan.active }, "?id=eq." + plan.id);
+    setSaving(false);
+    load();
+  }
+
+  async function sellMembership() {
+    if (saving || !selected) return;
+    var plan = plansById[sellForm.plan_id];
+    if (!plan) return;
+    var amountPaid = sellForm.amount_paid === "" ? plan.price : parseInt(sellForm.amount_paid, 10);
+    if (isNaN(amountPaid) || amountPaid < 0) return;
+    setSaving(true);
+    var startedAt = new Date();
+    var expiresAt = new Date(startedAt.getTime() + plan.term_days * 24 * 60 * 60 * 1000);
+    await db("POST", "customer_memberships", {
+      salon_id: salon.id, customer_id: selected.customer.id, plan_id: plan.id,
+      started_at: startedAt.toISOString(), expires_at: expiresAt.toISOString(),
+      amount_paid: amountPaid, status: "active",
+      sold_by_staff_id: sellForm.sold_by_staff_id || null,
+    });
+    setSellForm({ plan_id: "", amount_paid: "", sold_by_staff_id: "" });
+    setShowSellModal(false);
+    setSaving(false);
+    load();
+  }
 
   var panelStyle = {
     background: STEEL, borderRadius: 14, padding: 20, marginBottom: 16,
@@ -136,6 +215,96 @@ export default function CustomersPage() {
               </div>
             </div>
           </div>
+
+          <div style={panelStyle}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: CHROME }}>
+                Membership
+              </div>
+              <div onClick={function () { setShowSellModal(true); }} style={{ fontSize: 12, color: SIGNAL, fontWeight: 700, cursor: "pointer" }}>
+                + Sell membership
+              </div>
+            </div>
+            {theirMemberships.length === 0 && (
+              <div style={{ fontSize: 13, color: CHROME }}>No membership on record.</div>
+            )}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {theirMemberships.map(function (m) {
+                var plan = m.auto_membership_plans || {};
+                var status = membershipStatusLabel(m);
+                var statusColor = status === "active" ? SIGNAL : CHROME;
+                return (
+                  <div key={m.id} style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid " + CHROME + "22", background: "rgba(255,255,255,0.02)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: PAPER }}>{plan.name || "Membership"}</span>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: statusColor, textTransform: "uppercase" }}>{status}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: CHROME, marginTop: 4 }}>
+                      {new Date(m.started_at).toLocaleDateString("en-KE")} – {new Date(m.expires_at).toLocaleDateString("en-KE")} · {money(m.amount_paid)} paid
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {showSellModal && (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 20 }}>
+              <div style={Object.assign({}, panelStyle, { width: "100%", maxWidth: 420, marginBottom: 0 })}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: PAPER, marginBottom: 12 }}>Sell membership to {selected.customer.name}</div>
+                {activePlans.length === 0 ? (
+                  <div style={{ fontSize: 13, color: CHROME, marginBottom: 12 }}>
+                    No membership plans have been created yet. Close this and use "Manage Plans" from the customer list to create one.
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 11, color: CHROME, marginBottom: 4 }}>Plan</div>
+                      <select value={sellForm.plan_id}
+                        onChange={function (e) {
+                          var plan = plansById[e.target.value];
+                          setSellForm(Object.assign({}, sellForm, { plan_id: e.target.value, amount_paid: plan ? String(plan.price) : "" }));
+                        }}
+                        style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.04)", color: PAPER, border: "1px solid rgba(143,166,184,0.3)", borderRadius: 8, padding: "10px 10px", fontSize: 13 }}>
+                        <option value="">Choose a plan…</option>
+                        {activePlans.map(function (p) {
+                          var svc = servicesById[p.covered_service_id];
+                          return <option key={p.id} value={p.id}>{p.name} — {p.term_days}d — {money(p.price)}{svc ? " (" + svc.name + ")" : ""}</option>;
+                        })}
+                      </select>
+                    </div>
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 11, color: CHROME, marginBottom: 4 }}>Amount paid (KSh)</div>
+                      <input type="number" value={sellForm.amount_paid}
+                        onChange={function (e) { setSellForm(Object.assign({}, sellForm, { amount_paid: e.target.value })); }}
+                        style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.04)", color: PAPER, border: "1px solid rgba(143,166,184,0.3)", borderRadius: 8, padding: "10px 10px", fontSize: 13 }} />
+                    </div>
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 11, color: CHROME, marginBottom: 4 }}>Sold by (optional)</div>
+                      <select value={sellForm.sold_by_staff_id}
+                        onChange={function (e) { setSellForm(Object.assign({}, sellForm, { sold_by_staff_id: e.target.value })); }}
+                        style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.04)", color: PAPER, border: "1px solid rgba(143,166,184,0.3)", borderRadius: 8, padding: "10px 10px", fontSize: 13 }}>
+                        <option value="">Unattributed</option>
+                        {staff.map(function (s) { return <option key={s.id} value={s.id}>{s.name}</option>; })}
+                      </select>
+                    </div>
+                  </>
+                )}
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button onClick={function () { setShowSellModal(false); setSellForm({ plan_id: "", amount_paid: "", sold_by_staff_id: "" }); }}
+                    style={{ flex: 1, background: "transparent", color: CHROME, border: "1.5px solid " + CHROME + "55", borderRadius: 8, padding: "10px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                    Cancel
+                  </button>
+                  {activePlans.length > 0 && (
+                    <button onClick={sellMembership} disabled={saving || !sellForm.plan_id}
+                      style={{ flex: 1, background: SIGNAL, color: INK, border: "none", borderRadius: 8, padding: "10px", fontSize: 13, fontWeight: 800, cursor: "pointer", opacity: (saving || !sellForm.plan_id) ? 0.6 : 1 }}>
+                      Confirm sale
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div style={panelStyle}>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: CHROME, marginBottom: 10 }}>
@@ -221,6 +390,63 @@ export default function CustomersPage() {
           salon={salon}
           birthdayCampaign={birthdayCampaign}
         />
+
+        <div style={panelStyle}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: plans.length > 0 || showPlanEditor ? 10 : 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: CHROME }}>
+              Membership Plans
+            </div>
+            <div onClick={function () { setShowPlanEditor(!showPlanEditor); }} style={{ fontSize: 12, color: SIGNAL, fontWeight: 700, cursor: "pointer" }}>
+              {showPlanEditor ? "Cancel" : "+ New Plan"}
+            </div>
+          </div>
+
+          {showPlanEditor && (
+            <div style={{ marginBottom: 12, padding: 12, borderRadius: 10, border: "1px solid " + CHROME + "22", background: "rgba(255,255,255,0.02)" }}>
+              <input value={planForm.name} onChange={function (e) { setPlanForm(Object.assign({}, planForm, { name: e.target.value })); }}
+                placeholder="Plan name (e.g. 3-Month Unlimited Basic Wash)"
+                style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.04)", color: PAPER, border: "1px solid rgba(143,166,184,0.3)", borderRadius: 8, padding: "10px", fontSize: 13, marginBottom: 8 }} />
+              <select value={planForm.covered_service_id} onChange={function (e) { setPlanForm(Object.assign({}, planForm, { covered_service_id: e.target.value })); }}
+                style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.04)", color: PAPER, border: "1px solid rgba(143,166,184,0.3)", borderRadius: 8, padding: "10px", fontSize: 13, marginBottom: 8 }}>
+                <option value="">Covered service…</option>
+                {autoServices.map(function (s) { return <option key={s.id} value={s.id}>{s.name}</option>; })}
+              </select>
+              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                <input type="number" value={planForm.term_days} onChange={function (e) { setPlanForm(Object.assign({}, planForm, { term_days: e.target.value })); }}
+                  placeholder="Term (days)"
+                  style={{ flex: 1, background: "rgba(255,255,255,0.04)", color: PAPER, border: "1px solid rgba(143,166,184,0.3)", borderRadius: 8, padding: "10px", fontSize: 13 }} />
+                <input type="number" value={planForm.price} onChange={function (e) { setPlanForm(Object.assign({}, planForm, { price: e.target.value })); }}
+                  placeholder="Price (KSh)"
+                  style={{ flex: 1, background: "rgba(255,255,255,0.04)", color: PAPER, border: "1px solid rgba(143,166,184,0.3)", borderRadius: 8, padding: "10px", fontSize: 13 }} />
+              </div>
+              <button onClick={savePlan} disabled={saving} style={{
+                width: "100%", background: SIGNAL, color: INK, border: "none", borderRadius: 8, padding: "10px",
+                fontSize: 13, fontWeight: 800, cursor: "pointer", opacity: saving ? 0.6 : 1,
+              }}>
+                Create plan
+              </button>
+            </div>
+          )}
+
+          {plans.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {plans.map(function (p) {
+                var svc = servicesById[p.covered_service_id];
+                return (
+                  <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", borderRadius: 8, background: "rgba(255,255,255,0.02)", opacity: p.active ? 1 : 0.5 }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: PAPER }}>{p.name}</div>
+                      <div style={{ fontSize: 10, color: CHROME }}>{p.term_days}d · {money(p.price)}{svc ? " · " + svc.name : ""}</div>
+                    </div>
+                    <span onClick={function () { togglePlanActive(p); }} style={{ fontSize: 10, color: CHROME, textDecoration: "underline", cursor: "pointer" }}>
+                      {p.active ? "Deactivate" : "Reactivate"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
         <input value={search} onChange={function (e) { setSearch(e.target.value); }}
           placeholder="Search name, phone, or plate"
           style={{
