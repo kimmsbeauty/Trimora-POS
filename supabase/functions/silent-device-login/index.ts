@@ -4,21 +4,22 @@
 // any human-typed credentials.
 //
 // Flow:
-//  1. Look up salon_auth_users for this salon_id (this one IS a hard
-//     requirement -- if it's missing, something is fundamentally wrong
-//     with how the salon was provisioned, not something this function
-//     should try to self-heal).
-//  2. Look up salon_device_secrets for this salon_id.
-//  3. Attempt password grant with the stored secret, if one exists.
-//  4. Auto-resync whenever attempt 3 didn't succeed -- either because
-//     no secret row existed yet at all (e.g. a salon whose onboarding
-//     created the Auth user but never provisioned an initial secret --
-//     found and fixed 2026-07-11 for a newly onboarded car wash), or
-//     because a stored secret is stale (e.g. after a PIN reset sets a
-//     placeholder password). Both cases get the same fix: generate a
-//     new secret, set it as the Auth user's password, upsert the
-//     secret row, retry the grant.
-//  5. Return access_token + refresh_token.
+//  1. Rate-limit check (stopgap mitigation -- see audit Critical-1;
+//     this endpoint still has no proof of caller legitimacy beyond
+//     salon_id, which is intentionally public. Real fix is a device-
+//     bound credential, tracked separately. This only throttles
+//     bulk/automated hammering of a single salon_id.)
+//  2. Look up salon_auth_users for this salon_id
+//  3. Look up salon_device_secrets (may not exist yet -- a brand-new
+//     salon has never logged in, so has no secret row at all)
+//  4. If a secret exists, attempt a password grant with it
+//  5. If that failed, OR no secret existed yet: provision a fresh one
+//     (generate secret, update Auth password, upsert), then retry the
+//     grant. One self-healing path covers both "never provisioned" and
+//     "out of sync" (e.g. after a PIN reset sets a placeholder
+//     password) -- they're the same underlying problem (no working
+//     secret right now), not two different ones.
+//  6. Return access_token + refresh_token
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -62,6 +63,31 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, serviceKey);
 
+    // ── RATE LIMIT (stopgap -- see comment at top of file) ──────────
+    // A real shop's tab re-checks every 5 minutes, so even several
+    // devices/tabs open at once falls well under this threshold.
+    // Logged (not silent) so repeated hits are visible for follow-up.
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const { count: recentCallCount } = await supabase
+      .from("device_login_events")
+      .select("*", { count: "exact", head: true })
+      .eq("salon_id", salon_id)
+      .gte("created_at", tenMinutesAgo);
+
+    if ((recentCallCount || 0) >= 20) {
+      console.warn("silent-device-login rate limit hit for salon", salon_id, "-", recentCallCount, "calls in last 10 min");
+      return new Response(JSON.stringify({ error: "Too many login attempts. Please wait a few minutes and try again." }),
+        { status: 429, headers: { ...CORS, "Content-Type": "application/json" } });
+    }
+
+    const { error: eventInsertError } = await supabase
+      .from("device_login_events")
+      .insert({ salon_id });
+    if (eventInsertError) {
+      // Don't block login over a logging failure -- just note it.
+      console.error("device_login_events insert failed:", eventInsertError);
+    }
+
     // Check suspension
     const { data: salonRow } = await supabase
       .from("salons")
@@ -74,10 +100,7 @@ serve(async (req) => {
         { status: 403, headers: { ...CORS, "Content-Type": "application/json" } });
     }
 
-    // Get auth user -- still a hard requirement, not auto-healed. If
-    // this row is missing, the salon was never provisioned with a
-    // Supabase Auth user at all, which is a different, deeper problem
-    // than a missing/stale secret.
+    // Get auth user
     const { data: authUserRow, error: authUserError } = await supabase
       .from("salon_auth_users")
       .select("id")
@@ -89,37 +112,39 @@ serve(async (req) => {
         { status: 404, headers: { ...CORS, "Content-Type": "application/json" } });
     }
 
-    // Get email
+    // Get email (needed either way, so resolve it before checking the
+    // secret -- a brand-new salon with zero salon_device_secrets rows
+    // isn't a failure case, it just means we go straight to
+    // provisioning one below via the same self-healing path already
+    // used for a stale/mismatched secret, rather than treating "never
+    // provisioned" and "out of sync" as two different problems needing
+    // two different code paths.)
     const { data: userData, error: userError } = await supabase.auth.admin.getUserById(authUserRow.id);
     if (userError || !userData?.user?.email) {
       return new Response(JSON.stringify({ error: "Could not resolve device account. Please contact support." }),
         { status: 500, headers: { ...CORS, "Content-Type": "application/json" } });
     }
-
     const email = userData.user.email;
 
-    // Get stored secret -- no longer a hard failure if missing. A
-    // missing secret row and a stale/wrong secret get the same fix
-    // below (auto-resync), so both fall through to that same path
-    // instead of the missing-row case being a dead end.
+    // Get stored secret -- maybeSingle, not single: zero rows is an
+    // expected, normal state for a salon that has never logged in yet,
+    // not a query error.
     const { data: secretRow } = await supabase
       .from("salon_device_secrets")
       .select("secret")
       .eq("salon_id", salon_id)
-      .single();
+      .maybeSingle();
 
     // Attempt 1: use stored secret, if one exists
     let tokenData = secretRow ? await attemptPasswordGrant(supabaseUrl, serviceKey, email, secretRow.secret) : null;
 
-    // Attempt 2: no secret existed yet, or the grant failed with the
-    // stored one -- auto-resync: generate a new secret, set it as the
-    // Auth user's password, upsert the secret row, retry.
+    // Attempt 2: either no secret existed yet, or the grant with it
+    // failed -- (re)provision and retry. Same self-healing logic that
+    // already existed for the "stale secret" case; a salon with zero
+    // secret rows now goes through this exact path too instead of
+    // hitting a dead end on its very first login attempt.
     if (!tokenData) {
-      console.log(
-        secretRow
-          ? "Password grant failed for salon " + salon_id + " — auto-resyncing device secret"
-          : "No device secret on file for salon " + salon_id + " — provisioning one now"
-      );
+      console.log(secretRow ? "Password grant failed for salon" : "No device secret yet for salon", salon_id, "— provisioning/resyncing");
 
       const newSecret = randomSecret();
 
