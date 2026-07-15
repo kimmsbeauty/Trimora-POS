@@ -50,7 +50,13 @@ function buildWhatsAppMessage(salon, job, lineItems, staffMember, dateLabel, veh
     lines.push("Subtotal: " + money(job.total_price));
     lines.push("Discount: −" + money(job.discount_amount));
   }
-  lines.push("*TOTAL: " + money((job.total_price || 0) - (job.discount_amount || 0)) + "*");
+  var finalTotal = (job.total_price || 0) - (job.discount_amount || 0);
+  lines.push("*TOTAL: " + money(finalTotal) + "*");
+  if (salon && salon.tax_enabled) {
+    var rate = salon.tax_rate || 0;
+    var vat = finalTotal - Math.round(finalTotal / (1 + rate / 100));
+    lines.push("(Incl. VAT " + rate + "%: " + money(vat) + ")");
+  }
   lines.push(job.payment_status === "paid" ? "Paid via " + (job.payment_method || "—") : "Payment not yet collected");
   return lines.join("\n");
 }
@@ -71,6 +77,15 @@ export default function AutoReceipt({ salon, job, jobServices, staffById, onClos
 
   var isPaid = job.payment_status === "paid";
 
+  // VAT-inclusive: the listed/total price already includes tax, so this
+  // is purely an extraction for display -- no change to what's actually
+  // charged. finalTotal matches the TOTAL line below exactly.
+  var finalTotal = (job.total_price || 0) - (job.discount_amount || 0);
+  var taxEnabled = !!(salon && salon.tax_enabled);
+  var taxRate = (salon && salon.tax_rate) || 0;
+  var netAmount = taxEnabled ? Math.round(finalTotal / (1 + taxRate / 100)) : 0;
+  var vatAmount = taxEnabled ? finalTotal - netAmount : 0;
+
   return (
     <div className="receipt-print" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div style={{ background: STEEL, borderRadius: 16, padding: 28, width: 340, maxWidth: "100%", maxHeight: "85vh", overflowY: "auto", border: "1px solid " + CHROME + "33" }}>
@@ -78,6 +93,9 @@ export default function AutoReceipt({ salon, job, jobServices, staffById, onClos
         <div style={{ textAlign: "center", marginBottom: 16 }}>
           <SalonBrandmark salon={salon} size="sm" dark={false} />
           <div style={{ fontSize: 11, color: CHROME, marginTop: 8 }}>Receipt · {dateLabel}</div>
+          {taxEnabled && salon && salon.tax_pin && (
+            <div style={{ fontSize: 10, color: CHROME, marginTop: 2 }}>KRA PIN: {salon.tax_pin}</div>
+          )}
           <div style={{ borderBottom: "2px dashed " + CHROME + "44", margin: "12px 0" }} />
         </div>
 
@@ -130,8 +148,13 @@ export default function AutoReceipt({ salon, job, jobServices, staffById, onClos
         )}
         <div style={{ borderBottom: "2px dashed " + CHROME + "44", margin: "10px 0" }} />
         <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 900, fontSize: 16, color: PAPER }}>
-          <span>TOTAL</span><span style={{ color: SIGNAL }}>{money((job.total_price || 0) - (job.discount_amount || 0))}</span>
+          <span>TOTAL</span><span style={{ color: SIGNAL }}>{money(finalTotal)}</span>
         </div>
+        {taxEnabled && (
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: CHROME, marginTop: 4 }}>
+            <span>Incl. VAT ({taxRate}%)</span><span>{money(vatAmount)}</span>
+          </div>
+        )}
 
         <div style={{ fontSize: 12, color: CHROME, marginTop: 8 }}>
           <b style={{ color: PAPER }}>Payment:</b>{" "}

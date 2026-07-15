@@ -137,6 +137,21 @@ export default function ReportsPage({ isAdmin }) {
   jobsInRange.forEach(function (j) { jobIdsInRange[j.id] = true; });
 
   var totalRevenue = jobsInRange.reduce(function (a, j) { return a + payableAmount(j); }, 0);
+  // VAT-inclusive: each job's payableAmount already contains its tax
+  // portion. Honest limitation, not glossed over: this extracts VAT
+  // using the CURRENT tax_rate setting applied to every job in range,
+  // not whatever rate was configured at the time each job actually
+  // completed (no per-job rate is stored). Fine as long as the rate
+  // rarely changes; if it ever does, older completed jobs' VAT split
+  // shown here will shift retroactively rather than reflect history.
+  var taxRateForRange = (salon && salon.tax_rate) || 0;
+  var totalVat = (salon && salon.tax_enabled)
+    ? jobsInRange.reduce(function (a, j) {
+        var amt = payableAmount(j);
+        var net = Math.round(amt / (1 + taxRateForRange / 100));
+        return a + (amt - net);
+      }, 0)
+    : 0;
   var totalCommission = jobsInRange.reduce(function (a, j) { return a + (j.commission || 0); }, 0);
   var jobCount = jobsInRange.length;
   var avgTicket = jobCount ? Math.round(totalRevenue / jobCount) : 0;
@@ -525,6 +540,25 @@ export default function ReportsPage({ isAdmin }) {
           </div>
         )}
       </Card>
+
+      {salon && salon.tax_enabled && (
+        <Card>
+          <CardTitle>Tax (VAT) — {rangeLabel}</CardTitle>
+          <div style={{ fontSize: 10, color: CHROME, marginBottom: 10, marginTop: -4 }}>
+            Prices are VAT-inclusive at {salon.tax_rate || 0}% -- this is the tax portion already
+            contained in the revenue figures above, not an amount added on top.
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: PAPER, padding: "6px 0" }}>
+            <span>Gross revenue (incl. VAT)</span><span style={{ color: SIGNAL }}>{money(totalRevenue)}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: PAPER, padding: "6px 0" }}>
+            <span>Net revenue (excl. VAT)</span><span>{money(totalRevenue - totalVat)}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 800, color: PAPER, padding: "6px 0", borderTop: "1px solid " + CHROME + "22" }}>
+            <span>VAT collected</span><span style={{ color: SIGNAL }}>{money(totalVat)}</span>
+          </div>
+        </Card>
+      )}
 
       <Card>
         <CardTitle>Staff Commission — {rangeLabel}</CardTitle>

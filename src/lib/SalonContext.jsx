@@ -109,6 +109,9 @@ export function SalonGate({ mode, children }) {
               mpesa_send_money_phone: settingsRows[0].mpesa_send_money_phone,
               enabled_payment_methods: settingsRows[0].enabled_payment_methods || ["Cash", "Till"],
               referral_reward_pct: settingsRows[0].referral_reward_pct != null ? settingsRows[0].referral_reward_pct : 10,
+              tax_enabled: !!settingsRows[0].tax_enabled,
+              tax_rate: settingsRows[0].tax_rate != null ? settingsRows[0].tax_rate : 16,
+              tax_pin: settingsRows[0].tax_pin || null,
               // subscription fields already on resolvedSalon from public_salon_directory
               // — preserve them explicitly so they aren't lost in the merge
               subscription_plan:       resolvedSalon.subscription_plan,

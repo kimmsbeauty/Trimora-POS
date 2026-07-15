@@ -149,6 +149,17 @@ export default function AutoSettingsPage() {
   var [referralSaved, setReferralSaved] = useState(false);
   var [referralError, setReferralError] = useState("");
 
+  // ── Tax (VAT) settings ────────────────────────────────────────────
+  // VAT-inclusive: tax_rate is purely a display/reporting extraction
+  // from prices that already include it -- no checkout math depends on
+  // these fields. tax_pin is the KRA PIN shown on receipts when set.
+  var [taxEnabled, setTaxEnabled] = useState(false);
+  var [taxRate, setTaxRate] = useState("16");
+  var [taxPin, setTaxPin] = useState("");
+  var [taxSaving, setTaxSaving] = useState(false);
+  var [taxSaved, setTaxSaved] = useState(false);
+  var [taxError, setTaxError] = useState("");
+
   useEffect(function () {
     if (!salon || !salon.id) return;
     (async function () {
@@ -162,6 +173,9 @@ export default function AutoSettingsPage() {
       setCurrency(s.currency_symbol || "KSh");
       setTimezone(s.timezone || "Africa/Nairobi");
       setReferralPct(s.referral_reward_pct != null ? String(s.referral_reward_pct) : "10");
+      setTaxEnabled(!!s.tax_enabled);
+      setTaxRate(s.tax_rate != null ? String(s.tax_rate) : "16");
+      setTaxPin(s.tax_pin || "");
     })();
     setSalonDisplayName(salon.name || "");
   }, [salon && salon.id]);
@@ -224,6 +238,22 @@ export default function AutoSettingsPage() {
     if (ok === null) { setReferralError("Save failed."); return; }
     setReferralSaved(true);
     autoResetSaved(setReferralSaved);
+  }
+
+  async function saveTaxSettings() {
+    setTaxError("");
+    var rate = parseInt(taxRate, 10);
+    if (isNaN(rate) || rate < 0 || rate > 100) { setTaxError("Enter a whole number between 0 and 100."); return; }
+    setTaxSaving(true);
+    var ok = await db("PATCH", "salon_settings", {
+      tax_enabled: taxEnabled,
+      tax_rate: rate,
+      tax_pin: taxPin.trim() || null,
+    }, "?salon_id=eq." + (salon && salon.id));
+    setTaxSaving(false);
+    if (ok === null) { setTaxError("Save failed."); return; }
+    setTaxSaved(true);
+    autoResetSaved(setTaxSaved);
   }
 
   // ── Subscription -- ported from SalonSettingsPage ────────────────────
@@ -473,7 +503,7 @@ export default function AutoSettingsPage() {
       <div style={{ padding: "20px 20px 4px" }}>
         <div style={{ fontSize: 20, fontWeight: 800, color: PAPER }}>Settings</div>
         <div style={{ fontSize: 12, color: CHROME, marginTop: 2 }}>
-          Branding, Contact & Payments, M-Pesa, PIN Management, Business Info, Preferences, Referrals, Subscription.
+          Branding, Contact & Payments, M-Pesa, PIN Management, Business Info, Preferences, Referrals, Tax (VAT), Subscription.
         </div>
       </div>
       <div style={{ padding: 20, maxWidth: 480, margin: "0 auto" }}>
@@ -663,6 +693,39 @@ export default function AutoSettingsPage() {
 
           {referralError && <div style={{ color: ALERT, fontSize: 12, marginBottom: 8 }}>{referralError}</div>}
           <SaveBtn onClick={saveReferralPct} saving={referralSaving} saved={referralSaved} />
+        </div>
+
+        {/* ── TAX (VAT) ────────────────────────────────────────── */}
+        <div style={sectionStyle}>
+          <div style={sectionTitleStyle}><span>🧾</span> Tax (VAT)</div>
+          <div style={{ fontSize: 10, color: CHROME, marginBottom: 12, marginTop: -8 }}>
+            Prices are treated as VAT-inclusive — this only affects what's shown on receipts and
+            in Reports, never what's actually charged at checkout.
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+            <input type="checkbox" checked={taxEnabled}
+              onChange={function (e) { setTaxEnabled(e.target.checked); setTaxSaved(false); }}
+              style={{ width: 18, height: 18, cursor: "pointer" }} />
+            <span style={{ fontSize: 13, color: PAPER, fontWeight: 700 }}>Show VAT breakdown on receipts</span>
+          </div>
+
+          {taxEnabled && (
+            <>
+              <Field label="VAT Rate (%)">
+                <input type="number" min="0" max="100" value={taxRate}
+                  onChange={function (e) { setTaxRate(e.target.value); setTaxSaved(false); }} style={inputStyle} />
+              </Field>
+
+              <Field label="KRA PIN (optional)">
+                <input value={taxPin} onChange={function (e) { setTaxPin(e.target.value); setTaxSaved(false); }}
+                  placeholder="e.g. P051234567X" style={inputStyle} />
+              </Field>
+            </>
+          )}
+
+          {taxError && <div style={{ color: ALERT, fontSize: 12, marginBottom: 8 }}>{taxError}</div>}
+          <SaveBtn onClick={saveTaxSettings} saving={taxSaving} saved={taxSaved} />
         </div>
 
         {/* ── SUBSCRIPTION ─────────────────────────────────────── */}
