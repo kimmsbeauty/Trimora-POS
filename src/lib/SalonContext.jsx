@@ -112,6 +112,9 @@ export function SalonGate({ mode, children }) {
               tax_enabled: !!settingsRows[0].tax_enabled,
               tax_rate: settingsRows[0].tax_rate != null ? settingsRows[0].tax_rate : 16,
               tax_pin: settingsRows[0].tax_pin || null,
+              receipt_footer_message: settingsRows[0].receipt_footer_message || null,
+              receipt_show_staff: settingsRows[0].receipt_show_staff !== false,
+              receipt_show_vehicle: settingsRows[0].receipt_show_vehicle !== false,
               // subscription fields already on resolvedSalon from public_salon_directory
               // — preserve them explicitly so they aren't lost in the merge
               subscription_plan:       resolvedSalon.subscription_plan,

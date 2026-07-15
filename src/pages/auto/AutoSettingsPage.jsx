@@ -160,6 +160,14 @@ export default function AutoSettingsPage() {
   var [taxSaved, setTaxSaved] = useState(false);
   var [taxError, setTaxError] = useState("");
 
+  // ── Receipt customization ────────────────────────────────────────
+  var [receiptFooter, setReceiptFooter] = useState("");
+  var [receiptShowStaff, setReceiptShowStaff] = useState(true);
+  var [receiptShowVehicle, setReceiptShowVehicle] = useState(true);
+  var [receiptSaving, setReceiptSaving] = useState(false);
+  var [receiptSaved, setReceiptSaved] = useState(false);
+  var [receiptError, setReceiptError] = useState("");
+
   useEffect(function () {
     if (!salon || !salon.id) return;
     (async function () {
@@ -176,6 +184,9 @@ export default function AutoSettingsPage() {
       setTaxEnabled(!!s.tax_enabled);
       setTaxRate(s.tax_rate != null ? String(s.tax_rate) : "16");
       setTaxPin(s.tax_pin || "");
+      setReceiptFooter(s.receipt_footer_message || "");
+      setReceiptShowStaff(s.receipt_show_staff !== false);
+      setReceiptShowVehicle(s.receipt_show_vehicle !== false);
     })();
     setSalonDisplayName(salon.name || "");
   }, [salon && salon.id]);
@@ -254,6 +265,20 @@ export default function AutoSettingsPage() {
     if (ok === null) { setTaxError("Save failed."); return; }
     setTaxSaved(true);
     autoResetSaved(setTaxSaved);
+  }
+
+  async function saveReceiptSettings() {
+    setReceiptError("");
+    setReceiptSaving(true);
+    var ok = await db("PATCH", "salon_settings", {
+      receipt_footer_message: receiptFooter.trim() || null,
+      receipt_show_staff: receiptShowStaff,
+      receipt_show_vehicle: receiptShowVehicle,
+    }, "?salon_id=eq." + (salon && salon.id));
+    setReceiptSaving(false);
+    if (ok === null) { setReceiptError("Save failed."); return; }
+    setReceiptSaved(true);
+    autoResetSaved(setReceiptSaved);
   }
 
   // ── Subscription -- ported from SalonSettingsPage ────────────────────
@@ -503,7 +528,7 @@ export default function AutoSettingsPage() {
       <div style={{ padding: "20px 20px 4px" }}>
         <div style={{ fontSize: 20, fontWeight: 800, color: PAPER }}>Settings</div>
         <div style={{ fontSize: 12, color: CHROME, marginTop: 2 }}>
-          Branding, Contact & Payments, M-Pesa, PIN Management, Business Info, Preferences, Referrals, Tax (VAT), Subscription.
+          Branding, Contact & Payments, M-Pesa, PIN Management, Business Info, Preferences, Referrals, Tax (VAT), Receipt, Subscription.
         </div>
       </div>
       <div style={{ padding: 20, maxWidth: 480, margin: "0 auto" }}>
@@ -726,6 +751,34 @@ export default function AutoSettingsPage() {
 
           {taxError && <div style={{ color: ALERT, fontSize: 12, marginBottom: 8 }}>{taxError}</div>}
           <SaveBtn onClick={saveTaxSettings} saving={taxSaving} saved={taxSaved} />
+        </div>
+
+        {/* ── RECEIPT ──────────────────────────────────────────── */}
+        <div style={sectionStyle}>
+          <div style={sectionTitleStyle}><span>🧻</span> Receipt</div>
+
+          <Field label="Footer message (optional)">
+            <input value={receiptFooter}
+              onChange={function (e) { setReceiptFooter(e.target.value); setReceiptSaved(false); }}
+              placeholder="e.g. Thank you, see you again!" style={inputStyle} />
+          </Field>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <input type="checkbox" checked={receiptShowStaff}
+              onChange={function (e) { setReceiptShowStaff(e.target.checked); setReceiptSaved(false); }}
+              style={{ width: 18, height: 18, cursor: "pointer" }} />
+            <span style={{ fontSize: 13, color: PAPER, fontWeight: 700 }}>Show staff name</span>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+            <input type="checkbox" checked={receiptShowVehicle}
+              onChange={function (e) { setReceiptShowVehicle(e.target.checked); setReceiptSaved(false); }}
+              style={{ width: 18, height: 18, cursor: "pointer" }} />
+            <span style={{ fontSize: 13, color: PAPER, fontWeight: 700 }}>Show vehicle details</span>
+          </div>
+
+          {receiptError && <div style={{ color: ALERT, fontSize: 12, marginBottom: 8 }}>{receiptError}</div>}
+          <SaveBtn onClick={saveReceiptSettings} saving={receiptSaving} saved={receiptSaved} />
         </div>
 
         {/* ── SUBSCRIPTION ─────────────────────────────────────── */}

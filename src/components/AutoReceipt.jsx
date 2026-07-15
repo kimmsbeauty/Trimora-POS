@@ -34,12 +34,14 @@ function money(n) {
 }
 
 function buildWhatsAppMessage(salon, job, lineItems, staffMember, dateLabel, vehicleLabel) {
+  var showStaff = !(salon && salon.receipt_show_staff === false);
+  var showVehicle = !(salon && salon.receipt_show_vehicle === false);
   var lines = [];
   lines.push("🧾 *" + (salon && salon.name ? salon.name : "Trimora Auto") + " — Receipt*");
   lines.push(dateLabel);
   lines.push("");
-  if (vehicleLabel) lines.push("🚗 " + vehicleLabel);
-  if (staffMember) lines.push("👤 Attended by: " + staffMember.name);
+  if (showVehicle && vehicleLabel) lines.push("🚗 " + vehicleLabel);
+  if (showStaff && staffMember) lines.push("👤 Attended by: " + staffMember.name);
   lines.push("");
   lineItems.forEach(function (li) {
     var name = (li.auto_services && li.auto_services.name) || "Service";
@@ -58,6 +60,10 @@ function buildWhatsAppMessage(salon, job, lineItems, staffMember, dateLabel, veh
     lines.push("(Incl. VAT " + rate + "%: " + money(vat) + ")");
   }
   lines.push(job.payment_status === "paid" ? "Paid via " + (job.payment_method || "—") : "Payment not yet collected");
+  if (salon && salon.receipt_footer_message) {
+    lines.push("");
+    lines.push("_" + salon.receipt_footer_message + "_");
+  }
   return lines.join("\n");
 }
 
@@ -76,6 +82,9 @@ export default function AutoReceipt({ salon, job, jobServices, staffById, onClos
     .filter(Boolean).join(" · ");
 
   var isPaid = job.payment_status === "paid";
+  var showStaff = !(salon && salon.receipt_show_staff === false);
+  var showVehicle = !(salon && salon.receipt_show_vehicle === false);
+  var footerMessage = salon && salon.receipt_footer_message;
 
   // VAT-inclusive: the listed/total price already includes tax, so this
   // is purely an extraction for display -- no change to what's actually
@@ -99,16 +108,18 @@ export default function AutoReceipt({ salon, job, jobServices, staffById, onClos
           <div style={{ borderBottom: "2px dashed " + CHROME + "44", margin: "12px 0" }} />
         </div>
 
-        <div style={{ fontSize: 12, color: CHROME, marginBottom: 4 }}>
-          <b style={{ color: PAPER }}>Vehicle:</b> {vehicleLabel || "—"}
-        </div>
+        {showVehicle && (
+          <div style={{ fontSize: 12, color: CHROME, marginBottom: 4 }}>
+            <b style={{ color: PAPER }}>Vehicle:</b> {vehicleLabel || "—"}
+          </div>
+        )}
         {customer.name && (
           <div style={{ fontSize: 12, color: CHROME, marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
             <b style={{ color: PAPER }}>Customer:</b> {customer.name}
             <LoyaltyBadge customer={customer} size="sm" />
           </div>
         )}
-        {staffMember && (
+        {showStaff && staffMember && (
           <div style={{ fontSize: 12, color: CHROME, marginBottom: 4 }}>
             <b style={{ color: PAPER }}>Attended by:</b> {staffMember.name}
           </div>
@@ -127,7 +138,7 @@ export default function AutoReceipt({ salon, job, jobServices, staffById, onClos
                   <span>{name}</span>
                   <span style={{ fontWeight: 700 }}>{money(li.price)}</span>
                 </div>
-                {lineStaffName && lineStaffName !== (staffMember && staffMember.name) && (
+                {showStaff && lineStaffName && lineStaffName !== (staffMember && staffMember.name) && (
                   <div style={{ fontSize: 10, color: CHROME }}>by {lineStaffName}</div>
                 )}
               </div>
@@ -214,7 +225,13 @@ export default function AutoReceipt({ salon, job, jobServices, staffById, onClos
           </div>
         )}
 
-        <div style={{ textAlign: "center", marginTop: 16, paddingTop: 12, borderTop: "1px dashed " + CHROME + "33" }}>
+        {footerMessage && (
+          <div style={{ textAlign: "center", marginTop: 16, fontSize: 12, color: PAPER, fontStyle: "italic" }}>
+            {footerMessage}
+          </div>
+        )}
+
+        <div style={{ textAlign: "center", marginTop: footerMessage ? 8 : 16, paddingTop: 12, borderTop: "1px dashed " + CHROME + "33" }}>
           <div style={{ fontSize: 10, color: CHROME, letterSpacing: "0.08em" }}>
             Powered by <span style={{ fontWeight: 900, color: SIGNAL }}>TRIMORA AUTO</span>
           </div>
