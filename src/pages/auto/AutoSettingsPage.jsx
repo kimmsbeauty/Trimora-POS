@@ -139,6 +139,16 @@ export default function AutoSettingsPage() {
   var [prefSaved, setPrefSaved] = useState(false);
   var [prefError, setPrefError] = useState("");
 
+  // ── Referral reward -- single configurable %, applied automatically
+  // to both the referrer's next visit and the referred customer's first
+  // visit (see BoardPage.jsx / CheckInPage.jsx). Snapshotted into each
+  // auto_referrals row at the moment a referral is recorded, so changing
+  // this later never retroactively alters a reward already promised.
+  var [referralPct, setReferralPct] = useState("10");
+  var [referralSaving, setReferralSaving] = useState(false);
+  var [referralSaved, setReferralSaved] = useState(false);
+  var [referralError, setReferralError] = useState("");
+
   useEffect(function () {
     if (!salon || !salon.id) return;
     (async function () {
@@ -151,6 +161,7 @@ export default function AutoSettingsPage() {
       setSecondaryColor(s.secondary_color || "#1A1A1A");
       setCurrency(s.currency_symbol || "KSh");
       setTimezone(s.timezone || "Africa/Nairobi");
+      setReferralPct(s.referral_reward_pct != null ? String(s.referral_reward_pct) : "10");
     })();
     setSalonDisplayName(salon.name || "");
   }, [salon && salon.id]);
@@ -199,6 +210,20 @@ export default function AutoSettingsPage() {
     if (ok === null) { setPrefError("Save failed."); return; }
     setPrefSaved(true);
     autoResetSaved(setPrefSaved);
+  }
+
+  async function saveReferralPct() {
+    setReferralError("");
+    var pct = parseInt(referralPct, 10);
+    if (isNaN(pct) || pct < 0 || pct > 100) { setReferralError("Enter a whole number between 0 and 100."); return; }
+    setReferralSaving(true);
+    var ok = await db("PATCH", "salon_settings", {
+      referral_reward_pct: pct,
+    }, "?salon_id=eq." + (salon && salon.id));
+    setReferralSaving(false);
+    if (ok === null) { setReferralError("Save failed."); return; }
+    setReferralSaved(true);
+    autoResetSaved(setReferralSaved);
   }
 
   // ── Subscription -- ported from SalonSettingsPage ────────────────────
@@ -448,7 +473,7 @@ export default function AutoSettingsPage() {
       <div style={{ padding: "20px 20px 4px" }}>
         <div style={{ fontSize: 20, fontWeight: 800, color: PAPER }}>Settings</div>
         <div style={{ fontSize: 12, color: CHROME, marginTop: 2 }}>
-          Branding, Contact & Payments, M-Pesa, PIN Management, Business Info, Preferences, Subscription.
+          Branding, Contact & Payments, M-Pesa, PIN Management, Business Info, Preferences, Referrals, Subscription.
         </div>
       </div>
       <div style={{ padding: 20, maxWidth: 480, margin: "0 auto" }}>
@@ -620,6 +645,24 @@ export default function AutoSettingsPage() {
 
           {prefError && <div style={{ color: ALERT, fontSize: 12, marginBottom: 8 }}>{prefError}</div>}
           <SaveBtn onClick={savePreferences} saving={prefSaving} saved={prefSaved} />
+        </div>
+
+        {/* ── REFERRALS ────────────────────────────────────────── */}
+        <div style={sectionStyle}>
+          <div style={sectionTitleStyle}><span>🤝</span> Referrals</div>
+          <div style={{ fontSize: 10, color: CHROME, marginBottom: 12, marginTop: -8 }}>
+            When staff record "Referred by" at Check-In, both the referrer (on their next visit)
+            and the new customer (on this first visit) automatically get this % off — no extra
+            step needed at checkout. Changing this only affects referrals recorded from now on.
+          </div>
+
+          <Field label="Reward (%)">
+            <input type="number" min="0" max="100" value={referralPct}
+              onChange={function (e) { setReferralPct(e.target.value); setReferralSaved(false); }} style={inputStyle} />
+          </Field>
+
+          {referralError && <div style={{ color: ALERT, fontSize: 12, marginBottom: 8 }}>{referralError}</div>}
+          <SaveBtn onClick={saveReferralPct} saving={referralSaving} saved={referralSaved} />
         </div>
 
         {/* ── SUBSCRIPTION ─────────────────────────────────────── */}

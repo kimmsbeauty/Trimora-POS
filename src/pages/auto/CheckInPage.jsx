@@ -44,6 +44,18 @@ export default function CheckInPage() {
   var vModelState = useState(""); var vModel = vModelState[0]; var setVModel = vModelState[1];
   var vColorState = useState(""); var vColor = vColorState[0]; var setVColor = vColorState[1];
 
+  // Referral: only offered on the not_found (brand-new customer) path,
+  // matching "the new customer's reward applies on this first visit."
+  // Deliberately a separate explicit phone lookup rather than a live
+  // search-as-you-type, so staff get a clear name confirmation before
+  // it's attached -- same reasoning as the reg-number vehicle search
+  // above, just for a person instead of a car.
+  var referrerPhoneState = useState(""); var referrerPhone = referrerPhoneState[0]; var setReferrerPhone = referrerPhoneState[1];
+  var referrerState = useState(null); // resolved { id, name } | null
+  var referrer = referrerState[0]; var setReferrer = referrerState[1];
+  var referrerSearchStatusState = useState("idle"); // idle | searching | found | not_found
+  var referrerSearchStatus = referrerSearchStatusState[0]; var setReferrerSearchStatus = referrerSearchStatusState[1];
+
   var selectedState = useState({}); // { [service.id]: true }
   var selected = selectedState[0]; var setSelected = selectedState[1];
 
@@ -69,6 +81,21 @@ export default function CheckInPage() {
     setRegInput(""); setSearchStatus("idle"); setVehicle(null);
     setCustName(""); setCustPhone(""); setVMake(""); setVModel(""); setVColor("");
     setSelected({}); setResult(null); setLastVehicleId(null);
+    setReferrerPhone(""); setReferrer(null); setReferrerSearchStatus("idle");
+  }
+
+  async function handleReferrerSearch() {
+    var phone = referrerPhone.trim();
+    if (!phone) return;
+    setReferrerSearchStatus("searching");
+    var rows = await db("GET", "customers", null, "?phone=eq." + encodeURIComponent(phone) + "&limit=1");
+    if (rows && rows.length > 0) {
+      setReferrer(rows[0]);
+      setReferrerSearchStatus("found");
+    } else {
+      setReferrer(null);
+      setReferrerSearchStatus("not_found");
+    }
   }
 
   async function handleSearch() {
@@ -150,6 +177,24 @@ export default function CheckInPage() {
       event_type: "checked_in",
       payload: { vehicle_id: vehicleId, service_count: selectedServices.length, total_price: total },
     });
+
+    // Referral: only possible on the not_found (brand-new customer) path
+    // -- referrerSearchStatus === "found" guarantees a resolved customer
+    // id, distinct from the newly-created one (an existing customer can't
+    // refer themselves; the phone-lookup UI also only appears pre-submit
+    // for new customers, so this can't fire on a returning-customer visit
+    // at all). A failure here doesn't roll back or block the check-in --
+    // the queue/job creation above is the important part; a referral not
+    // recording is recoverable, a stuck check-in isn't.
+    if (searchStatus === "not_found" && referrerSearchStatus === "found" && referrer) {
+      await db("POST", "auto_referrals", {
+        salon_id: salon.id,
+        referrer_customer_id: referrer.id,
+        referred_customer_id: customerId,
+        reward_pct: (salon && salon.referral_reward_pct != null) ? salon.referral_reward_pct : 10,
+        referred_job_id: job.id,
+      });
+    }
 
     setSubmitting(false);
     setLastVehicleId(vehicleId);
@@ -278,6 +323,33 @@ export default function CheckInPage() {
             </div>
             <input value={vColor} onChange={function (e) { setVColor(e.target.value); }}
               placeholder="Color" style={Object.assign({}, inputStyle, { marginTop: 10 })} />
+          </div>
+        )}
+
+        {searchStatus === "not_found" && (
+          <div style={panelStyle}>
+            <span style={labelStyle}>Referred by (optional)</span>
+            <div style={{ display: "flex", gap: 10 }}>
+              <input value={referrerPhone}
+                onChange={function (e) { setReferrerPhone(e.target.value); setReferrer(null); setReferrerSearchStatus("idle"); }}
+                placeholder="Referrer's phone number" style={Object.assign({}, inputStyle, { flex: 1 })} />
+              <button onClick={handleReferrerSearch} disabled={!referrerPhone.trim()} style={{
+                padding: "0 18px", borderRadius: 10, border: "1.5px solid " + SIGNAL, background: "transparent",
+                color: SIGNAL, fontWeight: 700, fontSize: 13, cursor: "pointer",
+              }}>
+                Find
+              </button>
+            </div>
+            {referrerSearchStatus === "found" && referrer && (
+              <div style={{ fontSize: 12, color: SIGNAL, marginTop: 8, fontWeight: 700 }}>
+                ✓ {referrer.name} — both get {salon && salon.referral_reward_pct != null ? salon.referral_reward_pct : 10}% off
+              </div>
+            )}
+            {referrerSearchStatus === "not_found" && (
+              <div style={{ fontSize: 12, color: ALERT, marginTop: 8 }}>
+                No customer found with that phone number.
+              </div>
+            )}
           </div>
         )}
 

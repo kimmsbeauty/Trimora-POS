@@ -134,6 +134,7 @@ export default function BoardPage() {
   // membership's covered_service_id. Fetched fresh each load() so an expiry crossing midnight
   // between visits is never stale.
   var membershipsState = useState({}); var membershipsByCustomerId = membershipsState[0]; var setMembershipsByCustomerId = membershipsState[1];
+  var referralsState = useState([]); var referrals = referralsState[0]; var setReferrals = referralsState[1];
   var busyState = useState(false); var busy = busyState[0]; var setBusy = busyState[1];
   var salon = useSalon();
   // Phase 5: completing a job requires collecting payment first --
@@ -213,8 +214,23 @@ export default function BoardPage() {
         byCustomer[row.customer_id].push(row);
       });
       setMembershipsByCustomerId(byCustomer);
+
+      // Two independent ways a job can carry a pending referral reward:
+      // (a) this customer is a referrer with ANY pending reward waiting
+      //     for their next visit (could be redeemed on this job or a
+      //     later one -- whichever comes first), or
+      // (b) this exact job IS the referred customer's rewarded first
+      //     visit (referred_job_id was stamped at check-in).
+      // Both checked in one query via an OR filter rather than two round
+      // trips.
+      var jobIds = jobRows.map(function (j) { return j.id; });
+      var referralRows = await db("GET", "auto_referrals", null,
+        "?or=(and(referrer_customer_id.in.(" + custIds.join(",") + "),referrer_reward_status.eq.pending)," +
+        "and(referred_job_id.in.(" + jobIds.join(",") + "),referred_reward_status.eq.pending))");
+      setReferrals(referralRows || []);
     } else {
       setMembershipsByCustomerId({});
+      setReferrals([]);
     }
 
     setLoading(false);
@@ -239,6 +255,52 @@ export default function BoardPage() {
     }
     return null;
   }
+
+  // Finds a pending referral reward applicable to this job -- checked
+  // separately from membership and given lower priority (see the render
+  // site below): this job's schema only has one discount slot, so if a
+  // job somehow qualifies for both a membership AND a referral reward at
+  // once, membership wins and the referral stays pending for a future
+  // visit rather than being silently dropped.
+  function findReferralMatch(job) {
+    if (!job.customer_id) return null;
+    var direct = referrals.filter(function (r) { return r.referred_job_id === job.id && r.referred_reward_status === "pending"; })[0];
+    if (direct) return { referral: direct, role: "referred" };
+    var asReferrer = referrals.filter(function (r) { return r.referrer_customer_id === job.customer_id && r.referrer_reward_status === "pending"; })[0];
+    if (asReferrer) return { referral: asReferrer, role: "referrer" };
+    return null;
+  }
+
+  // Referral rewards apply automatically, unlike Membership's manual
+  // "Apply" tap -- per the product decision, staff shouldn't need to
+  // remember to do anything. Runs whenever a job's referral/membership
+  // data changes; only ever fills in a job's discount when staff haven't
+  // touched it yet (edits.discountType === undefined, not merely falsy --
+  // an explicit "Remove" click sets it to null, which must stay removed,
+  // not get re-applied on the next tick). Membership still wins if a job
+  // somehow qualifies for both, since only one discount slot exists.
+  useEffect(function () {
+    var toApply = null;
+    jobs.forEach(function (job) {
+      if (job.status !== "ready_for_collection") return;
+      var existing = commissionEdits[job.id];
+      if (existing && existing.discountType !== undefined) return;
+      if (findMembershipMatch(job)) return;
+      var match = findReferralMatch(job);
+      if (!match) return;
+      if (!toApply) toApply = {};
+      toApply[job.id] = { discountType: "pct", discountValue: String(match.referral.reward_pct) };
+    });
+    if (toApply) {
+      setCommissionEdits(function (prev) {
+        var next = Object.assign({}, prev);
+        Object.keys(toApply).forEach(function (jobId) {
+          next[jobId] = Object.assign({}, next[jobId], toApply[jobId]);
+        });
+        return next;
+      });
+    }
+  }, [jobs, referrals, membershipsByCustomerId, jobServicesByJobId]);
 
   useEffect(function () {
     load();
@@ -411,6 +473,15 @@ export default function BoardPage() {
         patch.payment_status = "paid";
       }
     }
+    // Captured before the post-completion setCommissionEdits cleanup
+    // below deletes this job's edits -- only marks the reward redeemed
+    // if it was actually still applied at the moment of completion (a
+    // staff "Remove" click clears discountSource, so a removed referral
+    // correctly stays pending for a future visit instead of being
+    // burned here).
+    var editsAtCompletion = commissionEdits[job.id] || {};
+    var referralToRedeem = (next === "completed" && editsAtCompletion.discountSource === "referral")
+      ? findReferralMatch(job) : null;
     await db("PATCH", "auto_jobs", patch, "?id=eq." + job.id);
 
     if (next === "completed") {
@@ -423,6 +494,15 @@ export default function BoardPage() {
 
     if (next === "completed" && job.bay_id) {
       await db("PATCH", "auto_bays", { current_job_id: null }, "?id=eq." + job.bay_id);
+    }
+
+    if (referralToRedeem) {
+      var field = referralToRedeem.role === "referred" ? "referred_reward_status" : "referrer_reward_status";
+      var jobField = referralToRedeem.role === "referred" ? "referred_job_id" : "referrer_job_id";
+      var referralPatch = {};
+      referralPatch[field] = "redeemed";
+      referralPatch[jobField] = job.id;
+      await db("PATCH", "auto_referrals", referralPatch, "?id=eq." + referralToRedeem.referral.id);
     }
 
     // Loyalty (feature-parity item #7): credits the customer's total
@@ -796,6 +876,8 @@ export default function BoardPage() {
               var pricing = isReadyForCollection ? computeLinePricing(job) : null;
               var membershipMatch = isReadyForCollection ? findMembershipMatch(job) : null;
               var membershipApplied = edits.discountType === "membership";
+              var referralMatch = isReadyForCollection ? findReferralMatch(job) : null;
+              var referralApplied = edits.discountSource === "referral";
 
               return (
                 <div key={job.id} style={{
@@ -891,11 +973,11 @@ export default function BoardPage() {
                         );
                       })}
 
-                      {!membershipApplied && (
+                      {!membershipApplied && !referralApplied && (
                         <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
                           <span style={{ fontSize: 11, color: CHROME, whiteSpace: "nowrap" }}>Discount</span>
                           <select value={edits.discountType || ""}
-                            onChange={function (e) { setDiscount({ discountType: e.target.value || null }); }}
+                            onChange={function (e) { setDiscount({ discountType: e.target.value || null, discountSource: undefined }); }}
                             style={{
                               background: "rgba(255,255,255,0.04)", color: PAPER,
                               border: "1px solid rgba(143,166,184,0.3)", borderRadius: 6, padding: "6px 6px", fontSize: 11,
@@ -906,7 +988,7 @@ export default function BoardPage() {
                           </select>
                           {edits.discountType && (
                             <input type="number" value={edits.discountValue || ""}
-                              onChange={function (e) { setDiscount({ discountValue: e.target.value }); }}
+                              onChange={function (e) { setDiscount({ discountValue: e.target.value, discountSource: undefined }); }}
                               placeholder="0"
                               style={{
                                 width: 64, background: "rgba(255,255,255,0.04)", color: PAPER,
@@ -934,6 +1016,17 @@ export default function BoardPage() {
                             ✓ Membership applied{membershipMatch ? " — " + membershipMatch.plan.name : ""} (−KSh {(pricing ? pricing.discountAmount : 0).toLocaleString()})
                           </span>
                           <span onClick={function () { setDiscount({ discountType: null, discountValue: "" }); }}
+                            style={{ fontSize: 11, color: CHROME, textDecoration: "underline", cursor: "pointer" }}>
+                            Remove
+                          </span>
+                        </div>
+                      )}
+                      {referralApplied && (
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+                          <span style={{ fontSize: 11, color: SIGNAL, fontWeight: 700 }}>
+                            ✓ Referral reward applied — {edits.discountValue}% off (−KSh {(pricing ? pricing.discountAmount : 0).toLocaleString()})
+                          </span>
+                          <span onClick={function () { setDiscount({ discountType: null, discountValue: "", discountSource: undefined }); }}
                             style={{ fontSize: 11, color: CHROME, textDecoration: "underline", cursor: "pointer" }}>
                             Remove
                           </span>

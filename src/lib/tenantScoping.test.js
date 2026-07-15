@@ -93,6 +93,11 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
                           // apart). Still needs TENANT_TABLES' GET-side
                           // salon_id filter for the transaction-history
                           // list on the Customer detail page.
+  "auto_referrals", // added 2026-07-15 alongside Referral Tracking --
+                    // salon_id column, standard select/insert/update/
+                    // delete policies via auth_salon_id(). Queried from
+                    // CheckInPage.jsx (create) and BoardPage.jsx (the
+                    // pending-reward OR-filter lookup at checkout).
 ];
 
 // Tables confirmed live (2026-07-07) to have a salon_id column, but
