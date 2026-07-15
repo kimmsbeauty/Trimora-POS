@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { GOLD, GOLD_LT, GOLD_DIM, BLACK, WHITE, CREAM, DARK, GREEN, AMBER, SUPABASE_URL, SUPABASE_KEY } from "../lib/constants.js";
+import { getValidAccessToken } from "../lib/deviceAuth";
 
 function normalizePhone(p) {
   return (p || "").replace(/\D/g, "").replace(/^0/, "254");
@@ -53,12 +54,13 @@ export default function TomorrowReminders({ appointments, salonName, customers, 
     if (!salonId) return;
     setSmsStatus(function(p) { return Object.assign({}, p, { [appt.id]: "sending" }); });
     try {
+      var deviceToken = await getValidAccessToken();
       var res = await fetch(SUPABASE_URL + "/functions/v1/send-marketing-message", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           apikey: SUPABASE_KEY,
-          Authorization: "Bearer " + SUPABASE_KEY,
+          Authorization: "Bearer " + (deviceToken || SUPABASE_KEY),
         },
         body: JSON.stringify({
           campaign_id: appointmentCampaign.id,

@@ -4,6 +4,8 @@
 // Receives: { campaign_id, customer_id, salon_id }
 //
 // Steps:
+//   0. Verifies the caller is an authenticated device belonging to the
+//      requested salon_id (audit High-2).
 //   1. Confirms the salon isn't suspended (service-role calls bypass RLS,
 //      so this has to be checked explicitly here, not left to RLS).
 //   2. Basic abuse guard: caps sends to 300/salon/rolling hour.
@@ -15,6 +17,15 @@
 //      opt-out line.
 //   7. Sends via Africa's Talking using Trimora's shared credentials.
 //   8. Logs the result to marketing_messages.
+//
+// Security note (audit High-2): previously this function accepted any
+// salon_id/campaign_id/customer_id in the request body with no proof the
+// caller belonged to that salon -- salon_id is intentionally public, so
+// anyone could trigger SMS sends billed to Trimora's shared Africa's
+// Talking credentials, up to the per-salon hourly cap, across every
+// tenant. The caller's device-auth bearer token is now required to
+// resolve (via salon_auth_users) to the same salon_id present in the
+// request body.
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -45,6 +56,43 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+
+    // ── Gate 0: verify the caller is an authenticated device for this
+    //    salon (audit High-2) ────────────────────────────────────────
+    const authHeader = req.headers.get("Authorization") || "";
+    const callerToken = authHeader.replace(/^Bearer\s+/i, "");
+
+    if (!callerToken) {
+      return new Response(
+        JSON.stringify({ error: "Missing Authorization header" }),
+        { status: 401, headers: { ...CORS, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { data: callerData, error: callerError } = await supabase.auth.getUser(callerToken);
+    if (callerError || !callerData?.user?.id) {
+      return new Response(
+        JSON.stringify({ error: "Invalid or expired session. Please refresh and try again." }),
+        { status: 401, headers: { ...CORS, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { data: callerAuthRow } = await supabase
+      .from("salon_auth_users")
+      .select("salon_id")
+      .eq("id", callerData.user.id)
+      .maybeSingle();
+
+    if (!callerAuthRow || callerAuthRow.salon_id !== salon_id) {
+      console.warn(
+        "send-marketing-message: salon mismatch -- caller belongs to", callerAuthRow?.salon_id,
+        "requested", salon_id
+      );
+      return new Response(
+        JSON.stringify({ error: "Not authorized for this salon." }),
+        { status: 403, headers: { ...CORS, "Content-Type": "application/json" } }
+      );
+    }
 
     // ── Gate 1: suspension — checked explicitly, RLS doesn't apply here ──
     const { data: salonRow } = await supabase

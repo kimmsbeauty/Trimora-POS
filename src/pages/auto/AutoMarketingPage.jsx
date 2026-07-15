@@ -29,6 +29,7 @@ import { useState, useEffect, useCallback } from "react";
 import { db } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
 import { SUPABASE_URL, SUPABASE_KEY } from "../../lib/constants";
+import { getValidAccessToken } from "../../lib/deviceAuth";
 import AutoCampaignEditorCard from "../../components/AutoCampaignEditorCard";
 import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "./theme";
 
@@ -104,12 +105,13 @@ export default function AutoMarketingPage() {
     var campaign = campaignResult && campaignResult[0];
     if (!campaign) { setBroadcastSending(false); alert("Could not create broadcast. Check your connection."); return; }
     var sentCount = 0, failedCount = 0;
+    var deviceToken = await getValidAccessToken();
     for (var i = 0; i < broadcastRecipients.length; i++) {
       var c = broadcastRecipients[i];
       try {
         var res = await fetch(SUPABASE_URL + "/functions/v1/send-marketing-message", {
           method: "POST",
-          headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY },
+          headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY, Authorization: "Bearer " + (deviceToken || SUPABASE_KEY) },
           body: JSON.stringify({ campaign_id: campaign.id, customer_id: c.id, salon_id: salonId }),
         });
         var data = await res.json().catch(function () { return {}; });

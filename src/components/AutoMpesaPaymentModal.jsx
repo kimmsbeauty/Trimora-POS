@@ -17,6 +17,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { SUPABASE_URL, SUPABASE_KEY } from "../lib/constants";
+import { getValidAccessToken } from "../lib/deviceAuth";
 import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "../pages/auto/theme";
 
 function money(n) {
@@ -96,12 +97,13 @@ export default function AutoMpesaPaymentModal({ salon, job, onPaid, onCancel }) 
     setError("");
 
     try {
+      var deviceToken = await getValidAccessToken();
       var res = await fetch(SUPABASE_URL + "/functions/v1/mpesa-stk-push", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           apikey: SUPABASE_KEY,
-          Authorization: "Bearer " + SUPABASE_KEY,
+          Authorization: "Bearer " + (deviceToken || SUPABASE_KEY),
         },
         body: JSON.stringify({
           salon_id:  salon.id,

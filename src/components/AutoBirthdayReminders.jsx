@@ -20,6 +20,7 @@
 
 import { useState } from "react";
 import { SUPABASE_URL, SUPABASE_KEY } from "../lib/constants.js";
+import { getValidAccessToken } from "../lib/deviceAuth";
 import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "../pages/auto/theme";
 
 function isBirthdayToday(dob) {
@@ -53,12 +54,13 @@ export default function AutoBirthdayReminders({ customers, salonName, salon, bir
     if (!salonId) return;
     setSmsStatus(function (p) { return Object.assign({}, p, { [customer.id]: "sending" }); });
     try {
+      var deviceToken = await getValidAccessToken();
       var res = await fetch(SUPABASE_URL + "/functions/v1/send-marketing-message", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           apikey: SUPABASE_KEY,
-          Authorization: "Bearer " + SUPABASE_KEY,
+          Authorization: "Bearer " + (deviceToken || SUPABASE_KEY),
         },
         body: JSON.stringify({
           campaign_id: birthdayCampaign.id,

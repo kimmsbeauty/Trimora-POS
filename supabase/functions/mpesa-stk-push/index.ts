@@ -5,11 +5,13 @@
 // Called by the POS frontend when the customer selects M-Pesa and the
 // staff taps "Send STK Push". The frontend passes the salon_id, amount,
 // and customer phone. This function:
-//   1. Loads that salon's Daraja credentials from salon_mpesa_config
-//   2. Gets a Daraja OAuth token
-//   3. Calls the STK Push API
-//   4. Saves a pending record to salon_mpesa_payments
-//   5. Returns the CheckoutRequestID so the frontend can poll for status
+//   1. Verifies the caller is an authenticated device belonging to the
+//      requested salon_id (audit High-1)
+//   2. Loads that salon's Daraja credentials from salon_mpesa_config
+//   3. Gets a Daraja OAuth token
+//   4. Calls the STK Push API
+//   5. Saves a pending record to salon_mpesa_payments
+//   6. Returns the CheckoutRequestID so the frontend can poll for status
 //
 // The actual payment confirmation arrives asynchronously via the
 // mpesa-callback function -- this function only initiates the push.
@@ -22,6 +24,14 @@
 // mpesa-callback requires this token to match before processing an
 // update, so knowing checkout_request_id alone (which the frontend does
 // legitimately need, for polling) is not enough to forge a callback.
+//
+// Security note (audit High-1): previously this function accepted any
+// salon_id in the request body with no proof the caller belonged to that
+// salon -- salon_id is intentionally public (resolved from the booking-
+// page slug), so anyone could trigger unwanted M-Pesa payment prompts to
+// arbitrary phone numbers "as" any salon. The caller's device-auth
+// bearer token is now required to resolve (via salon_auth_users) to the
+// same salon_id present in the request body.
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -56,20 +66,48 @@ serve(async (req) => {
       );
     }
 
-    // Normalise phone to 254XXXXXXXXX format
-    const cleanPhone = phone.replace(/\D/g, "").replace(/^0/, "254").replace(/^(\+254)/, "254");
-    if (!/^2547\d{8}$/.test(cleanPhone) && !/^2541\d{8}$/.test(cleanPhone)) {
-      return new Response(
-        JSON.stringify({ error: "Invalid Kenyan phone number" }),
-        { status: 400, headers: { ...CORS, "Content-Type": "application/json" } }
-      );
-    }
-
     // Use service role client to read credentials (bypasses RLS)
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+
+    // -- Verify the caller is an authenticated device for this salon
+    //    (audit High-1) -----------------------------------------------
+    const authHeader = req.headers.get("Authorization") || "";
+    const callerToken = authHeader.replace(/^Bearer\s+/i, "");
+
+    if (!callerToken) {
+      return new Response(
+        JSON.stringify({ error: "Missing Authorization header" }),
+        { status: 401, headers: { ...CORS, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { data: callerData, error: callerError } = await supabase.auth.getUser(callerToken);
+    if (callerError || !callerData?.user?.id) {
+      return new Response(
+        JSON.stringify({ error: "Invalid or expired session. Please refresh and try again." }),
+        { status: 401, headers: { ...CORS, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { data: callerAuthRow } = await supabase
+      .from("salon_auth_users")
+      .select("salon_id")
+      .eq("id", callerData.user.id)
+      .maybeSingle();
+
+    if (!callerAuthRow || callerAuthRow.salon_id !== salon_id) {
+      console.warn(
+        "mpesa-stk-push: salon mismatch -- caller belongs to", callerAuthRow?.salon_id,
+        "requested", salon_id
+      );
+      return new Response(
+        JSON.stringify({ error: "Not authorized for this salon." }),
+        { status: 403, headers: { ...CORS, "Content-Type": "application/json" } }
+      );
+    }
 
     // This client uses the service role key, which bypasses RLS entirely -
     // suspension must be checked explicitly here, RLS won't catch it.
@@ -83,6 +121,15 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: "This salon's account is currently suspended." }),
         { status: 403, headers: { ...CORS, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Normalise phone to 254XXXXXXXXX format
+    const cleanPhone = phone.replace(/\D/g, "").replace(/^0/, "254").replace(/^(\+254)/, "254");
+    if (!/^2547\d{8}$/.test(cleanPhone) && !/^2541\d{8}$/.test(cleanPhone)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid Kenyan phone number" }),
+        { status: 400, headers: { ...CORS, "Content-Type": "application/json" } }
       );
     }
 
