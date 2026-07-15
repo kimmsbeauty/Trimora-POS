@@ -17,6 +17,9 @@ import {
   autoRevenueByMonth as autoRevenueByMonthLib,
   autoRevenueBySalon as autoRevenueBySalonLib,
 } from "../lib/salonHealth.js";
+import AuditView from "./superadmin/AuditView";
+import AutoAuditView from "./superadmin/AutoAuditView";
+import AutoHealthView from "./superadmin/AutoHealthView";
 
 var GOLD_LT = "#F5E6B8";
 
@@ -1101,68 +1104,7 @@ export default function SuperAdminDashboard({ onLogout }) {
 
   // ── AUDIT LOG VIEW ───────────────────────────────────────────────
   if (view === "audit") {
-    var actionLabels = {
-      suspend_salon:        { icon: "⛔", label: "Suspended salon" },
-      reactivate_salon:     { icon: "✓",  label: "Reactivated salon" },
-      record_payment:       { icon: "💰", label: "Recorded payment" },
-      reset_pin:            { icon: "🔑", label: "Reset PIN" },
-      edit_salon_details:   { icon: "✏️", label: "Edited salon details" },
-      manual_onboard:       { icon: "🏪", label: "Manually onboarded salon" },
-      generate_invite:      { icon: "📨", label: "Generated invite link" },
-      manual_onboard_auto:  { icon: "🚗", label: "Manually onboarded car wash" },
-      generate_invite_auto: { icon: "🚗", label: "Generated Auto invite link" },
-      update_plan_price:    { icon: "💲", label: "Updated plan price" },
-      enable_auto_module:   { icon: "🚗", label: "Onboarded salon into Auto" },
-      disable_auto_module:  { icon: "🚫", label: "Suspended salon's Auto access" },
-    };
-
-    return (
-      <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
-        <div style={{ background: BLACK, padding: "16px 20px" }}>
-          <button onClick={function() { setView("salons"); }}
-            style={{ background: "none", border: "none", color: GOLD_DIM, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 8, padding: 0 }}>
-            ← Back
-          </button>
-          <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>📋 Audit Log</div>
-          <div style={{ fontSize: 11, color: GOLD_DIM + "aa", marginTop: 2 }}>Most recent 200 actions</div>
-        </div>
-
-        <div style={{ padding: 16 }}>
-          {auditLoading ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>Loading...</div>
-          ) : auditLog.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>No actions logged yet.</div>
-          ) : (
-            auditLog.map(function(entry) {
-              var meta = actionLabels[entry.action] || { icon: "•", label: entry.action };
-              return (
-                <div key={entry.id} style={{ background: WHITE, borderRadius: 12, padding: 14, marginBottom: 8, border: "1.5px solid " + GOLD_DIM + "33" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: DARK }}>
-                      {meta.icon} {meta.label}
-                      {entry.salon_name && (
-                        <span style={{ color: GOLD_DIM }}>
-                          {" · "}
-                          {(function() { var s = salons.find(function(x) { return x.id === entry.salon_id; }); return s && s.salon_number ? "#" + String(s.salon_number).padStart(3,"0") + " " : ""; })()}
-                          {entry.salon_name}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: 10, color: "#999", whiteSpace: "nowrap", marginLeft: 8 }}>
-                      {new Date(entry.created_at).toLocaleString("en-KE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                    </div>
-                  </div>
-                  {entry.details && (
-                    <div style={{ fontSize: 12, color: "#666", marginBottom: 4 }}>{entry.details}</div>
-                  )}
-                  <div style={{ fontSize: 10, color: "#aaa" }}>by {entry.admin_email || "unknown"}</div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-    );
+    return <AuditView auditLoading={auditLoading} auditLog={auditLog} salons={salons} setView={setView} />;
   }
 
   // ── ONBOARDING REQUESTS VIEW ────────────────────────────────────────
@@ -1540,59 +1482,7 @@ export default function SuperAdminDashboard({ onLogout }) {
   // (salonHealth.js) against salon_directory's auto_* columns
   // (migration 028) -- no new fetch, same loaded `salons` state.
   if (view === "autohealth") {
-    var autoFlagged = autoSalonsNeedingAttention();
-    var autoSeverityColor = { high: RED, medium: AMBER, low: "#999" };
-    var autoSeverityBg    = { high: "#FEE2E2", medium: "#FEF3C7", low: "#F3F4F6" };
-
-    return (
-      <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
-        <div style={{ background: BLACK, padding: "16px 20px" }}>
-          <button onClick={function() { setView("carwashes"); }}
-            style={{ background: "none", border: "none", color: GOLD_DIM, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 8, padding: 0 }}>
-            ← Back
-          </button>
-          <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>🩺 Auto Health</div>
-          <div style={{ fontSize: 11, color: GOLD_DIM + "aa", marginTop: 2 }}>
-            {autoFlagged.length === 0 ? "All onboarded car washes look healthy." : autoFlagged.length + " car wash" + (autoFlagged.length === 1 ? "" : "es") + " need" + (autoFlagged.length === 1 ? "s" : "") + " attention"}
-          </div>
-        </div>
-
-        <div style={{ padding: 16 }}>
-          {autoFlagged.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>
-              <div style={{ fontSize: 32, marginBottom: 10 }}>✅</div>
-              Nothing needs attention right now.
-            </div>
-          ) : (
-            autoFlagged.map(function(item) {
-              var s = item.salon;
-              return (
-                <div key={s.id} onClick={function() { openSalonDetail(s, "autohealth"); }}
-                  style={{ background: WHITE, borderRadius: 14, padding: 14, marginBottom: 10, border: "1.5px solid " + GOLD_DIM + "33", cursor: "pointer" }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: DARK }}>{s.name}</div>
-                    <div style={{ fontSize: 10, color: "#999" }}>/{s.slug}</div>
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {item.flags.map(function(f, i) {
-                      return (
-                        <span key={i} style={{
-                          fontSize: 10, fontWeight: 800, padding: "4px 9px", borderRadius: 20,
-                          background: autoSeverityBg[f.severity], color: autoSeverityColor[f.severity],
-                        }}>
-                          {f.label}
-                        </span>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-    );
+    return <AutoHealthView autoSalonsNeedingAttention={autoSalonsNeedingAttention} openSalonDetail={openSalonDetail} setView={setView} />;
   }
 
   // ── AUTO ANALYTICS VIEW ──────────────────────────────────────────
@@ -1681,52 +1571,7 @@ export default function SuperAdminDashboard({ onLogout }) {
   // Salons product's Audit Log entry point) -- just filtered to Auto-
   // tagged actions. No new RPC, no separate log.
   if (view === "autoaudit") {
-    var autoActionLabels = {
-      enable_auto_module:   { icon: "🚗", label: "Onboarded salon into Auto" },
-      disable_auto_module:  { icon: "🚫", label: "Suspended salon's Auto access" },
-      manual_onboard_auto:  { icon: "🏪", label: "Manually onboarded car wash" },
-      generate_invite_auto: { icon: "📨", label: "Generated Auto invite link" },
-    };
-    var autoAuditEntries = auditLog.filter(function(e) { return autoActionLabels[e.action]; });
-
-    return (
-      <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
-        <div style={{ background: BLACK, padding: "16px 20px" }}>
-          <button onClick={function() { setView("carwashes"); }}
-            style={{ background: "none", border: "none", color: GOLD_DIM, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 8, padding: 0 }}>
-            ← Back
-          </button>
-          <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>📋 Auto Audit Log</div>
-          <div style={{ fontSize: 11, color: GOLD_DIM + "aa", marginTop: 2 }}>Onboard/suspend actions only, most recent 200 overall</div>
-        </div>
-
-        <div style={{ padding: 16 }}>
-          {auditLoading ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>Loading...</div>
-          ) : autoAuditEntries.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>No Auto onboarding actions logged yet.</div>
-          ) : (
-            autoAuditEntries.map(function(entry) {
-              var meta = autoActionLabels[entry.action];
-              return (
-                <div key={entry.id} style={{ background: WHITE, borderRadius: 12, padding: 14, marginBottom: 8, border: "1.5px solid " + GOLD_DIM + "33" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: DARK }}>
-                      {meta.icon} {meta.label}
-                      {entry.salon_name && <span style={{ color: GOLD_DIM }}>{" · "}{entry.salon_name}</span>}
-                    </div>
-                    <div style={{ fontSize: 10, color: "#999", whiteSpace: "nowrap", marginLeft: 8 }}>
-                      {new Date(entry.created_at).toLocaleString("en-KE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 10, color: "#aaa" }}>by {entry.admin_email || "unknown"}</div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-    );
+    return <AutoAuditView auditLoading={auditLoading} auditLog={auditLog} setView={setView} />;
   }
 
   // ── AUTO REQUESTS VIEW ───────────────────────────────────────────
