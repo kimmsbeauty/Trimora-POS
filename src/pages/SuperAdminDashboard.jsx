@@ -20,6 +20,10 @@ import {
 import AuditView from "./superadmin/AuditView";
 import AutoAuditView from "./superadmin/AutoAuditView";
 import AutoHealthView from "./superadmin/AutoHealthView";
+import HealthView from "./superadmin/HealthView";
+import PlansView from "./superadmin/PlansView";
+import AutoAnalyticsView from "./superadmin/AutoAnalyticsView";
+import AnalyticsView from "./superadmin/AnalyticsView";
 
 var GOLD_LT = "#F5E6B8";
 
@@ -1010,96 +1014,12 @@ export default function SuperAdminDashboard({ onLogout }) {
   // ── DETAIL VIEW ──────────────────────────────────────────────────
   // ── PLANS VIEW ───────────────────────────────────────────────────
   if (view === "plans") {
-    return (
-      <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
-        <div style={{ background: BLACK, padding: "16px 20px" }}>
-          <button onClick={function() { setView("salons"); }}
-            style={{ background: "none", border: "none", color: GOLD_DIM, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 8, padding: 0 }}>
-            ← Back
-          </button>
-          <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>💲 Subscription Plans</div>
-          <div style={{ fontSize: 11, color: GOLD_DIM + "aa", marginTop: 2 }}>Changes apply immediately — salons see the new price next time they load Settings</div>
-        </div>
-
-        <div style={{ padding: 16 }}>
-          {plansLoading ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>Loading...</div>
-          ) : plans.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>No plans found.</div>
-          ) : (
-            plans.map(function(plan) {
-              var isEditing = planEditing === plan.key;
-              return (
-                <div key={plan.key} style={{ background: WHITE, borderRadius: 14, padding: 16, marginBottom: 10, border: "1.5px solid " + GOLD_DIM + "33" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isEditing ? 12 : 0 }}>
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: DARK }}>{plan.label}</div>
-                      <div style={{ fontSize: 11, color: "#999", marginTop: 2 }}>
-                        {plan.period_days ? plan.period_days + " days" : "Forever"}
-                        {plan.save_label ? " · " + plan.save_label : ""}
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      {!isEditing && (
-                        <>
-                          <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>KES {plan.price_kes.toLocaleString()}</div>
-                          <button
-                            onClick={function() { setPlanEditing(plan.key); setPlanEditValue(String(plan.price_kes)); setPlanError(""); }}
-                            style={{ background: WHITE, border: "1.5px solid " + GOLD_DIM, borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 800, cursor: "pointer", color: DARK }}
-                          >
-                            Edit
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {isEditing && (
-                    <div>
-                      <label style={{ fontSize: 11, fontWeight: 800, color: "#888", display: "block", marginBottom: 6, textTransform: "uppercase" }}>New Price (KES)</label>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <input
-                          type="number" min="0"
-                          value={planEditValue}
-                          onChange={function(e) { setPlanEditValue(e.target.value); setPlanError(""); }}
-                          onKeyDown={function(e) { if (e.key === "Enter") updatePlanPrice(plan.key, planEditValue); if (e.key === "Escape") { setPlanEditing(null); setPlanError(""); } }}
-                          autoFocus
-                          style={{ flex: 1, borderRadius: 10, border: "1.5px solid " + GOLD_DIM, background: CREAM, padding: "11px 13px", fontSize: 16, fontWeight: 800, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK }}
-                        />
-                        <button
-                          onClick={function() { updatePlanPrice(plan.key, planEditValue); }}
-                          disabled={planSaving}
-                          style={{ background: GOLD, color: BLACK, border: "none", borderRadius: 10, padding: "11px 16px", fontWeight: 900, fontSize: 13, cursor: "pointer", opacity: planSaving ? 0.6 : 1, whiteSpace: "nowrap" }}
-                        >
-                          {planSaving ? "Saving..." : "Save"}
-                        </button>
-                        <button
-                          onClick={function() { setPlanEditing(null); setPlanError(""); }}
-                          disabled={planSaving}
-                          style={{ background: WHITE, color: "#888", border: "1.5px solid #ddd", borderRadius: 10, padding: "11px 14px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                      {planError && (
-                        <div style={{ color: "#991B1B", fontSize: 12, marginTop: 8, padding: "6px 10px", background: "#FEE2E2", borderRadius: 8 }}>{planError}</div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-
-          <div style={{ marginTop: 20, padding: "14px 16px", background: "#FEF3C7", borderRadius: 12, border: "1.5px solid #F59E0B33" }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: "#92400E", marginBottom: 4 }}>⚠️ Important</div>
-            <div style={{ fontSize: 12, color: "#92400E", lineHeight: 1.7 }}>
-              Changing a price here does not retroactively affect existing subscriptions — only what salons see when choosing or renewing a plan. The "save" labels (e.g. "Save 8%") are not auto-calculated and should be updated manually if prices change significantly.
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return <PlansView
+      plansLoading={plansLoading} plans={plans} planEditing={planEditing}
+      planEditValue={planEditValue} planError={planError} planSaving={planSaving}
+      setView={setView} setPlanEditing={setPlanEditing} setPlanEditValue={setPlanEditValue}
+      setPlanError={setPlanError} updatePlanPrice={updatePlanPrice}
+    />;
   }
 
   // ── AUDIT LOG VIEW ───────────────────────────────────────────────
@@ -1273,63 +1193,7 @@ export default function SuperAdminDashboard({ onLogout }) {
 
   // ── HEALTH VIEW ───────────────────────────────────────────────────
   if (view === "health") {
-    var flaggedSalons = salonsNeedingAttention();
-    var severityColor = { high: RED, medium: AMBER, low: "#999" };
-    var severityBg    = { high: "#FEE2E2", medium: "#FEF3C7", low: "#F3F4F6" };
-
-    return (
-      <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
-        <div style={{ background: BLACK, padding: "16px 20px" }}>
-          <button onClick={function() { setView("salons"); }}
-            style={{ background: "none", border: "none", color: GOLD_DIM, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 8, padding: 0 }}>
-            ← Back
-          </button>
-          <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>🩺 Salon Health</div>
-          <div style={{ fontSize: 11, color: GOLD_DIM + "aa", marginTop: 2 }}>
-            {flaggedSalons.length === 0 ? "All salons look healthy." : flaggedSalons.length + " salon" + (flaggedSalons.length === 1 ? "" : "s") + " need" + (flaggedSalons.length === 1 ? "s" : "") + " attention"}
-          </div>
-        </div>
-
-        <div style={{ padding: 16 }}>
-          {flaggedSalons.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>
-              <div style={{ fontSize: 32, marginBottom: 10 }}>✅</div>
-              Nothing needs attention right now.
-            </div>
-          ) : (
-            flaggedSalons.map(function(item) {
-              var s = item.salon;
-              return (
-                <div key={s.id}
-                  onClick={function() { openSalonDetail(s, "health"); }}
-                  style={{ background: WHITE, borderRadius: 14, padding: 14, marginBottom: 10, border: "1.5px solid " + GOLD_DIM + "33", cursor: "pointer" }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      {s.salon_number && <span style={{ fontSize: 10, fontWeight: 900, color: WHITE, background: GOLD_DIM, borderRadius: 6, padding: "2px 7px", letterSpacing: "0.03em" }}>#{String(s.salon_number).padStart(3, "0")}</span>}
-                      <div style={{ fontSize: 13, fontWeight: 800, color: DARK }}>{s.name}</div>
-                    </div>
-                    <div style={{ fontSize: 10, color: "#999" }}>/{s.slug}</div>
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {item.flags.map(function(f, i) {
-                      return (
-                        <span key={i} style={{
-                          fontSize: 10, fontWeight: 800, padding: "4px 9px", borderRadius: 20,
-                          background: severityBg[f.severity], color: severityColor[f.severity],
-                        }}>
-                          {f.label}
-                        </span>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-    );
+    return <HealthView salonsNeedingAttention={salonsNeedingAttention} openSalonDetail={openSalonDetail} setView={setView} />;
   }
 
   // ── CAR WASHES VIEW (Trimora Auto module) ───────────────────────────
@@ -1487,82 +1351,10 @@ export default function SuperAdminDashboard({ onLogout }) {
 
   // ── AUTO ANALYTICS VIEW ──────────────────────────────────────────
   if (view === "autoanalytics") {
-    var autoRevMonthly  = autoRevenueByMonth();
-    var autoRevBySalon  = autoRevenueBySalon();
-    var autoMaxRev      = Math.max.apply(null, autoRevMonthly.map(function(r) { return r.value; }).concat([1]));
-    var autoMaxSalonRev = Math.max.apply(null, autoRevBySalon.map(function(r) { return r.value; }).concat([1]));
-    var autoTotalRevenue = allAutoJobs.reduce(function(a, j) { return a + Number(j.total_price || 0); }, 0);
-
-    return (
-      <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
-        <div style={{ background: BLACK, padding: "16px 20px" }}>
-          <button onClick={function() { setView("carwashes"); }}
-            style={{ background: "none", border: "none", color: GOLD_DIM, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 8, padding: 0 }}>
-            ← Back
-          </button>
-          <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>📊 Auto Analytics</div>
-          <div style={{ fontSize: 11, color: GOLD_DIM + "aa", marginTop: 2 }}>Across all onboarded car washes · completed jobs only</div>
-        </div>
-
-        <div style={{ padding: 16 }}>
-          {autoAnalyticsLoading ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>Loading...</div>
-          ) : (
-            <div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10, marginBottom: 14 }}>
-                <StatCard icon="💰" label="Total Auto Revenue" value={fmt(autoTotalRevenue)} sub={allAutoJobs.length + " completed jobs"} />
-              </div>
-
-              <div style={{ background: WHITE, borderRadius: 14, padding: 16, marginBottom: 14, border: "1.5px solid " + GOLD_DIM + "33" }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: DARK, marginBottom: 12 }}>Auto Revenue by Month</div>
-                {autoRevMonthly.length === 0 ? (
-                  <div style={{ fontSize: 12, color: "#999" }}>No completed jobs yet.</div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {autoRevMonthly.map(function(r) {
-                      return (
-                        <div key={r.label}>
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#666", marginBottom: 3 }}>
-                            <span>{r.label}</span>
-                            <span style={{ fontWeight: 800, color: DARK }}>{fmt(r.value)}</span>
-                          </div>
-                          <div style={{ background: CREAM, borderRadius: 6, height: 8, overflow: "hidden" }}>
-                            <div style={{ background: GOLD, height: "100%", width: (r.value / autoMaxRev * 100) + "%", borderRadius: 6 }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div style={{ background: WHITE, borderRadius: 14, padding: 16, border: "1.5px solid " + GOLD_DIM + "33" }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: DARK, marginBottom: 12 }}>Auto Revenue by Salon</div>
-                {autoRevBySalon.length === 0 ? (
-                  <div style={{ fontSize: 12, color: "#999" }}>No completed jobs yet.</div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {autoRevBySalon.map(function(r) {
-                      return (
-                        <div key={r.salonId}>
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#666", marginBottom: 3 }}>
-                            <span>{r.name}</span>
-                            <span style={{ fontWeight: 800, color: DARK }}>{fmt(r.value)}</span>
-                          </div>
-                          <div style={{ background: CREAM, borderRadius: 6, height: 8, overflow: "hidden" }}>
-                            <div style={{ background: GOLD_DIM, height: "100%", width: (r.value / autoMaxSalonRev * 100) + "%", borderRadius: 6 }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
+    return <AutoAnalyticsView
+      setView={setView} autoAnalyticsLoading={autoAnalyticsLoading} allAutoJobs={allAutoJobs}
+      autoRevenueByMonth={autoRevenueByMonth} autoRevenueBySalon={autoRevenueBySalon} fmt={fmt} StatCard={StatCard}
+    />;
   }
 
   // ── AUTO AUDIT LOG VIEW ──────────────────────────────────────────
@@ -1694,98 +1486,10 @@ export default function SuperAdminDashboard({ onLogout }) {
 
   // ── ANALYTICS VIEW ───────────────────────────────────────────────
   if (view === "analytics") {
-    var revMonthly  = revenueByMonth();
-    var salonMonthly = salonsByMonth();
-    var revBySalon  = revenueBySalon();
-    var maxRev      = Math.max.apply(null, revMonthly.map(function(r) { return r.value; }).concat([1]));
-    var maxSalonRev = Math.max.apply(null, revBySalon.map(function(r) { return r.value; }).concat([1]));
-
-    return (
-      <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
-        <div style={{ background: BLACK, padding: "16px 20px" }}>
-          <button onClick={function() { setView("salons"); }}
-            style={{ background: "none", border: "none", color: GOLD_DIM, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 8, padding: 0 }}>
-            ← Back
-          </button>
-          <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>📊 Platform Analytics</div>
-        </div>
-
-        <div style={{ padding: 16 }}>
-          {analyticsLoading ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>Loading...</div>
-          ) : (
-            <div>
-              {/* Revenue by month */}
-              <div style={{ background: WHITE, borderRadius: 14, padding: 16, marginBottom: 14, border: "1.5px solid " + GOLD_DIM + "33" }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: DARK, marginBottom: 12 }}>Revenue by Month</div>
-                {revMonthly.length === 0 ? (
-                  <div style={{ fontSize: 12, color: "#999" }}>No payments recorded yet.</div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {revMonthly.map(function(r) {
-                      return (
-                        <div key={r.label}>
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#666", marginBottom: 3 }}>
-                            <span>{r.label}</span>
-                            <span style={{ fontWeight: 800, color: DARK }}>{fmt(r.value)}</span>
-                          </div>
-                          <div style={{ background: CREAM, borderRadius: 6, height: 8, overflow: "hidden" }}>
-                            <div style={{ background: GOLD, height: "100%", width: (r.value / maxRev * 100) + "%", borderRadius: 6 }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Salon growth by month */}
-              <div style={{ background: WHITE, borderRadius: 14, padding: 16, marginBottom: 14, border: "1.5px solid " + GOLD_DIM + "33" }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: DARK, marginBottom: 12 }}>New Salons by Month</div>
-                {salonMonthly.length === 0 ? (
-                  <div style={{ fontSize: 12, color: "#999" }}>No salons yet.</div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {salonMonthly.map(function(r) {
-                      return (
-                        <div key={r.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, padding: "4px 0" }}>
-                          <span style={{ color: "#666" }}>{r.label}</span>
-                          <span style={{ fontWeight: 800, color: DARK }}>{r.value} {r.value === 1 ? "salon" : "salons"}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Revenue by salon — top payers */}
-              <div style={{ background: WHITE, borderRadius: 14, padding: 16, border: "1.5px solid " + GOLD_DIM + "33" }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: DARK, marginBottom: 12 }}>Revenue by Salon</div>
-                {revBySalon.length === 0 ? (
-                  <div style={{ fontSize: 12, color: "#999" }}>No payments recorded yet.</div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {revBySalon.map(function(r) {
-                      return (
-                        <div key={r.salonId}>
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#666", marginBottom: 3 }}>
-                            <span>{r.number ? "#" + String(r.number).padStart(3,"0") + " " : ""}{r.name}</span>
-                            <span style={{ fontWeight: 800, color: DARK }}>{fmt(r.value)}</span>
-                          </div>
-                          <div style={{ background: CREAM, borderRadius: 6, height: 8, overflow: "hidden" }}>
-                            <div style={{ background: GOLD_DIM, height: "100%", width: (r.value / maxSalonRev * 100) + "%", borderRadius: 6 }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
+    return <AnalyticsView
+      setView={setView} analyticsLoading={analyticsLoading}
+      revenueByMonth={revenueByMonth} salonsByMonth={salonsByMonth} revenueBySalon={revenueBySalon} fmt={fmt}
+    />;
   }
 
   if (view === "detail" && selectedSalon) {
