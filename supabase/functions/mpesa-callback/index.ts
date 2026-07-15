@@ -1,97 +1,102 @@
 // supabase/functions/mpesa-callback/index.ts
 //
-// Receives the asynchronous STK Push callback from Safaricom.
-// Safaricom POSTs to this URL after the customer enters their PIN
-// (or cancels, or the request times out).
+// Receives asynchronous payment result callbacks from Safaricom Daraja
+// for STK Push transactions initiated by mpesa-stk-push.
 //
-// This function:
-//   1. Parses Safaricom's callback body
-//   2. Updates the matching salon_mpesa_payments row to confirmed/failed
-//   3. Returns 200 immediately (Safaricom requires a fast response)
+// Security note (audit Critical-2): this endpoint has no way to verify
+// the caller is actually Safaricom via network-level means we can fully
+// trust (no verified, current Safaricom IP list was available to build
+// against, and verify_jwt would only require -any- valid Supabase JWT,
+// which the public anon key already satisfies -- no real barrier).
+// Instead, mpesa-stk-push embeds a per-payment secret token in the
+// CallBackURL it registers with Safaricom (?t=...), stored server-side
+// only in salon_mpesa_payments.callback_token and never sent to the
+// frontend. This function requires that token to match before processing
+// any update -- knowing checkout_request_id alone (which the frontend
+// legitimately has, for polling) is not sufficient to forge a callback.
 //
-// The frontend polls salon_mpesa_payments by checkout_request_id
-// to detect when status changes from "pending" to "confirmed"/"failed".
+// Always responds 200 "Accepted" regardless of outcome (including a
+// token mismatch) -- both to satisfy Safaricom's retry contract and to
+// avoid giving a forger a distinguishing signal between "wrong token"
+// and "processed".
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-serve(async (req) => {
-  // Always respond 200 immediately — Safaricom will retry if we don't
-  // Safaricom does not send CORS preflight; this endpoint is server-to-server only
+const ACCEPTED = new Response(
+  JSON.stringify({ ResultCode: 0, ResultDesc: "Accepted" }),
+  { status: 200, headers: { "Content-Type": "application/json" } }
+);
 
+serve(async (req) => {
   try {
+    const url = new URL(req.url);
+    const providedToken = url.searchParams.get("t");
+
     const body = await req.json();
     console.log("M-Pesa callback received:", JSON.stringify(body));
 
-    // Safaricom callback structure:
-    // { Body: { stkCallback: { MerchantRequestID, CheckoutRequestID, ResultCode, ResultDesc, CallbackMetadata? } } }
     const callback = body?.Body?.stkCallback;
     if (!callback) {
-      console.error("Unexpected callback shape:", JSON.stringify(body));
-      return new Response(JSON.stringify({ ResultCode: 0, ResultDesc: "Accepted" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
+      return ACCEPTED;
     }
 
-    const {
-      CheckoutRequestID,
-      MerchantRequestID,
-      ResultCode,
-      ResultDesc,
-      CallbackMetadata,
-    } = callback;
+    const { CheckoutRequestID, ResultCode, ResultDesc, CallbackMetadata } = callback;
 
-    // ResultCode 0 = success, anything else = failure/cancellation
-    const succeeded = ResultCode === 0 || ResultCode === "0";
-
-    // Extract M-Pesa receipt number from metadata items (only present on success)
-    let mpesaReceipt: string | null = null;
-    if (succeeded && CallbackMetadata?.Item) {
-      const receiptItem = CallbackMetadata.Item.find(
-        (i: { Name: string; Value?: string }) => i.Name === "MpesaReceiptNumber"
-      );
-      if (receiptItem) mpesaReceipt = receiptItem.Value ?? null;
-    }
-
-    // Use service role to update the payment record (bypasses RLS)
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { error: updateError } = await supabase
+    // -- Verify this callback corresponds to a payment we actually
+    //    initiated, using the per-payment secret (see note above) --
+    const { data: paymentRow, error: lookupError } = await supabase
+      .from("salon_mpesa_payments")
+      .select("callback_token")
+      .eq("checkout_request_id", CheckoutRequestID)
+      .maybeSingle();
+
+    if (lookupError) {
+      console.error("mpesa-callback: payment lookup failed:", lookupError);
+      return ACCEPTED;
+    }
+
+    if (!paymentRow) {
+      console.warn("mpesa-callback: no payment found for CheckoutRequestID", CheckoutRequestID);
+      return ACCEPTED;
+    }
+
+    if (!providedToken || !paymentRow.callback_token || providedToken !== paymentRow.callback_token) {
+      console.warn(
+        "mpesa-callback: token mismatch for CheckoutRequestID", CheckoutRequestID,
+        "-- ignoring (possible forged callback, or a pre-migration payment row with no stored token)"
+      );
+      return ACCEPTED;
+    }
+
+    const succeeded = ResultCode === 0 || ResultCode === "0";
+
+    let mpesaReceipt = null;
+    if (succeeded && CallbackMetadata?.Item) {
+      const receiptItem = CallbackMetadata.Item.find((i) => i.Name === "MpesaReceiptNumber");
+      if (receiptItem) mpesaReceipt = receiptItem.Value ?? null;
+    }
+
+    await supabase
       .from("salon_mpesa_payments")
       .update({
-        status:       succeeded ? "confirmed" : "failed",
-        result_code:  String(ResultCode),
-        result_desc:  ResultDesc,
+        status:        succeeded ? "confirmed" : "failed",
+        result_code:   String(ResultCode),
+        result_desc:   ResultDesc,
         mpesa_receipt: mpesaReceipt,
-        updated_at:   new Date().toISOString(),
+        updated_at:    new Date().toISOString(),
       })
       .eq("checkout_request_id", CheckoutRequestID);
 
-    if (updateError) {
-      console.error("Failed to update payment record:", updateError);
-    } else {
-      console.log(
-        `Payment ${CheckoutRequestID} → ${succeeded ? "confirmed" : "failed"}`,
-        mpesaReceipt ? `receipt: ${mpesaReceipt}` : ""
-      );
-    }
-
-    // Safaricom expects this exact response shape
-    return new Response(
-      JSON.stringify({ ResultCode: 0, ResultDesc: "Accepted" }),
-      { status: 200, headers: { "Content-Type": "application/json" } }
-    );
+    return ACCEPTED;
 
   } catch (err) {
     console.error("mpesa-callback error:", err);
-    // Still return 200 — never let Safaricom think the callback failed
-    return new Response(
-      JSON.stringify({ ResultCode: 0, ResultDesc: "Accepted" }),
-      { status: 200, headers: { "Content-Type": "application/json" } }
-    );
+    return ACCEPTED;
   }
 });

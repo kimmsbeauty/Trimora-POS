@@ -12,7 +12,16 @@
 //   5. Returns the CheckoutRequestID so the frontend can poll for status
 //
 // The actual payment confirmation arrives asynchronously via the
-// mpesa-callback function — this function only initiates the push.
+// mpesa-callback function -- this function only initiates the push.
+//
+// Security note (audit Critical-2): the CallBackURL we register with
+// Safaricom includes a per-payment secret token (?t=...), generated
+// here and stored server-side only in salon_mpesa_payments.callback_token.
+// It is NEVER included in this function's response to the frontend --
+// only checkout_request_id/merchant_request_id (needed for polling) are.
+// mpesa-callback requires this token to match before processing an
+// update, so knowing checkout_request_id alone (which the frontend does
+// legitimately need, for polling) is not enough to forge a callback.
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -21,6 +30,12 @@ const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+function randomToken() {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -102,7 +117,7 @@ serve(async (req) => {
       );
     }
 
-    // ── Step 1: Get OAuth token from Daraja ──────────────────────────
+    // -- Step 1: Get OAuth token from Daraja --------------------------
     const authString = btoa(`${config.consumer_key}:${config.consumer_secret}`);
     const tokenRes = await fetch(
       "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
@@ -123,7 +138,7 @@ serve(async (req) => {
 
     const { access_token } = await tokenRes.json();
 
-    // ── Step 2: Build STK Push payload ───────────────────────────────
+    // -- Step 2: Build STK Push payload --------------------------------
     // For Buy Goods (CustomerBuyGoodsOnline):
     //   - BusinessShortCode = the Till number
     //   - Password = base64(shortcode + shortcode + timestamp)
@@ -139,8 +154,12 @@ serve(async (req) => {
     // Buy Goods password: base64(shortcode + shortcode + timestamp)
     const password = btoa(`${config.shortcode}${config.shortcode}${timestamp}`);
 
-    // Callback URL — points to our mpesa-callback Edge Function
-    const callbackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/mpesa-callback`;
+    // Per-payment callback secret -- see security note at top of file.
+    const callbackToken = randomToken();
+
+    // Callback URL -- points to our mpesa-callback Edge Function, with
+    // the per-payment secret token appended.
+    const callbackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/mpesa-callback?t=${callbackToken}`;
 
     const stkPayload = {
       BusinessShortCode: config.shortcode,
@@ -156,7 +175,7 @@ serve(async (req) => {
       TransactionDesc:   "Payment",
     };
 
-    // ── Step 3: Initiate STK Push ─────────────────────────────────────
+    // -- Step 3: Initiate STK Push ---------------------------------------
     const stkRes = await fetch(
       "https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
       {
@@ -182,7 +201,7 @@ serve(async (req) => {
       );
     }
 
-    // ── Step 4: Save pending payment record ───────────────────────────
+    // -- Step 4: Save pending payment record ------------------------------
     const { error: insertError } = await supabase
       .from("salon_mpesa_payments")
       .insert({
@@ -194,14 +213,17 @@ serve(async (req) => {
         reference: reference || null,
         job_id:    job_id || null,
         status:    "pending",
+        callback_token: callbackToken,
       });
 
     if (insertError) {
       console.error("Insert payment record error:", insertError);
-      // Don't fail the request — STK was already sent. Log and continue.
+      // Don't fail the request -- STK was already sent. Log and continue.
     }
 
-    // ── Step 5: Return CheckoutRequestID for frontend polling ─────────
+    // -- Step 5: Return CheckoutRequestID for frontend polling ------------
+    // Note: callback_token is intentionally NOT included here -- it must
+    // never reach the client. See security note at top of file.
     return new Response(
       JSON.stringify({
         success:              true,
