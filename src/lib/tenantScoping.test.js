@@ -98,6 +98,11 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
                     // delete policies via auth_salon_id(). Queried from
                     // CheckInPage.jsx (create) and BoardPage.jsx (the
                     // pending-reward OR-filter lookup at checkout).
+  "auto_refunds", // added 2026-07-15 alongside Refunds -- salon_id
+                  // column, SELECT+INSERT only (no update/delete
+                  // policy: an append-only ledger, same convention as
+                  // customer_wallet_transactions). Queried/written from
+                  // ReportsPage.jsx.
 ];
 
 // Tables confirmed live (2026-07-07) to have a salon_id column, but

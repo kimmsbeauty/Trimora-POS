@@ -77,6 +77,22 @@ export default function ReportsPage({ isAdmin }) {
   var customFromState = useState(""); var customFrom = customFromState[0]; var setCustomFrom = customFromState[1];
   var customToState = useState(""); var customTo = customToState[0]; var setCustomTo = customToState[1];
 
+  // Refund: full or partial, always back to whatever method the job was
+  // originally paid with (staff hands cash back / notes an M-Pesa
+  // reversal themselves -- this doesn't trigger any actual M-Pesa
+  // reversal API call, there isn't one for this). Commission is reduced
+  // proportionally to what fraction of the payable amount is now
+  // refunded in total; stock is only restored on a refund that brings
+  // the job to fully refunded (a partial refund can't safely guess
+  // which physical stock use it corresponds to, so it's left for manual
+  // adjustment via the Stock Log Viewer -- called out in the modal's
+  // copy, not just buried in a comment).
+  var refundJobState = useState(null); var refundJob = refundJobState[0]; var setRefundJob = refundJobState[1];
+  var refundAmountState = useState(""); var refundAmount = refundAmountState[0]; var setRefundAmount = refundAmountState[1];
+  var refundReasonState = useState(""); var refundReason = refundReasonState[0]; var setRefundReason = refundReasonState[1];
+  var refundSavingState = useState(false); var refundSaving = refundSavingState[0]; var setRefundSaving = refundSavingState[1];
+  var refundErrorState = useState(""); var refundError = refundErrorState[0]; var setRefundError = refundErrorState[1];
+
   var load = useCallback(async function () {
     var results = await Promise.all([
       db("GET", "auto_jobs", null, "?status=eq.completed&order=completed_at.desc&select=*,auto_vehicles(reg_number,make),customers(name)"),
@@ -101,6 +117,107 @@ export default function ReportsPage({ isAdmin }) {
   }, []);
 
   useEffect(function () { load(); }, [load]);
+
+  async function processRefund() {
+    if (refundSaving || !refundJob) return;
+    var job = refundJob;
+    var amount = parseInt(refundAmount, 10);
+    var payable = payableAmount(job);
+    var alreadyRefunded = job.refunded_amount || 0;
+    var refundable = payable - alreadyRefunded;
+    if (isNaN(amount) || amount <= 0) { setRefundError("Enter an amount greater than 0."); return; }
+    if (amount > refundable) { setRefundError("Can't refund more than KSh " + refundable.toLocaleString() + " (already refunded: KSh " + alreadyRefunded.toLocaleString() + ")."); return; }
+
+    setRefundSaving(true);
+    setRefundError("");
+
+    var ok = await db("POST", "auto_refunds", {
+      salon_id: salon.id, job_id: job.id, amount: amount, reason: refundReason.trim() || null,
+    });
+    if (ok === null) { setRefundSaving(false); setRefundError("Failed to record refund."); return; }
+
+    var newRefundedAmount = alreadyRefunded + amount;
+    var isNowFullyRefunded = newRefundedAmount >= payable;
+
+    // Proportional commission reduction, derived from current state so
+    // no separate "original commission" column is needed: if the
+    // current commission C already reflects alreadyRefunded out of
+    // payable, then C == C0 * (payable - alreadyRefunded) / payable for
+    // whatever the true original C0 was. The new commission should be
+    // C0 * (payable - newRefundedAmount) / payable. Dividing the two
+    // eliminates C0 entirely: C_new = C * (payable - newRefundedAmount)
+    // / (payable - alreadyRefunded). Guarded by refundable > 0 above,
+    // so (payable - alreadyRefunded) can't be zero here.
+    var jobPatch = { refunded_amount: newRefundedAmount };
+    if (job.commission != null) {
+      jobPatch.commission = Math.round((job.commission * (payable - newRefundedAmount)) / (payable - alreadyRefunded));
+    }
+    await db("PATCH", "auto_jobs", jobPatch, "?id=eq." + job.id);
+
+    if (isNowFullyRefunded) {
+      await restoreStockForJob(job);
+    }
+
+    // Loyalty: a partial refund only walks back total_spend by the
+    // refunded amount; visit_count only comes down on a full refund,
+    // since the visit itself still happened even if the money came back.
+    if (job.customer_id) {
+      var custRows = await db("GET", "customers", null, "?id=eq." + job.customer_id);
+      var cust = custRows && custRows[0];
+      if (cust) {
+        var custPatch = { total_spend: Math.max(0, (cust.total_spend || 0) - amount) };
+        if (isNowFullyRefunded) custPatch.visit_count = Math.max(0, (cust.visit_count || 0) - 1);
+        await db("PATCH", "customers", custPatch, "?id=eq." + job.customer_id);
+      }
+    }
+
+    setRefundSaving(false);
+    setRefundJob(null);
+    setRefundAmount("");
+    setRefundReason("");
+    load();
+  }
+
+  // Mirrors deductStockForJob in BoardPage.jsx, in reverse -- same
+  // best-effort convention (logged, not surfaced as a refund failure;
+  // the refund record itself is what matters, stock restoration is a
+  // courtesy on top of it). Only called for a refund that brings the
+  // job to fully refunded, per the scoping decision above.
+  async function restoreStockForJob(job) {
+    try {
+      var jobServiceRows = await db("GET", "auto_job_services", null, "?job_id=eq." + job.id + "&select=auto_service_id");
+      var serviceIds = (jobServiceRows || []).map(function (js) { return js.auto_service_id; });
+      if (serviceIds.length === 0) return;
+
+      var requiredRows = await db("GET", "auto_service_required_stock", null,
+        "?auto_service_id=in.(" + serviceIds.join(",") + ")");
+      if (!requiredRows || requiredRows.length === 0) return;
+
+      var neededByStockId = {};
+      requiredRows.forEach(function (r) {
+        neededByStockId[r.stock_id] = (neededByStockId[r.stock_id] || 0) + Number(r.quantity);
+      });
+
+      var stockIds = Object.keys(neededByStockId);
+      var stockRows = await db("GET", "stock", null, "?id=in.(" + stockIds.join(",") + ")");
+      var stockById = {};
+      (stockRows || []).forEach(function (s) { stockById[s.id] = s; });
+
+      for (var i = 0; i < stockIds.length; i++) {
+        var stockId = stockIds[i];
+        var current = stockById[stockId];
+        if (!current) continue;
+        var qty = Math.round(neededByStockId[stockId]);
+        await db("PATCH", "stock", { stock: (current.stock || 0) + qty }, "?id=eq." + stockId);
+        await db("POST", "auto_stock_movements", {
+          stock_id: stockId, change_qty: qty, reason: "auto_job_refund",
+          reference_type: "auto_job", reference_id: job.id, created_by: null,
+        });
+      }
+    } catch (err) {
+      console.error("Stock restoration failed for job " + job.id + ":", err);
+    }
+  }
 
   if (!isAdmin) {
     return (
@@ -442,9 +559,20 @@ export default function ReportsPage({ isAdmin }) {
                     <div style={{ fontSize: 10, color: CHROME }}>{j.payment_method || "—"}</div>
                   </div>
                 </div>
-                <div style={{ fontSize: 11, color: CHROME, marginTop: 6 }}>
-                  {servicesText || "No services"}{staffMember ? " · " + staffMember.name : ""}
+                <div style={{ fontSize: 11, color: CHROME, marginTop: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>{servicesText || "No services"}{staffMember ? " · " + staffMember.name : ""}</span>
+                  {(j.refunded_amount || 0) < payableAmount(j) && (
+                    <span onClick={function () { setRefundJob(j); setRefundAmount(""); setRefundReason(""); setRefundError(""); }}
+                      style={{ color: ALERT, textDecoration: "underline", cursor: "pointer", whiteSpace: "nowrap", marginLeft: 10 }}>
+                      Refund
+                    </span>
+                  )}
                 </div>
+                {(j.refunded_amount || 0) > 0 && (
+                  <div style={{ fontSize: 10, color: ALERT, marginTop: 4 }}>
+                    {(j.refunded_amount >= payableAmount(j)) ? "Fully refunded" : "Partially refunded"}: −{money(j.refunded_amount)}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -588,6 +716,60 @@ export default function ReportsPage({ isAdmin }) {
           );
         })}
       </Card>
+      {refundJob && (function () {
+        var payable = payableAmount(refundJob);
+        var alreadyRefunded = refundJob.refunded_amount || 0;
+        var refundable = payable - alreadyRefunded;
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 20 }}>
+            <div style={{ width: "100%", maxWidth: 420, background: STEEL, borderRadius: 14, padding: 20, border: "1px solid " + CHROME + "33" }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: PAPER, marginBottom: 6 }}>Refund job</div>
+              <div style={{ fontSize: 12, color: CHROME, marginBottom: 14 }}>
+                Paid {money(payable)} via {refundJob.payment_method || "—"} · refundable: {money(refundable)}
+                {alreadyRefunded > 0 ? " (KSh " + alreadyRefunded.toLocaleString() + " already refunded)" : ""}
+              </div>
+              {refundError && <div style={{ fontSize: 12, color: ALERT, marginBottom: 10 }}>{refundError}</div>}
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 11, color: CHROME, marginBottom: 4 }}>Amount to refund (KSh)</div>
+                <input type="number" value={refundAmount} max={refundable}
+                  onChange={function (e) { setRefundAmount(e.target.value); }}
+                  placeholder={String(refundable)}
+                  style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.04)", color: PAPER, border: "1px solid rgba(143,166,184,0.3)", borderRadius: 8, padding: "10px", fontSize: 13 }} />
+                <span onClick={function () { setRefundAmount(String(refundable)); }}
+                  style={{ fontSize: 11, color: SIGNAL, fontWeight: 700, cursor: "pointer", textDecoration: "underline" }}>
+                  Full refund (KSh {refundable.toLocaleString()})
+                </span>
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 11, color: CHROME, marginBottom: 4 }}>Reason (optional)</div>
+                <input value={refundReason} onChange={function (e) { setRefundReason(e.target.value); }}
+                  style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.04)", color: PAPER, border: "1px solid rgba(143,166,184,0.3)", borderRadius: 8, padding: "10px", fontSize: 13 }} />
+              </div>
+              <div style={{ fontSize: 10, color: CHROME, marginBottom: 16 }}>
+                Money goes back the way it was paid (hand back cash / note the M-Pesa reversal yourself --
+                this doesn't trigger an actual M-Pesa reversal). Commission is reduced proportionally.
+                {parseInt(refundAmount, 10) >= refundable
+                  ? " Stock used for this job will be restored automatically since this is a full refund."
+                  : " Stock is NOT auto-restored for a partial refund -- adjust manually in the Stock Log Viewer if needed."}
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button onClick={function () { setRefundJob(null); }} style={{
+                  flex: 1, background: "transparent", color: CHROME, border: "1.5px solid " + CHROME + "55",
+                  borderRadius: 8, padding: "10px", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                }}>
+                  Cancel
+                </button>
+                <button onClick={processRefund} disabled={refundSaving} style={{
+                  flex: 1, background: ALERT, color: INK, border: "none", borderRadius: 8, padding: "10px",
+                  fontSize: 13, fontWeight: 800, cursor: "pointer", opacity: refundSaving ? 0.6 : 1,
+                }}>
+                  Confirm Refund
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

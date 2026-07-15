@@ -155,6 +155,25 @@ export default function BoardPage() {
   var walletAmount = walletAmountState[0]; var setWalletAmount = walletAmountState[1];
   var walletErrorState = useState("");
   var walletError = walletErrorState[0]; var setWalletError = walletErrorState[1];
+
+  // Split payment: an optional second method for whatever's left after
+  // wallet. splitMode toggles the two-method picker in place of the
+  // single-method button list; the breakdown itself (amounts, methods)
+  // only gets built at confirm time from these two slots, and stashed
+  // separately (pendingSplitBreakdown) if a Till leg needs to wait on
+  // STK confirmation first.
+  var splitModeState = useState(false);
+  var splitMode = splitModeState[0]; var setSplitMode = splitModeState[1];
+  var splitMethodAState = useState("Cash");
+  var splitMethodA = splitMethodAState[0]; var setSplitMethodA = splitMethodAState[1];
+  var splitAmountAState = useState("");
+  var splitAmountA = splitAmountAState[0]; var setSplitAmountA = splitAmountAState[1];
+  var splitMethodBState = useState("Till");
+  var splitMethodB = splitMethodBState[0]; var setSplitMethodB = splitMethodBState[1];
+  var splitAmountBState = useState("");
+  var splitAmountB = splitAmountBState[0]; var setSplitAmountB = splitAmountBState[1];
+  var pendingSplitBreakdownState = useState(null);
+  var pendingSplitBreakdown = pendingSplitBreakdownState[0]; var setPendingSplitBreakdown = pendingSplitBreakdownState[1];
   var showMpesaModalState = useState(false);
   var showMpesaModal = showMpesaModalState[0]; var setShowMpesaModal = showMpesaModalState[1];
   // Receipt: shown automatically right after a job completes, matching
@@ -450,7 +469,7 @@ export default function BoardPage() {
     };
   }
 
-  async function advanceJob(job, paymentMethod, walletAmountUsed) {
+  async function advanceJob(job, paymentMethod, walletAmountUsed, paymentBreakdown) {
     if (busy) return;
     var next = NEXT_STATUS[job.status];
     if (!next) return;
@@ -468,7 +487,11 @@ export default function BoardPage() {
       // calls advanceJob with no paymentMethod at all -- payment_status
       // stays 'unpaid', payment_method stays null, and nothing about
       // completion is blocked on it.
-      if (paymentMethod) {
+      if (paymentBreakdown) {
+        patch.payment_method = "Split";
+        patch.payment_breakdown = paymentBreakdown;
+        patch.payment_status = "paid";
+      } else if (paymentMethod) {
         patch.payment_method = paymentMethod;
         patch.payment_status = "paid";
       }
@@ -574,6 +597,10 @@ export default function BoardPage() {
     setBusy(false);
     setWalletAmount(0);
     setWalletError("");
+    setSplitMode(false);
+    setSplitAmountA("");
+    setSplitAmountB("");
+    setPendingSplitBreakdown(null);
     setPaymentJobId(job.id);
   }
 
@@ -585,7 +612,7 @@ export default function BoardPage() {
   // spend beat this one to it -- or a network error), the job is NOT
   // completed and the modal stays open with the error shown, exactly like
   // a declined M-Pesa payment already behaves.
-  async function spendWalletThenAdvance(job, remainderMethod) {
+  async function spendWalletThenAdvance(job, remainderMethod, paymentBreakdown) {
     var amount = walletAmount;
     if (amount > 0) {
       setBusy(true);
@@ -601,7 +628,12 @@ export default function BoardPage() {
     setWalletError("");
     var walletUsed = amount;
     setWalletAmount(0);
-    if (remainderMethod === "wallet_full") {
+    setSplitMode(false);
+    setSplitAmountA("");
+    setSplitAmountB("");
+    if (paymentBreakdown) {
+      advanceJob(job, undefined, walletUsed, paymentBreakdown);
+    } else if (remainderMethod === "wallet_full") {
       advanceJob(job, "Wallet", walletUsed);
     } else if (remainderMethod === "later") {
       advanceJob(job, undefined, walletUsed);
@@ -631,6 +663,24 @@ export default function BoardPage() {
 
   function payTill() {
     setShowMpesaModal(true);
+  }
+
+  // Confirms a two-method split of the (post-wallet) remainder. If
+  // neither leg is Till, both are just staff-attested labels like Cash
+  // already is -- completes immediately. If one leg IS Till, the flow
+  // defers exactly like Wallet+Till already does: only that leg's STK
+  // push is opened (for just its amount, not the whole remainder), and
+  // the split is only persisted once that push actually confirms -- a
+  // cancelled/failed prompt leaves nothing recorded, same safety
+  // property Wallet+Till already has.
+  function paySplit(job, breakdown) {
+    var tillLeg = breakdown.filter(function (b) { return b.method === "Till"; })[0];
+    if (tillLeg) {
+      setPendingSplitBreakdown(breakdown);
+      setShowMpesaModal(true);
+    } else {
+      spendWalletThenAdvance(job, null, breakdown);
+    }
   }
 
   // Matches POSApp.jsx's sendFeedbackRequest exactly: same refusal
@@ -669,11 +719,18 @@ export default function BoardPage() {
 
   function handleMpesaPaid(job, method) {
     setShowMpesaModal(false);
-    spendWalletThenAdvance(job, method);
+    if (pendingSplitBreakdown) {
+      var breakdown = pendingSplitBreakdown;
+      setPendingSplitBreakdown(null);
+      spendWalletThenAdvance(job, null, breakdown);
+    } else {
+      spendWalletThenAdvance(job, method);
+    }
   }
 
   function handleMpesaCancel() {
     setShowMpesaModal(false);
+    setPendingSplitBreakdown(null);
     // Leave paymentJobId set so staff lands back on the Cash/Till choice
     // rather than the modal silently closing them out of completing the
     // job at all.
@@ -1118,7 +1175,61 @@ export default function BoardPage() {
                 }}>
                   ✓ Complete with Wallet
                 </button>
-              ) : (function () {
+              ) : splitMode ? (function () {
+                var enabled = (salon && salon.enabled_payment_methods) || ["Cash", "Till"];
+                var methods = ["Cash"].concat(enabled.filter(function (m) { return m !== "Cash"; }));
+                var remaining = payableAmount(payJob) - walletAmount;
+                var amtA = parseInt(splitAmountA, 10) || 0;
+                var amtB = parseInt(splitAmountB, 10) || 0;
+                var sumMatches = amtA > 0 && amtB > 0 && (amtA + amtB) === remaining;
+                var sameMethod = splitMethodA === splitMethodB;
+                return (
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 12, color: CHROME, marginBottom: 8 }}>
+                      Split KSh {remaining.toLocaleString()} between two methods:
+                    </div>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+                      <select value={splitMethodA} onChange={function (e) { setSplitMethodA(e.target.value); }}
+                        style={{ flex: 1, background: "rgba(255,255,255,0.04)", color: PAPER, border: "1px solid rgba(143,166,184,0.3)", borderRadius: 6, padding: "8px", fontSize: 13 }}>
+                        {methods.map(function (m) { return <option key={m} value={m}>{m}</option>; })}
+                      </select>
+                      <input type="number" value={splitAmountA} onChange={function (e) { setSplitAmountA(e.target.value); }}
+                        placeholder="0"
+                        style={{ width: 90, background: "rgba(255,255,255,0.04)", color: PAPER, border: "1px solid rgba(143,166,184,0.3)", borderRadius: 6, padding: "8px", fontSize: 13 }} />
+                    </div>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+                      <select value={splitMethodB} onChange={function (e) { setSplitMethodB(e.target.value); }}
+                        style={{ flex: 1, background: "rgba(255,255,255,0.04)", color: PAPER, border: "1px solid rgba(143,166,184,0.3)", borderRadius: 6, padding: "8px", fontSize: 13 }}>
+                        {methods.map(function (m) { return <option key={m} value={m}>{m}</option>; })}
+                      </select>
+                      <input type="number" value={splitAmountB} onChange={function (e) { setSplitAmountB(e.target.value); }}
+                        placeholder="0"
+                        style={{ width: 90, background: "rgba(255,255,255,0.04)", color: PAPER, border: "1px solid rgba(143,166,184,0.3)", borderRadius: 6, padding: "8px", fontSize: 13 }} />
+                    </div>
+                    {sameMethod && (
+                      <div style={{ fontSize: 11, color: ALERT, marginBottom: 8 }}>Pick two different methods.</div>
+                    )}
+                    {!sameMethod && (amtA > 0 || amtB > 0) && !sumMatches && (
+                      <div style={{ fontSize: 11, color: ALERT, marginBottom: 8 }}>
+                        Amounts must add up to exactly KSh {remaining.toLocaleString()}.
+                      </div>
+                    )}
+                    <button onClick={function () {
+                      paySplit(payJob, [{ method: splitMethodA, amount: amtA }, { method: splitMethodB, amount: amtB }]);
+                    }} disabled={busy || sameMethod || !sumMatches} style={{
+                      width: "100%", padding: "14px 0", borderRadius: 10, border: "none",
+                      background: SIGNAL, color: INK, fontWeight: 800, fontSize: 15, cursor: "pointer", marginBottom: 8,
+                      opacity: (busy || sameMethod || !sumMatches) ? 0.5 : 1,
+                    }}>
+                      Confirm Split
+                    </button>
+                    <div onClick={function () { setSplitMode(false); setSplitAmountA(""); setSplitAmountB(""); }}
+                      style={{ fontSize: 12, color: CHROME, textDecoration: "underline", cursor: "pointer", textAlign: "center", marginBottom: 10 }}>
+                      Cancel split
+                    </div>
+                  </div>
+                );
+              })() : (function () {
                 var enabled = (salon && salon.enabled_payment_methods) || ["Cash", "Till"];
                 // Cash always available regardless of settings, matching
                 // POS's own checkout convention (see POSApp.jsx) and this
@@ -1144,6 +1255,16 @@ export default function BoardPage() {
                   );
                 });
               })()}
+              {!(walletAmount > 0 && walletAmount >= payableAmount(payJob)) && !splitMode && (
+                <div onClick={function () {
+                  setSplitMode(true);
+                  var remaining = payableAmount(payJob) - walletAmount;
+                  setSplitAmountA(String(Math.ceil(remaining / 2)));
+                  setSplitAmountB(String(Math.floor(remaining / 2)));
+                }} style={{ fontSize: 12, color: CHROME, textDecoration: "underline", cursor: "pointer", textAlign: "center", marginBottom: 10 }}>
+                  Split between two methods
+                </div>
+              )}
               {!(walletAmount > 0) && (
                 <button onClick={function () { payLater(payJob); }} disabled={busy} style={{
                   width: "100%", padding: "10px 0", borderRadius: 10, border: "none",
@@ -1153,7 +1274,10 @@ export default function BoardPage() {
                   Pay later
                 </button>
               )}
-              <button onClick={function () { setPaymentJobId(null); setWalletAmount(0); setWalletError(""); }} style={{
+              <button onClick={function () {
+                setPaymentJobId(null); setWalletAmount(0); setWalletError("");
+                setSplitMode(false); setSplitAmountA(""); setSplitAmountB("");
+              }} style={{
                 width: "100%", padding: "12px 0", borderRadius: 10, border: "1px solid " + CHROME + "55",
                 background: "transparent", color: CHROME, fontWeight: 700, fontSize: 14, cursor: "pointer",
               }}>
@@ -1170,7 +1294,11 @@ export default function BoardPage() {
         return (
           <AutoMpesaPaymentModal
             salon={salon}
-            job={Object.assign({}, payJob, { total_price: payableAmount(payJob) - walletAmount })}
+            job={Object.assign({}, payJob, {
+              total_price: pendingSplitBreakdown
+                ? (pendingSplitBreakdown.filter(function (b) { return b.method === "Till"; })[0] || {}).amount || 0
+                : payableAmount(payJob) - walletAmount,
+            })}
             onPaid={function (method) { handleMpesaPaid(payJob, method); }}
             onCancel={handleMpesaCancel}
           />
