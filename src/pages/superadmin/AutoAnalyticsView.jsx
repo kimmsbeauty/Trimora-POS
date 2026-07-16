@@ -15,7 +15,9 @@ export default function AutoAnalyticsView({
   var autoRevBySalon  = autoRevenueBySalon();
   var autoMaxRev      = Math.max.apply(null, autoRevMonthly.map(function(r) { return r.value; }).concat([1]));
   var autoMaxSalonRev = Math.max.apply(null, autoRevBySalon.map(function(r) { return r.value; }).concat([1]));
-  var autoTotalRevenue = allAutoJobs.reduce(function(a, j) { return a + Number(j.total_price || 0); }, 0);
+  var autoTotalRevenue = allAutoJobs.reduce(function(a, j) {
+    return a + Number(j.total_price || 0) - Number(j.discount_amount || 0) - Number(j.refunded_amount || 0);
+  }, 0);
 
   return (
     <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>

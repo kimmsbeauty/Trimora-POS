@@ -143,14 +143,22 @@ export function autoSalonsNeedingAttention(salons, now) {
     });
 }
 
-// jobs: rows from auto_platform_jobs (migration 028), status='completed' pre-filtered by caller
+// jobs: rows from auto_platform_jobs (migration 028), status='completed' pre-filtered by caller.
+// netRevenue nets out discount_amount and refunded_amount -- the view was
+// widened this session specifically so this fix could land here too, not
+// just in platform_stats' own total_revenue (same gap, same root cause:
+// summing gross total_price instead of what was actually kept).
+function netRevenue(j) {
+  return Number(j.total_price || 0) - Number(j.discount_amount || 0) - Number(j.refunded_amount || 0);
+}
+
 export function autoRevenueByMonth(jobs) {
   var map = {};
   jobs.forEach(function(j) {
     if (!j.completed_at) return;
     var d = new Date(j.completed_at);
     var key = d.toLocaleDateString("en-KE", { month: "short", year: "numeric" });
-    map[key] = (map[key] || 0) + Number(j.total_price || 0);
+    map[key] = (map[key] || 0) + netRevenue(j);
   });
   return Object.keys(map).map(function(k) { return { label: k, value: map[k] }; });
 }
@@ -159,7 +167,7 @@ export function autoRevenueBySalon(jobs) {
   var map = {};
   var names = {};
   jobs.forEach(function(j) {
-    map[j.salon_id] = (map[j.salon_id] || 0) + Number(j.total_price || 0);
+    map[j.salon_id] = (map[j.salon_id] || 0) + netRevenue(j);
     names[j.salon_id] = j.salon_name;
   });
   var rows = Object.keys(map).map(function(salonId) {

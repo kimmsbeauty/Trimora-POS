@@ -24,6 +24,7 @@ import HealthView from "./superadmin/HealthView";
 import PlansView from "./superadmin/PlansView";
 import AutoAnalyticsView from "./superadmin/AutoAnalyticsView";
 import AnalyticsView from "./superadmin/AnalyticsView";
+import CombinedPLView from "./superadmin/CombinedPLView";
 
 var GOLD_LT = "#F5E6B8";
 
@@ -78,6 +79,7 @@ export default function SuperAdminDashboard({ onLogout }) {
   var [view,         setView]         = useState("salons"); // "salons" | "detail"
   var [salons,       setSalons]       = useState([]);
   var [stats,        setStats]        = useState(null);
+  var [combinedPLBackTo, setCombinedPLBackTo] = useState("salons");
   var [selectedSalon,setSelectedSalon]= useState(null);
   var [detailReturnView, setDetailReturnView] = useState("salons");
   var [loading,      setLoading]      = useState(true);
@@ -1241,6 +1243,7 @@ export default function SuperAdminDashboard({ onLogout }) {
           <div className="carwash-nav-scroll" style={{ display: "flex", gap: 8, marginTop: 12, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
             {[
               { label: "📊 Analytics",  onClick: function() { setView("autoanalytics"); loadAutoAnalytics(); } },
+              { label: "💰 P&L",        onClick: function() { setCombinedPLBackTo("carwashes"); setView("combinedpl"); } },
               { label: "📋 Audit Log",  onClick: function() { setView("autoaudit"); loadAuditLog(); } },
               { label: "🩺 Health",     onClick: function() { setView("autohealth"); } },
               { label: "🧑‍💼 Requests", onClick: function() { setView("autorequests"); loadAutoOnboardingRequests(); } },
@@ -1355,6 +1358,15 @@ export default function SuperAdminDashboard({ onLogout }) {
       setView={setView} autoAnalyticsLoading={autoAnalyticsLoading} allAutoJobs={allAutoJobs}
       autoRevenueByMonth={autoRevenueByMonth} autoRevenueBySalon={autoRevenueBySalon} fmt={fmt} StatCard={StatCard}
     />;
+  }
+
+  // ── COMBINED P&L VIEW ────────────────────────────────────────────
+  // Reachable from both the Salons and Car Washes nav rows (see the
+  // two nav-button arrays below) since it's genuinely platform-wide,
+  // not owned by either product. backTo remembers which one to return
+  // to, set at the point each button calls setView("combinedpl").
+  if (view === "combinedpl") {
+    return <CombinedPLView setView={setView} stats={stats} fmt={fmt} backTo={combinedPLBackTo} />;
   }
 
   // ── AUTO AUDIT LOG VIEW ──────────────────────────────────────────
@@ -1775,6 +1787,7 @@ export default function SuperAdminDashboard({ onLogout }) {
             { label: "🧑‍💼 Requests", onClick: function() { setView("requests"); loadOnboardingRequests(); } },
             { label: "🩺 Health",     onClick: function() { setView("health"); } },
             { label: "📊 Analytics",  onClick: function() { setView("analytics"); loadAnalytics(); } },
+            { label: "💰 P&L",        onClick: function() { setCombinedPLBackTo("salons"); setView("combinedpl"); } },
             { label: "+ Manual",      onClick: function() { setManualModuleKey(null); setManualModal(true); setManualDone(""); } },
             { label: "+ Invite",      onClick: function() { setInviteModuleKey(null); setInviteModal(true); setInviteLink(""); setInviteEmail(""); setInviteName(""); }, highlight: true },
             { label: "Sign Out",      onClick: handleLogout, muted: true },
