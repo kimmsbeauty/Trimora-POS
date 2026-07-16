@@ -117,6 +117,13 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
                    // so it does NOT belong in TENANT_TABLES or this
                    // list -- injecting a client-side salon_id filter
                    // on a table without that column would just error.
+  "auto_vehicle_inspections", // added 2026-07-15 alongside Damage
+                              // Inspection -- salon_id column, standard
+                              // select/insert/update/delete policies via
+                              // auth_salon_id(). Queried/written from
+                              // CheckInPage.jsx (check_in stage) and
+                              // BoardPage.jsx (pickup stage + fetching
+                              // check_in markers as reference).
 ];
 
 // Tables confirmed live (2026-07-07) to have a salon_id column, but

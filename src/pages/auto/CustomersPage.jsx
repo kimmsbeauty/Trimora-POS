@@ -45,6 +45,8 @@ export default function CustomersPage() {
   var birthdayCampaignState = useState(null); var birthdayCampaign = birthdayCampaignState[0]; var setBirthdayCampaign = birthdayCampaignState[1];
   var loadingState = useState(true); var loading = loadingState[0]; var setLoading = loadingState[1];
   var searchState = useState(""); var search = searchState[0]; var setSearch = searchState[1];
+  var fleetOnlyState = useState(false); var fleetOnly = fleetOnlyState[0]; var setFleetOnly = fleetOnlyState[1];
+  var fleetNameEditsState = useState({}); var fleetNameEdits = fleetNameEditsState[0]; var setFleetNameEdits = fleetNameEditsState[1];
   var selectedIdState = useState(null); var selectedId = selectedIdState[0]; var setSelectedId = selectedIdState[1];
   var selectedVehicleIdState = useState(null); var selectedVehicleId = selectedVehicleIdState[0]; var setSelectedVehicleId = selectedVehicleIdState[1];
 
@@ -119,12 +121,14 @@ export default function CustomersPage() {
   });
 
   var q = search.trim().toLowerCase();
-  var filteredRows = q === "" ? customerRows : customerRows.filter(function (row) {
+  var filteredRows = (q === "" ? customerRows : customerRows.filter(function (row) {
     var c = row.customer;
     var nameMatch = (c.name || "").toLowerCase().indexOf(q) !== -1;
     var phoneMatch = (c.phone || "").toLowerCase().indexOf(q) !== -1;
     var plateMatch = row.vehicles.some(function (v) { return (v.reg_number || "").toLowerCase().indexOf(q) !== -1; });
     return nameMatch || phoneMatch || plateMatch;
+  })).filter(function (row) {
+    return !fleetOnly || row.vehicles.some(function (v) { return v.is_fleet; });
   });
 
   var staffById = {};
@@ -201,6 +205,18 @@ export default function CustomersPage() {
     setSaving(true);
     await db("PATCH", "auto_membership_plans", { active: !plan.active }, "?id=eq." + plan.id);
     setSaving(false);
+    load();
+  }
+
+  async function toggleVehicleFleet(v) {
+    await db("PATCH", "auto_vehicles", { is_fleet: !v.is_fleet, fleet_name: !v.is_fleet ? (v.fleet_name || null) : null }, "?id=eq." + v.id);
+    load();
+  }
+
+  async function saveFleetName(v) {
+    var name = fleetNameEdits[v.id];
+    if (name === undefined || name === (v.fleet_name || "")) return;
+    await db("PATCH", "auto_vehicles", { fleet_name: name.trim() || null }, "?id=eq." + v.id);
     load();
   }
 
@@ -479,13 +495,38 @@ export default function CustomersPage() {
                   <div key={v.id} style={{ borderRadius: 10, border: "1px solid " + CHROME + "22", overflow: "hidden" }}>
                     <div onClick={function () { setSelectedVehicleId(isExpanded ? null : v.id); }}
                       style={{ padding: "10px 12px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.02)" }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: PAPER }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: PAPER, display: "flex", alignItems: "center", gap: 8 }}>
                         {[v.reg_number, v.make, v.model, v.color].filter(Boolean).join(" · ")}
+                        {v.is_fleet && (
+                          <span style={{ fontSize: 9, fontWeight: 800, color: INK, background: SIGNAL, borderRadius: 4, padding: "2px 6px" }}>
+                            FLEET{v.fleet_name ? " · " + v.fleet_name : ""}
+                          </span>
+                        )}
                       </div>
                       <div style={{ fontSize: 11, color: CHROME }}>{isExpanded ? "Hide photos ▲" : "Photos ▼"}</div>
                     </div>
                     {isExpanded && (
                       <div style={{ padding: "10px 12px", borderTop: "1px solid " + CHROME + "22" }}>
+                        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: v.is_fleet ? 8 : 12, cursor: "pointer" }}>
+                          <input type="checkbox" checked={!!v.is_fleet}
+                            onChange={function () { toggleVehicleFleet(v); }}
+                            style={{ width: 16, height: 16, cursor: "pointer" }} />
+                          <span style={{ fontSize: 12, color: PAPER, fontWeight: 700 }}>Fleet vehicle</span>
+                        </label>
+                        {v.is_fleet && (
+                          <input
+                            value={fleetNameEdits[v.id] !== undefined ? fleetNameEdits[v.id] : (v.fleet_name || "")}
+                            onChange={function (e) {
+                              var val = e.target.value;
+                              setFleetNameEdits(function (prev) { return Object.assign({}, prev, { [v.id]: val }); });
+                            }}
+                            onBlur={function () { saveFleetName(v); }}
+                            placeholder="Fleet/company name (optional)"
+                            style={{
+                              width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.04)", color: PAPER,
+                              border: "1px solid rgba(143,166,184,0.3)", borderRadius: 8, padding: "8px 10px", fontSize: 12, marginBottom: 12,
+                            }} />
+                        )}
                         <VehiclePhotoUpload vehicleId={v.id} />
                       </div>
                     )}
@@ -614,8 +655,13 @@ export default function CustomersPage() {
           style={{
             width: "100%", boxSizing: "border-box", borderRadius: 10, border: "1.5px solid rgba(143,166,184,0.25)",
             background: "rgba(255,255,255,0.04)", padding: "12px 14px", fontSize: 15, color: PAPER,
-            outline: "none", fontFamily: "inherit", marginBottom: 16,
+            outline: "none", fontFamily: "inherit", marginBottom: 10,
           }} />
+        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, cursor: "pointer" }}>
+          <input type="checkbox" checked={fleetOnly} onChange={function (e) { setFleetOnly(e.target.checked); }}
+            style={{ width: 16, height: 16, cursor: "pointer" }} />
+          <span style={{ fontSize: 13, color: CHROME }}>Fleet vehicles only</span>
+        </label>
 
         {filteredRows.length === 0 && (
           <div style={{ fontSize: 13, color: CHROME, textAlign: "center", padding: 20 }}>

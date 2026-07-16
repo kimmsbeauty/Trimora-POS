@@ -13,6 +13,7 @@ import { useSalon } from "../../lib/SalonContext";
 import { db } from "../../lib/db";
 import LoyaltyBadge from "../../components/LoyaltyBadge";
 import VehiclePhotoUpload from "../../components/VehiclePhotoUpload";
+import CarDamageDiagram from "../../components/CarDamageDiagram";
 import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "./theme";
 
 function normalizeReg(raw) {
@@ -43,6 +44,10 @@ export default function CheckInPage() {
   var vMakeState = useState(""); var vMake = vMakeState[0]; var setVMake = vMakeState[1];
   var vModelState = useState(""); var vModel = vModelState[0]; var setVModel = vModelState[1];
   var vColorState = useState(""); var vColor = vColorState[0]; var setVColor = vColorState[1];
+  var vIsFleetState = useState(false); var vIsFleet = vIsFleetState[0]; var setVIsFleet = vIsFleetState[1];
+  var vFleetNameState = useState(""); var vFleetName = vFleetNameState[0]; var setVFleetName = vFleetNameState[1];
+  var damageMarkersState = useState([]); var damageMarkers = damageMarkersState[0]; var setDamageMarkers = damageMarkersState[1];
+  var damageNotesState = useState(""); var damageNotes = damageNotesState[0]; var setDamageNotes = damageNotesState[1];
 
   // Referral: only offered on the not_found (brand-new customer) path,
   // matching "the new customer's reward applies on this first visit."
@@ -80,6 +85,8 @@ export default function CheckInPage() {
   function resetForm() {
     setRegInput(""); setSearchStatus("idle"); setVehicle(null);
     setCustName(""); setCustPhone(""); setVMake(""); setVModel(""); setVColor("");
+    setVIsFleet(false); setVFleetName("");
+    setDamageMarkers([]); setDamageNotes("");
     setSelected({}); setResult(null); setLastVehicleId(null);
     setReferrerPhone(""); setReferrer(null); setReferrerSearchStatus("idle");
   }
@@ -153,6 +160,8 @@ export default function CheckInPage() {
         make: vMake.trim() || null,
         model: vModel.trim() || null,
         color: vColor.trim() || null,
+        is_fleet: vIsFleet,
+        fleet_name: vIsFleet ? (vFleetName.trim() || null) : null,
       });
       if (!savedVehicle || !savedVehicle[0]) { setSubmitting(false); setResult("error"); return; }
       vehicleId = savedVehicle[0].id;
@@ -195,6 +204,16 @@ export default function CheckInPage() {
         referred_job_id: job.id,
       });
     }
+
+    // Recorded even with zero markers -- an empty row still means
+    // "someone actually looked and found nothing", which matters for
+    // the pickup comparison (a missing row vs. an empty one are
+    // different facts).
+    await db("POST", "auto_vehicle_inspections", {
+      salon_id: salon.id, job_id: job.id, vehicle_id: vehicleId, stage: "check_in",
+      markers: damageMarkers.map(function (m) { return { x: m.x, y: m.y, type: m.type, note: m.note || "" }; }),
+      notes: damageNotes.trim() || null,
+    });
 
     setSubmitting(false);
     setLastVehicleId(vehicleId);
@@ -323,6 +342,16 @@ export default function CheckInPage() {
             </div>
             <input value={vColor} onChange={function (e) { setVColor(e.target.value); }}
               placeholder="Color" style={Object.assign({}, inputStyle, { marginTop: 10 })} />
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
+              <input type="checkbox" checked={vIsFleet}
+                onChange={function (e) { setVIsFleet(e.target.checked); }}
+                style={{ width: 16, height: 16, cursor: "pointer" }} />
+              <span style={{ fontSize: 13, color: PAPER }}>Fleet vehicle</span>
+            </div>
+            {vIsFleet && (
+              <input value={vFleetName} onChange={function (e) { setVFleetName(e.target.value); }}
+                placeholder="Fleet/company name (optional)" style={Object.assign({}, inputStyle, { marginTop: 8 })} />
+            )}
           </div>
         )}
 
@@ -350,6 +379,16 @@ export default function CheckInPage() {
                 No customer found with that phone number.
               </div>
             )}
+          </div>
+        )}
+
+        {(searchStatus === "found" || searchStatus === "not_found") && (
+          <div style={panelStyle}>
+            <span style={labelStyle}>Damage inspection (optional)</span>
+            <CarDamageDiagram markers={damageMarkers} onChange={setDamageMarkers} />
+            <input value={damageNotes} onChange={function (e) { setDamageNotes(e.target.value); }}
+              placeholder="General notes (optional)"
+              style={Object.assign({}, inputStyle, { marginTop: 10 })} />
           </div>
         )}
 

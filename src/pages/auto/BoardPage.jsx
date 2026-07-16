@@ -44,6 +44,7 @@ import AutoMpesaPaymentModal from "../../components/AutoMpesaPaymentModal";
 import AutoReceipt from "../../components/AutoReceipt";
 import AutoFeedbackModal from "../../components/AutoFeedbackModal";
 import VehiclePhotoUpload from "../../components/VehiclePhotoUpload";
+import CarDamageDiagram from "../../components/CarDamageDiagram";
 import { computeStockAfterDeduction } from "../../lib/saleLogic";
 import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "./theme";
 
@@ -143,6 +144,18 @@ export default function BoardPage() {
   var couponInputState = useState({}); var couponInputByJobId = couponInputState[0]; var setCouponInputByJobId = couponInputState[1];
   var couponErrorState = useState({}); var couponErrorByJobId = couponErrorState[0]; var setCouponErrorByJobId = couponErrorState[1];
   var couponApplyingState = useState(null); var couponApplyingJobId = couponApplyingState[0]; var setCouponApplyingJobId = couponApplyingState[1];
+
+  // Damage Inspection: check-in inspections are fetched keyed by
+  // job_id (each job has at most one check_in-stage row) and shown as
+  // faded reference markers under the live pickup layer, so new damage
+  // is visually obvious by comparison -- no automatic diffing, that
+  // was explicitly scoped out. Pickup markers are per-job, editable
+  // state (same 'object keyed by job.id' pattern as commissionEdits),
+  // only persisted to auto_vehicle_inspections at job completion.
+  var checkInInspectionsState = useState({}); var checkInInspectionsByJobId = checkInInspectionsState[0]; var setCheckInInspectionsByJobId = checkInInspectionsState[1];
+  var pickupMarkersState = useState({}); var pickupMarkersByJobId = pickupMarkersState[0]; var setPickupMarkersByJobId = pickupMarkersState[1];
+  var pickupNotesState = useState({}); var pickupNotesByJobId = pickupNotesState[0]; var setPickupNotesByJobId = pickupNotesState[1];
+  var showInspectionState = useState({}); var showInspectionByJobId = showInspectionState[0]; var setShowInspectionByJobId = showInspectionState[1];
   var busyState = useState(false); var busy = busyState[0]; var setBusy = busyState[1];
   var salon = useSalon();
   // Phase 5: completing a job requires collecting payment first --
@@ -258,6 +271,17 @@ export default function BoardPage() {
     } else {
       setMembershipsByCustomerId({});
       setReferrals([]);
+    }
+
+    var allJobIds = jobRows.map(function (j) { return j.id; });
+    if (allJobIds.length > 0) {
+      var inspectionRows = await db("GET", "auto_vehicle_inspections", null,
+        "?job_id=in.(" + allJobIds.join(",") + ")&stage=eq.check_in");
+      var inspByJob = {};
+      (inspectionRows || []).forEach(function (row) { inspByJob[row.job_id] = row; });
+      setCheckInInspectionsByJobId(inspByJob);
+    } else {
+      setCheckInInspectionsByJobId({});
     }
 
     setLoading(false);
@@ -566,6 +590,21 @@ export default function BoardPage() {
       referralPatch[field] = "redeemed";
       referralPatch[jobField] = job.id;
       await db("PATCH", "auto_referrals", referralPatch, "?id=eq." + referralToRedeem.referral.id);
+    }
+
+    // Pickup inspection: only recorded if staff actually opened the
+    // section for this job (avoids a blank row on every single
+    // completed job when nobody used the feature). job.vehicle_id is
+    // used directly rather than looked up again, since it's already on
+    // the job row.
+    if (next === "completed" && showInspectionByJobId[job.id] && job.vehicle_id) {
+      var pMarkers = pickupMarkersByJobId[job.id] || [];
+      var pNotes = pickupNotesByJobId[job.id] || "";
+      await db("POST", "auto_vehicle_inspections", {
+        salon_id: job.salon_id, job_id: job.id, vehicle_id: job.vehicle_id, stage: "pickup",
+        markers: pMarkers.map(function (m) { return { x: m.x, y: m.y, type: m.type, note: m.note || "" }; }),
+        notes: pNotes.trim() || null,
+      });
     }
 
     // Loyalty (feature-parity item #7): credits the customer's total
@@ -996,6 +1035,18 @@ export default function BoardPage() {
                       }}>
                         📷
                       </button>
+                      {job.status === "ready_for_collection" && (
+                        <button onClick={function () {
+                          setShowInspectionByJobId(function (prev) { return Object.assign({}, prev, { [job.id]: !prev[job.id] }); });
+                        }} style={{
+                          background: showInspectionByJobId[job.id] ? SIGNAL : "transparent",
+                          color: showInspectionByJobId[job.id] ? INK : CHROME,
+                          border: "1.5px solid " + (showInspectionByJobId[job.id] ? SIGNAL : CHROME + "55"),
+                          borderRadius: 8, padding: "8px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                        }}>
+                          🔍
+                        </button>
+                      )}
                       {NEXT_STATUS[job.status] && (
                         <button onClick={function () {
                           if (NEXT_STATUS[job.status] === "completed") { startCompleteFlow(job); }
@@ -1183,6 +1234,32 @@ export default function BoardPage() {
                       <VehiclePhotoUpload vehicleId={job.vehicle_id} />
                     </div>
                   )}
+                  {showInspectionByJobId[job.id] && (function () {
+                    var checkIn = checkInInspectionsByJobId[job.id];
+                    return (
+                      <div style={{ borderTop: "1px solid " + CHROME + "22", paddingTop: 10, marginTop: 10 }}>
+                        <div style={{ fontSize: 11, color: CHROME, marginBottom: 8, textAlign: "center" }}>
+                          Pickup inspection{checkIn ? " — faded dots are what was marked at check-in" : " (no check-in inspection on record for this job)"}
+                        </div>
+                        <CarDamageDiagram
+                          markers={pickupMarkersByJobId[job.id] || []}
+                          referenceMarkers={checkIn ? checkIn.markers : []}
+                          onChange={function (next) {
+                            setPickupMarkersByJobId(function (prev) { return Object.assign({}, prev, { [job.id]: next }); });
+                          }} />
+                        <input value={pickupNotesByJobId[job.id] || ""}
+                          onChange={function (e) {
+                            var v = e.target.value;
+                            setPickupNotesByJobId(function (prev) { return Object.assign({}, prev, { [job.id]: v }); });
+                          }}
+                          placeholder="General notes (optional)"
+                          style={{
+                            width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.04)", color: PAPER,
+                            border: "1px solid rgba(143,166,184,0.3)", borderRadius: 8, padding: "8px 10px", fontSize: 12, marginTop: 10,
+                          }} />
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
