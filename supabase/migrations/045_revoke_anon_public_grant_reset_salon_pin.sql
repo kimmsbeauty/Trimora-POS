@@ -1,0 +1,26 @@
+-- Defense-in-depth cleanup, not a vulnerability fix -- confirmed via
+-- direct function-body review (SET search_path pinned, is_super_admin
+-- app_metadata JWT check present) that this function already rejects
+-- any non-super-admin caller internally. Not exploitable as-is.
+--
+-- Found while re-checking suspend_salon/reactivate_salon/
+-- super_admin_reset_salon_pin's grants directly: migration 044
+-- (this session's own earlier commit, "revoke_anon_public_grants_
+-- admin_functions") revoked anon/PUBLIC from suspend_salon and
+-- reactivate_salon, and its own comment cited
+-- super_admin_reset_salon_pin as the *already-proven-safe reference
+-- pattern* it was copying -- but live information_schema.
+-- routine_privileges showed anon and PUBLIC still both present on
+-- super_admin_reset_salon_pin. That comment was inaccurate for this
+-- one function; migration 044 simply never touched it. Re-verified via
+-- get_advisors(security) after this fix: super_admin_reset_salon_pin no
+-- longer appears under anon_security_definer_function_executable, only
+-- (expectedly) under authenticated_security_definer_function_executable
+-- -- super admins connect as ordinary authenticated sessions,
+-- distinguished by JWT app_metadata, not by Postgres role.
+--
+-- Same "REVOKE FROM anon alone is not sufficient, PUBLIC must be
+-- revoked too" lesson already documented in migration 044 -- both are
+-- revoked in a single statement here.
+
+REVOKE EXECUTE ON FUNCTION public.super_admin_reset_salon_pin(uuid, text, text) FROM anon, PUBLIC;
