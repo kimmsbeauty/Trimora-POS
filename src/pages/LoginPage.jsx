@@ -8,29 +8,41 @@ import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "./auto/theme";
 import { lighten, darken } from "../lib/colorUtils";
 import { useParams } from "react-router-dom";
 import { useSalon, fetchPublicSalonBranding } from "../lib/SalonContext";
-import { getValidAccessToken } from "../lib/deviceAuth";
+import { persistSession } from "../lib/deviceAuth";
 
 var MAX_ATTEMPTS  = 3;
 var LOCKOUT_SECS  = 30;
 
-async function verifyPin(role, pin) {
+// Real fix for audit Critical-1: PIN entry itself now both verifies
+// identity AND establishes the device session, in one step, via
+// device-pin-login -- rather than a session being silently established
+// beforehand (the old, vulnerable flow) and the PIN only checked after.
+// No pre-existing session is required or used here.
+async function verifyPin(salonId, role, pin) {
   try {
-    var deviceToken = await getValidAccessToken();
-    var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/verify_staff_pin", {
+    var res = await fetch(SUPABASE_URL + "/functions/v1/device-pin-login", {
       method: "POST",
       headers: {
-        "apikey":        SUPABASE_KEY,
-        "Authorization": "Bearer " + (deviceToken || SUPABASE_KEY),
-        "Content-Type":  "application/json",
+        "apikey":       SUPABASE_KEY,
+        "Content-Type": "application/json",
       },
-      body: JSON.stringify({ p_role: role, p_pin: pin }),
+      body: JSON.stringify({ salon_id: salonId, role: role, pin: pin }),
     });
-    if (!res.ok) return null;
-    var result = await res.json();
-    return result === true;
+    var result = await res.json().catch(function() { return {}; });
+
+    if (res.ok && result && result.success) {
+      return { ok: true, session: result };
+    }
+    if (res.status === 401) {
+      // Deliberately generic on the server (doesn't distinguish "wrong
+      // PIN" from "locked out") -- treated the same here as an
+      // incorrect attempt for the existing attempt-counter UI below.
+      return { ok: false, wrong: true };
+    }
+    return { ok: false, wrong: false, error: result && result.error };
   } catch (e) {
     console.error("PIN verify error:", e);
-    return null;
+    return { ok: false, wrong: false, networkError: true };
   }
 }
 
@@ -152,18 +164,22 @@ export default function LoginPage({ onLogin, isAuto }) {
   async function handleLogin() {
     if (locked) return;
     if (!pin) return setError("Please enter your PIN");
+    if (!salon || !salon.id) return setError("Salon context unavailable. Please refresh and try again.");
     setLoading(true);
     setError("");
 
-    var ok = await verifyPin(role, pin);
+    var result = await verifyPin(salon.id, role, pin);
     setLoading(false);
 
-    if (ok === true) {
-      // Success
+    if (result.ok) {
+      // PIN correct — device-pin-login already established the session;
+      // persist it here so the rest of the app (db.js, getValidAccessToken)
+      // picks it up exactly as it would have from the old silent flow.
+      persistSession(result.session, salon.id);
       setAttempts(0);
       setError("");
       onLogin(role);
-    } else if (ok === false) {
+    } else if (result.wrong) {
       // Wrong PIN
       var newAttempts = attempts + 1;
       setAttempts(newAttempts);
@@ -178,9 +194,9 @@ export default function LoginPage({ onLogin, isAuto }) {
         setError("Incorrect PIN. " + remaining + " attempt" + (remaining !== 1 ? "s" : "") + " remaining.");
       }
     } else {
-      // Network error — fall back to hardcoded check for offline resilience
+      // Network error or other failure — fall back to hardcoded check for offline resilience
       setPin("");
-      setError("Could not reach server. Check your connection.");
+      setError(result.error || "Could not reach server. Check your connection.");
       triggerShake();
     }
   }

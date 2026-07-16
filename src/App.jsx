@@ -9,7 +9,7 @@ import LoginPage from "./pages/LoginPage";
 import RatingPage from "./pages/RatingPage";
 import AutoRatingPage from "./pages/AutoRatingPage";
 import TrimoraLandingPage from "./pages/TrimoraLandingPage";
-import { getDeviceLoginStatus, silentDeviceLogin, clearDeviceAuth } from "./lib/deviceAuth";
+import { getDeviceLoginStatus, clearDeviceAuth } from "./lib/deviceAuth";
 import { SalonGate, useSalon, fetchPublicSalonBranding } from "./lib/SalonContext";
 
 // Lazily loaded: each of these is visited far less often than booking/POS
@@ -125,8 +125,8 @@ function DeviceGate({ children }) {
     var cancelled = false;
 
     async function check() {
-      // Always resolve the salon from the URL first — needed both for the
-      // session ownership check and for the silent login call below.
+      // Always resolve the salon from the URL first — needed for the
+      // session ownership check below (and to catch a genuinely bad slug).
       var salon = await fetchPublicSalonBranding(slug);
       if (cancelled) return;
 
@@ -147,28 +147,27 @@ function DeviceGate({ children }) {
         var storedAuth = JSON.parse(localStorage.getItem("trimora_device_auth") || "{}");
         if (!storedAuth.salon_id || storedAuth.salon_id !== salon.id) {
           // Wrong salon's session or legacy session (no salon_id stored) —
-          // clear it and force a fresh silent login for this salon.
+          // clear it. LoginPage's PIN entry is what establishes a fresh
+          // one for this salon now (see below), not a silent call here.
           clearDeviceAuth();
-          loginStatus = "none";
-        } else {
-          // Session is valid and belongs to this salon.
-          if (!cancelled) setStatus("ok");
-          return;
         }
       }
 
-      var result = await silentDeviceLogin(salon.id);
-      if (cancelled) return;
-
-      if (result.ok) {
-        setStatus("ok");
-      } else {
-        setStatus("error");
-        setError(result.error || "Could not connect. Please contact support.");
-      }
+      // No blocking, no silent session creation from just a salon_id
+      // (audit Critical-1: that was the actual vulnerability — anyone
+      // who knew a salon's public slug could mint a full session with
+      // zero proof of legitimacy). A device with no valid session for
+      // this salon simply renders through to LoginPage, whose PIN entry
+      // now both verifies identity AND establishes the session in one
+      // step (see LoginPage.jsx / device-pin-login). An already-valid
+      // session for this salon is left as-is and reused.
+      if (!cancelled) setStatus("ok");
     }
 
     check();
+    // Still periodically re-verify session ownership (e.g. a browser
+    // left open across a salon-URL change), just never re-creates one
+    // from scratch — that's PIN entry's job.
     var interval = setInterval(check, 5 * 60 * 1000);
     return function() { cancelled = true; clearInterval(interval); };
   }, [slug]);
