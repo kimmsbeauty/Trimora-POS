@@ -25,6 +25,9 @@ import PlansView from "./superadmin/PlansView";
 import AutoAnalyticsView from "./superadmin/AutoAnalyticsView";
 import AnalyticsView from "./superadmin/AnalyticsView";
 import CombinedPLView from "./superadmin/CombinedPLView";
+import RequestsView from "./superadmin/RequestsView";
+import CarWashesView from "./superadmin/CarWashesView";
+import AutoRequestsView from "./superadmin/AutoRequestsView";
 
 var GOLD_LT = "#F5E6B8";
 
@@ -1035,162 +1038,14 @@ export default function SuperAdminDashboard({ onLogout }) {
   // creation itself is untouched by this; a request only ever produces
   // an invite link, exactly like the "+ Invite" button already does.
   if (view === "requests") {
-    return (
-      <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
-        <div style={{ background: BLACK, padding: "16px 20px" }}>
-          <button onClick={function() { setView("salons"); }}
-            style={{ background: "none", border: "none", color: GOLD_DIM, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 8, padding: 0 }}>
-            ← Back
-          </button>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>🧑‍💼 Onboarding Requests</div>
-              <div style={{ fontSize: 11, color: GOLD_DIM + "aa", marginTop: 2 }}>Submitted by sales reps from the field</div>
-            </div>
-            <button onClick={function() { setAddRepModal(true); setAddRepEmail(""); setAddRepPass(""); setAddRepError(""); }}
-              style={{ background: "none", border: "1px solid " + GOLD_DIM + "66", color: GOLD, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
-              + Add Sales Rep
-            </button>
-          </div>
-        </div>
-
-        <div style={{ padding: 16 }}>
-          {requestsLoading ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>Loading...</div>
-          ) : onboardingRequests.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>No onboarding requests yet.</div>
-          ) : (
-            onboardingRequests.map(function(r) {
-              var statusMeta = {
-                pending:  { bg: "#FEF3C7", fg: "#92400E", label: "🕓 Pending" },
-                approved: { bg: "#D1FAE5", fg: "#065F46", label: "✅ Approved" },
-                rejected: { bg: "#FEE2E2", fg: "#991B1B", label: "❌ Rejected" },
-              }[r.status] || { bg: "#F5F0E8", fg: "#666", label: r.status };
-
-              return (
-                <div key={r.id} style={{ background: WHITE, borderRadius: 12, padding: 14, marginBottom: 10, border: "1.5px solid " + GOLD_DIM + "33" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: DARK }}>{r.salon_name}</div>
-                    <div style={{ padding: "3px 10px", borderRadius: 20, fontSize: 10, fontWeight: 800, background: statusMeta.bg, color: statusMeta.fg }}>
-                      {statusMeta.label}
-                    </div>
-                  </div>
-
-                  {(r.owner_name || r.owner_email || r.owner_phone) && (
-                    <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>
-                      {r.owner_name}{r.owner_name && (r.owner_email || r.owner_phone) ? " · " : ""}
-                      {r.owner_email}{r.owner_email && r.owner_phone ? " · " : ""}{r.owner_phone}
-                    </div>
-                  )}
-
-                  {r.notes && <div style={{ fontSize: 12, color: "#666", marginBottom: 8, fontStyle: "italic" }}>{r.notes}</div>}
-
-                  <div style={{ fontSize: 10, color: "#aaa", marginBottom: r.status === "pending" ? 10 : 0 }}>
-                    {new Date(r.created_at).toLocaleString("en-KE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                  </div>
-
-                  {r.status === "pending" && (
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={function() { approveRequest(r); }} disabled={approvingId === r.id}
-                        style={{ flex: 1, background: "linear-gradient(135deg," + GOLD + "," + GOLD + ")", color: BLACK, border: "none", borderRadius: 8, padding: "9px 0", fontWeight: 900, fontSize: 12, cursor: approvingId === r.id ? "not-allowed" : "pointer", opacity: approvingId === r.id ? 0.6 : 1 }}>
-                        {approvingId === r.id ? "Approving..." : "✅ Approve"}
-                      </button>
-                      <button onClick={function() { setRejectModal(r); setRejectReason(""); }}
-                        style={{ flex: 1, background: "#FEE2E2", color: "#991B1B", border: "none", borderRadius: 8, padding: "9px 0", fontWeight: 900, fontSize: 12, cursor: "pointer" }}>
-                        ❌ Reject
-                      </button>
-                    </div>
-                  )}
-
-                  {r.status === "approved" && r.resulting_invite_token && (
-                    <div style={{ background: "#F0FDF4", border: "1px solid " + GREEN + "55", borderRadius: 8, padding: 10, marginTop: 8 }}>
-                      <div style={{ fontSize: 10, color: "#065F46", fontWeight: 700, marginBottom: 4 }}>Invite link:</div>
-                      <div style={{ fontSize: 10, color: DARK, wordBreak: "break-all", fontFamily: "monospace" }}>
-                        {window.location.origin + "/onboard?token=" + r.resulting_invite_token}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* Reject reason modal */}
-        {rejectModal && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 100 }}>
-            <div style={{ background: WHITE, borderRadius: 16, padding: 24, maxWidth: 380, width: "100%" }}>
-              <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 4 }}>Reject Request</div>
-              <div style={{ fontSize: 12, color: "#888", marginBottom: 14 }}>{rejectModal.salon_name}</div>
-              <textarea
-                placeholder="Reason (optional, visible to the rep)"
-                value={rejectReason}
-                onChange={function(e) { setRejectReason(e.target.value); }}
-                rows={3}
-                style={{ width: "100%", borderRadius: 8, border: "1.5px solid " + GOLD_DIM + "33", padding: "10px 12px", fontSize: 13, boxSizing: "border-box", marginBottom: 14, fontFamily: "inherit", resize: "vertical" }}
-              />
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={function() { setRejectModal(null); setRejectReason(""); }}
-                  style={{ flex: 1, background: GRAY, color: DARK, border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                  Cancel
-                </button>
-                <button onClick={rejectRequest}
-                  style={{ flex: 1, background: "#EF4444", color: WHITE, border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 900, fontSize: 13, cursor: "pointer" }}>
-                  Confirm Reject
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Add sales rep modal */}
-        {addRepModal && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 100 }}>
-            <div style={{ background: WHITE, borderRadius: 16, padding: 24, maxWidth: 380, width: "100%" }}>
-              <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 4 }}>Add Sales Rep</div>
-              <div style={{ fontSize: 12, color: "#888", marginBottom: 14 }}>They'll sign in at /sales with these credentials.</div>
-
-              <input
-                placeholder="Email"
-                type="email"
-                value={addRepEmail}
-                onChange={function(e) { setAddRepEmail(e.target.value); setAddRepError(""); }}
-                style={{ width: "100%", borderRadius: 8, border: "1.5px solid " + GOLD_DIM + "33", padding: "10px 12px", fontSize: 13, boxSizing: "border-box", marginBottom: 8, fontFamily: "inherit" }}
-              />
-              <input
-                placeholder="Temporary password"
-                type="text"
-                value={addRepPass}
-                onChange={function(e) { setAddRepPass(e.target.value); setAddRepError(""); }}
-                style={{ width: "100%", borderRadius: 8, border: "1.5px solid " + GOLD_DIM + "33", padding: "10px 12px", fontSize: 13, boxSizing: "border-box", marginBottom: 10, fontFamily: "inherit" }}
-              />
-
-              {addRepError && (
-                <div style={{ color: "#EF4444", fontSize: 12, marginBottom: 10, padding: "8px 12px", background: "rgba(239,68,68,0.08)", borderRadius: 8 }}>
-                  {addRepError}
-                </div>
-              )}
-              {addRepDone && (
-                <div style={{ color: "#065F46", fontSize: 12, marginBottom: 10, padding: "8px 12px", background: "#D1FAE5", borderRadius: 8, fontWeight: 700 }}>
-                  ✅ Sales rep account created
-                </div>
-              )}
-
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={function() { setAddRepModal(false); }}
-                  style={{ flex: 1, background: GRAY, color: DARK, border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                  Cancel
-                </button>
-                <button onClick={addSalesRep} disabled={addRepLoading}
-                  style={{ flex: 1, background: GOLD, color: BLACK, border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 900, fontSize: 13, cursor: addRepLoading ? "not-allowed" : "pointer", opacity: addRepLoading ? 0.7 : 1 }}>
-                  {addRepLoading ? "Creating..." : "Create Account"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
+    return <RequestsView
+      setView={setView} requestsLoading={requestsLoading} onboardingRequests={onboardingRequests}
+      rejectModal={rejectModal} setRejectModal={setRejectModal} rejectReason={rejectReason} setRejectReason={setRejectReason} rejectRequest={rejectRequest}
+      approvingId={approvingId} approveRequest={approveRequest}
+      addRepModal={addRepModal} setAddRepModal={setAddRepModal} addRepEmail={addRepEmail} setAddRepEmail={setAddRepEmail}
+      addRepPass={addRepPass} setAddRepPass={setAddRepPass} addRepError={addRepError} setAddRepError={setAddRepError}
+      addRepDone={addRepDone} addRepLoading={addRepLoading} addSalesRep={addSalesRep}
+    />;
   }
 
   // ── HEALTH VIEW ───────────────────────────────────────────────────
@@ -1210,138 +1065,14 @@ export default function SuperAdminDashboard({ onLogout }) {
   // service-role-only action), so this is genuinely new capability, not
   // a UI wired onto something that already worked another way.
   if (view === "carwashes") {
-    var onboardedCarWashes = salons.filter(function(s) { return s.auto_enabled; });
-    var notYetOnboarded = salons.filter(function(s) { return !s.auto_enabled; });
-
-    return (
-      <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
-        <div style={{ background: BLACK, padding: "16px 20px" }}>
-          <button onClick={function() { setView("salons"); }}
-            style={{ background: "none", border: "none", color: GOLD_DIM, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 8, padding: 0 }}>
-            ← Back
-          </button>
-          <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>🚗 Car Washes (Trimora Auto)</div>
-          <div style={{ fontSize: 11, color: GOLD_DIM + "aa", marginTop: 2, marginBottom: 10 }}>
-            {onboardedCarWashes.length} onboarded car wash{onboardedCarWashes.length === 1 ? "" : "es"} · use + Onboard or + Invite below to add a new one
-          </div>
-          <div style={{ display: "flex", gap: 6 }}>
-            {PRODUCTS.map(function(p) {
-              var active = p.views.indexOf(view) !== -1;
-              return (
-                <button key={p.key} onClick={function() { setView(p.homeView); }} style={{
-                  flex: 1, padding: "9px 0", borderRadius: 10, border: "none",
-                  background: active ? GOLD : "rgba(255,255,255,0.08)",
-                  color: active ? BLACK : GOLD_DIM,
-                  fontSize: 12, fontWeight: 800, cursor: "pointer",
-                }}>
-                  {p.label}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="carwash-nav-scroll" style={{ display: "flex", gap: 8, marginTop: 12, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-            {[
-              { label: "📊 Analytics",  onClick: function() { setView("autoanalytics"); loadAutoAnalytics(); } },
-              { label: "💰 P&L",        onClick: function() { setCombinedPLBackTo("carwashes"); setView("combinedpl"); } },
-              { label: "📋 Audit Log",  onClick: function() { setView("autoaudit"); loadAuditLog(); } },
-              { label: "🩺 Health",     onClick: function() { setView("autohealth"); } },
-              { label: "🧑‍💼 Requests", onClick: function() { setView("autorequests"); loadAutoOnboardingRequests(); } },
-              { label: "+ Onboard",     onClick: function() { setManualModuleKey("auto"); setManualModal(true); setManualDone(""); } },
-              { label: "+ Invite",      onClick: function() { setInviteModuleKey("auto"); setInviteModal(true); setInviteLink(""); setInviteEmail(""); setInviteName(""); } },
-            ].map(function(btn) {
-              return (
-                <button key={btn.label} className="carwash-nav-item" onClick={btn.onClick} style={{
-                  flexShrink: 0, background: "rgba(255,255,255,0.1)", border: "1px solid " + GOLD_DIM + "44",
-                  color: WHITE, borderRadius: 20, padding: "7px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
-                }}>
-                  {btn.label}
-                </button>
-              );
-            })}
-          </div>
-          <style>{`
-            .carwash-nav-scroll::-webkit-scrollbar { display: none; }
-            @media (min-width: 640px) {
-              .carwash-nav-item { flex: 1 1 0 !important; white-space: normal !important; }
-            }
-          `}</style>
-        </div>
-
-        <div style={{ padding: 16 }}>
-          {onboardedCarWashes.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "50px 20px", color: "#999" }}>
-              <div style={{ fontSize: 34, marginBottom: 10 }}>🚗</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: DARK, marginBottom: 6 }}>No car washes onboarded yet</div>
-              <div style={{ fontSize: 12 }}>Use <b>+ Onboard</b> or <b>+ Invite</b> above to create one from scratch, or approve a request under <b>Requests</b>.</div>
-            </div>
-          ) : (
-            onboardedCarWashes.map(function(s) {
-              return (
-                <div key={s.id} onClick={function() { openSalonDetail(s, "carwashes"); }}
-                  style={{ background: WHITE, borderRadius: 14, padding: 14, marginBottom: 10, border: "1.5px solid " + GOLD_DIM + "33", cursor: "pointer" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                        {s.salon_number && <span style={{ fontSize: 10, fontWeight: 900, color: WHITE, background: GOLD_DIM, borderRadius: 6, padding: "2px 7px", letterSpacing: "0.03em" }}>#{String(s.salon_number).padStart(3, "0")}</span>}
-                        <div style={{ fontSize: 14, fontWeight: 800, color: DARK }}>{s.name}</div>
-                        <Badge color={GREEN}>Onboarded</Badge>
-                        {s.suspended && <Badge color={RED}>Account suspended</Badge>}
-                      </div>
-                      <div style={{ fontSize: 11, color: "#888" }}>
-                        /{s.slug}
-                        {s.auto_enabled_at ? " · enabled " + new Date(s.auto_enabled_at).toLocaleDateString() : ""}
-                      </div>
-                    </div>
-                    <button
-                      disabled={actionLoading}
-                      onClick={function(e) { e.stopPropagation(); toggleAutoModule(s, false); }}
-                      style={{
-                        background: "#FEE2E2", color: RED,
-                        border: "none", borderRadius: 8, padding: "8px 14px",
-                        fontSize: 12, fontWeight: 800, cursor: actionLoading ? "default" : "pointer",
-                        opacity: actionLoading ? 0.6 : 1,
-                      }}
-                    >
-                      Suspend
-                    </button>
-                  </div>
-                </div>
-              );
-            })
-          )}
-
-          {notYetOnboarded.length > 0 && (
-            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid " + GOLD_DIM + "33" }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "#999", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>
-                Add an existing salon instead
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <select value={addExistingSalonId} onChange={function(e) { setAddExistingSalonId(e.target.value); }}
-                  style={{ flex: 1, padding: "10px 12px", borderRadius: 8, border: "1.5px solid " + GOLD_DIM + "44", fontSize: 13, background: WHITE }}>
-                  <option value="">Select a salon…</option>
-                  {notYetOnboarded.map(function(s) { return <option key={s.id} value={s.id}>{s.name}</option>; })}
-                </select>
-                <button
-                  disabled={actionLoading || !addExistingSalonId}
-                  onClick={function() {
-                    var target = notYetOnboarded.filter(function(s) { return s.id === addExistingSalonId; })[0];
-                    if (target) { toggleAutoModule(target, true); setAddExistingSalonId(""); }
-                  }}
-                  style={{
-                    background: addExistingSalonId ? GOLD_DIM : "#E5E0D5", color: addExistingSalonId ? BLACK : "#999",
-                    border: "none", borderRadius: 8, padding: "10px 16px", fontSize: 12, fontWeight: 800,
-                    cursor: addExistingSalonId && !actionLoading ? "pointer" : "default",
-                  }}
-                >
-                  Add
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
+    return <CarWashesView
+      salons={salons} view={view} setView={setView} PRODUCTS={PRODUCTS} Badge={Badge}
+      loadAutoAnalytics={loadAutoAnalytics} loadAuditLog={loadAuditLog} loadAutoOnboardingRequests={loadAutoOnboardingRequests} setCombinedPLBackTo={setCombinedPLBackTo}
+      setManualModuleKey={setManualModuleKey} setManualModal={setManualModal} setManualDone={setManualDone}
+      setInviteModuleKey={setInviteModuleKey} setInviteModal={setInviteModal} setInviteLink={setInviteLink} setInviteEmail={setInviteEmail} setInviteName={setInviteName}
+      openSalonDetail={openSalonDetail} actionLoading={actionLoading} toggleAutoModule={toggleAutoModule}
+      addExistingSalonId={addExistingSalonId} setAddExistingSalonId={setAddExistingSalonId}
+    />;
   }
 
   // ── AUTO HEALTH VIEW ─────────────────────────────────────────────
@@ -1386,114 +1117,12 @@ export default function SuperAdminDashboard({ onLogout }) {
   // exact same RPC the salon flow uses, just tagged -- so the resulting
   // salon has Auto enabled automatically the moment onboarding completes.
   if (view === "autorequests") {
-    return (
-      <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
-        <div style={{ background: BLACK, padding: "16px 20px" }}>
-          <button onClick={function() { setView("carwashes"); }}
-            style={{ background: "none", border: "none", color: GOLD_DIM, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 8, padding: 0 }}>
-            ← Back
-          </button>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 900, color: GOLD }}>🧑‍💼 Auto Requests</div>
-              <div style={{ fontSize: 11, color: GOLD_DIM + "aa", marginTop: 2 }}>Car wash onboarding requests, separate from salon requests</div>
-            </div>
-            <button onClick={function() { setAddRepModal(true); setAddRepEmail(""); setAddRepPass(""); setAddRepError(""); }}
-              style={{ background: "none", border: "1px solid " + GOLD_DIM + "66", color: GOLD, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
-              + Add Sales Rep
-            </button>
-          </div>
-        </div>
-
-        <div style={{ padding: 16 }}>
-          {autoRequestsLoading ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>Loading...</div>
-          ) : autoOnboardingRequests.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#888" }}>No Auto onboarding requests yet.</div>
-          ) : (
-            autoOnboardingRequests.map(function(r) {
-              var statusMeta = {
-                pending:  { bg: "#FEF3C7", fg: "#92400E", label: "🕓 Pending" },
-                approved: { bg: "#D1FAE5", fg: "#065F46", label: "✅ Approved" },
-                rejected: { bg: "#FEE2E2", fg: "#991B1B", label: "❌ Rejected" },
-              }[r.status] || { bg: "#F5F0E8", fg: "#666", label: r.status };
-
-              return (
-                <div key={r.id} style={{ background: WHITE, borderRadius: 12, padding: 14, marginBottom: 10, border: "1.5px solid " + GOLD_DIM + "33" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: DARK }}>{r.salon_name}</div>
-                    <div style={{ padding: "3px 10px", borderRadius: 20, fontSize: 10, fontWeight: 800, background: statusMeta.bg, color: statusMeta.fg }}>
-                      {statusMeta.label}
-                    </div>
-                  </div>
-
-                  {(r.owner_name || r.owner_email || r.owner_phone) && (
-                    <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>
-                      {r.owner_name}{r.owner_name && (r.owner_email || r.owner_phone) ? " · " : ""}
-                      {r.owner_email}{r.owner_email && r.owner_phone ? " · " : ""}{r.owner_phone}
-                    </div>
-                  )}
-
-                  {r.notes && <div style={{ fontSize: 12, color: "#666", marginBottom: 8, fontStyle: "italic" }}>{r.notes}</div>}
-
-                  <div style={{ fontSize: 10, color: "#aaa", marginBottom: r.status === "pending" ? 10 : 0 }}>
-                    {new Date(r.created_at).toLocaleString("en-KE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                  </div>
-
-                  {r.status === "pending" && (
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={function() { approveAutoRequest(r); }} disabled={autoApprovingId === r.id}
-                        style={{ flex: 1, background: "linear-gradient(135deg," + GOLD + "," + GOLD + ")", color: BLACK, border: "none", borderRadius: 8, padding: "9px 0", fontWeight: 900, fontSize: 12, cursor: autoApprovingId === r.id ? "not-allowed" : "pointer", opacity: autoApprovingId === r.id ? 0.6 : 1 }}>
-                        {autoApprovingId === r.id ? "Approving..." : "✅ Approve"}
-                      </button>
-                      <button onClick={function() { setAutoRejectModal(r); setAutoRejectReason(""); }}
-                        style={{ flex: 1, background: "#FEE2E2", color: "#991B1B", border: "none", borderRadius: 8, padding: "9px 0", fontWeight: 900, fontSize: 12, cursor: "pointer" }}>
-                        ❌ Reject
-                      </button>
-                    </div>
-                  )}
-
-                  {r.status === "approved" && r.resulting_invite_token && (
-                    <div style={{ background: "#F0FDF4", border: "1px solid " + GREEN + "55", borderRadius: 8, padding: 10, marginTop: 8 }}>
-                      <div style={{ fontSize: 10, color: "#065F46", fontWeight: 700, marginBottom: 4 }}>Invite link (Auto enables on completion):</div>
-                      <div style={{ fontSize: 10, color: DARK, wordBreak: "break-all", fontFamily: "monospace" }}>
-                        {window.location.origin + "/onboard?token=" + r.resulting_invite_token}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {autoRejectModal && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 100 }}>
-            <div style={{ background: WHITE, borderRadius: 16, padding: 24, maxWidth: 380, width: "100%" }}>
-              <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 4 }}>Reject Auto Request</div>
-              <div style={{ fontSize: 12, color: "#888", marginBottom: 14 }}>{autoRejectModal.salon_name}</div>
-              <textarea
-                placeholder="Reason (optional, visible to the rep)"
-                value={autoRejectReason}
-                onChange={function(e) { setAutoRejectReason(e.target.value); }}
-                rows={3}
-                style={{ width: "100%", borderRadius: 8, border: "1.5px solid " + GOLD_DIM + "33", padding: "10px 12px", fontSize: 13, boxSizing: "border-box", marginBottom: 14, fontFamily: "inherit", resize: "vertical" }}
-              />
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={function() { setAutoRejectModal(null); setAutoRejectReason(""); }}
-                  style={{ flex: 1, background: GRAY, color: DARK, border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                  Cancel
-                </button>
-                <button onClick={rejectAutoRequest}
-                  style={{ flex: 1, background: "#EF4444", color: WHITE, border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 900, fontSize: 13, cursor: "pointer" }}>
-                  Confirm Reject
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
+    return <AutoRequestsView
+      setView={setView} autoRequestsLoading={autoRequestsLoading} autoOnboardingRequests={autoOnboardingRequests}
+      autoApprovingId={autoApprovingId} approveAutoRequest={approveAutoRequest}
+      autoRejectModal={autoRejectModal} setAutoRejectModal={setAutoRejectModal} autoRejectReason={autoRejectReason} setAutoRejectReason={setAutoRejectReason} rejectAutoRequest={rejectAutoRequest}
+      setAddRepModal={setAddRepModal} setAddRepEmail={setAddRepEmail} setAddRepPass={setAddRepPass} setAddRepError={setAddRepError}
+    />;
   }
 
   // ── ANALYTICS VIEW ───────────────────────────────────────────────
