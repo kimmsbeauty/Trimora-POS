@@ -108,6 +108,15 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
                   // policies via auth_salon_id(). Managed from
                   // AutoSettingsPage.jsx (create/deactivate), looked
                   // up from BoardPage.jsx at checkout.
+  "auto_invoices", // added 2026-07-15 alongside Draft Invoices --
+                   // salon_id column, standard select/insert/update/
+                   // delete policies via auth_salon_id(). Its join
+                   // table auto_invoice_jobs deliberately has NO
+                   // salon_id column (scoped via the parent invoice's
+                   // salon_id instead through its own RLS policies),
+                   // so it does NOT belong in TENANT_TABLES or this
+                   // list -- injecting a client-side salon_id filter
+                   // on a table without that column would just error.
 ];
 
 // Tables confirmed live (2026-07-07) to have a salon_id column, but

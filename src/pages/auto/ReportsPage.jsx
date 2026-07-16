@@ -30,7 +30,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { db } from "../../lib/db";
+import { db, dbRpcAuth } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
 import AutoExportButton from "../../components/AutoExportButton";
 import AutoAskTrimora from "../../components/AutoAskTrimora";
@@ -93,6 +93,22 @@ export default function ReportsPage({ isAdmin }) {
   var refundSavingState = useState(false); var refundSaving = refundSavingState[0]; var setRefundSaving = refundSavingState[1];
   var refundErrorState = useState(""); var refundError = refundErrorState[0]; var setRefundError = refundErrorState[1];
 
+  // ── Draft Invoices ───────────────────────────────────────────────
+  // Independent of the page's date-range filter above -- a fleet
+  // client's invoice can span jobs from different days, so job
+  // candidates are fetched fresh per customer rather than reused from
+  // jobsInRange.
+  var invoicesState = useState([]); var invoices = invoicesState[0]; var setInvoices = invoicesState[1];
+  var showInvoiceModalState = useState(false); var showInvoiceModal = showInvoiceModalState[0]; var setShowInvoiceModal = showInvoiceModalState[1];
+  var invoicePhoneState = useState(""); var invoicePhone = invoicePhoneState[0]; var setInvoicePhone = invoicePhoneState[1];
+  var invoiceCustomerState = useState(null); var invoiceCustomer = invoiceCustomerState[0]; var setInvoiceCustomer = invoiceCustomerState[1];
+  var invoiceCandidateJobsState = useState([]); var invoiceCandidateJobs = invoiceCandidateJobsState[0]; var setInvoiceCandidateJobs = invoiceCandidateJobsState[1];
+  var invoiceSelectedJobIdsState = useState({}); var invoiceSelectedJobIds = invoiceSelectedJobIdsState[0]; var setInvoiceSelectedJobIds = invoiceSelectedJobIdsState[1];
+  var invoiceNotesState = useState(""); var invoiceNotes = invoiceNotesState[0]; var setInvoiceNotes = invoiceNotesState[1];
+  var invoiceDueDateState = useState(""); var invoiceDueDate = invoiceDueDateState[0]; var setInvoiceDueDate = invoiceDueDateState[1];
+  var invoiceSavingState = useState(false); var invoiceSaving = invoiceSavingState[0]; var setInvoiceSaving = invoiceSavingState[1];
+  var invoiceErrorState = useState(""); var invoiceError = invoiceErrorState[0]; var setInvoiceError = invoiceErrorState[1];
+
   var load = useCallback(async function () {
     var results = await Promise.all([
       db("GET", "auto_jobs", null, "?status=eq.completed&order=completed_at.desc&select=*,auto_vehicles(reg_number,make),customers(name)"),
@@ -106,6 +122,7 @@ export default function ReportsPage({ isAdmin }) {
       // ready_for_collection -- those aren't "waiting"). id-only select
       // since only the count is needed here, not full job rows.
       db("GET", "auto_jobs", null, "?status=eq.waiting&select=id"),
+      db("GET", "auto_invoices", null, "?order=created_at.desc&select=*,customers(name,phone),auto_invoice_jobs(job_id)"),
     ]);
     setJobs(results[0] || []);
     setJobServices(results[1] || []);
@@ -113,6 +130,7 @@ export default function ReportsPage({ isAdmin }) {
     setStaff(results[3] || []);
     setStockMoves(results[4] || []);
     setQueueCount((results[5] || []).length);
+    setInvoices(results[6] || []);
     setLoading(false);
   }, []);
 
@@ -217,6 +235,72 @@ export default function ReportsPage({ isAdmin }) {
     } catch (err) {
       console.error("Stock restoration failed for job " + job.id + ":", err);
     }
+  }
+
+  async function invoiceSearchCustomer() {
+    var phone = invoicePhone.trim();
+    if (!phone) return;
+    setInvoiceError("");
+    var custRows = await db("GET", "customers", null, "?phone=eq." + encodeURIComponent(phone) + "&limit=1");
+    var cust = custRows && custRows[0];
+    if (!cust) { setInvoiceError("No customer found with that phone number."); setInvoiceCustomer(null); return; }
+    setInvoiceCustomer(cust);
+
+    // Already-invoiced jobs are excluded up front (auto_invoice_jobs'
+    // UNIQUE(job_id) would reject them anyway, but filtering here means
+    // staff never see a job they can't actually pick).
+    var alreadyInvoicedIds = {};
+    invoices.forEach(function (inv) {
+      (inv.auto_invoice_jobs || []).forEach(function (link) { alreadyInvoicedIds[link.job_id] = true; });
+    });
+    var candidateRows = await db("GET", "auto_jobs", null,
+      "?customer_id=eq." + cust.id + "&status=eq.completed&payment_status=eq.unpaid&order=completed_at.desc" +
+      "&select=*,auto_vehicles(reg_number,make)");
+    setInvoiceCandidateJobs((candidateRows || []).filter(function (j) { return !alreadyInvoicedIds[j.id]; }));
+    setInvoiceSelectedJobIds({});
+  }
+
+  async function createDraftInvoice() {
+    if (invoiceSaving || !invoiceCustomer) return;
+    var jobIds = Object.keys(invoiceSelectedJobIds).filter(function (id) { return invoiceSelectedJobIds[id]; });
+    if (jobIds.length === 0) { setInvoiceError("Select at least one job."); return; }
+
+    setInvoiceSaving(true);
+    setInvoiceError("");
+    var invoiceRows = await db("POST", "auto_invoices", {
+      salon_id: salon.id, customer_id: invoiceCustomer.id,
+      notes: invoiceNotes.trim() || null,
+      due_date: invoiceDueDate || null,
+    });
+    var invoice = invoiceRows && invoiceRows[0];
+    if (!invoice) { setInvoiceSaving(false); setInvoiceError("Failed to create invoice."); return; }
+
+    for (var i = 0; i < jobIds.length; i++) {
+      await db("POST", "auto_invoice_jobs", { invoice_id: invoice.id, job_id: jobIds[i] });
+    }
+
+    setInvoiceSaving(false);
+    setShowInvoiceModal(false);
+    setInvoicePhone(""); setInvoiceCustomer(null); setInvoiceCandidateJobs([]);
+    setInvoiceSelectedJobIds({}); setInvoiceNotes(""); setInvoiceDueDate("");
+    load();
+  }
+
+  async function issueInvoice(invoice) {
+    var result = await dbRpcAuth("issue_auto_invoice", { p_invoice_id: invoice.id });
+    if (result.error) { alert(result.error); return; }
+    load();
+  }
+
+  async function markInvoicePaid(invoice) {
+    var result = await dbRpcAuth("mark_auto_invoice_paid", { p_invoice_id: invoice.id });
+    if (result.error) { alert(result.error); return; }
+    load();
+  }
+
+  async function deleteDraftInvoice(invoice) {
+    await db("DELETE", "auto_invoices", null, "?id=eq." + invoice.id);
+    load();
   }
 
   if (!isAdmin) {
@@ -716,6 +800,145 @@ export default function ReportsPage({ isAdmin }) {
           );
         })}
       </Card>
+
+      <Card>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <CardTitle>Invoices</CardTitle>
+          <span onClick={function () { setShowInvoiceModal(true); setInvoiceError(""); }}
+            style={{ fontSize: 12, color: SIGNAL, fontWeight: 700, cursor: "pointer" }}>
+            + New Invoice
+          </span>
+        </div>
+        {invoices.length === 0 ? (
+          <div style={{ fontSize: 13, color: CHROME }}>No invoices yet.</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {invoices.map(function (inv) {
+              var cust = inv.customers || {};
+              var jobCount = (inv.auto_invoice_jobs || []).length;
+              var statusColor = inv.status === "paid" ? SIGNAL : inv.status === "issued" ? PAPER : CHROME;
+              return (
+                <div key={inv.id} style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid " + CHROME + "22", background: "rgba(255,255,255,0.02)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: PAPER }}>
+                        {inv.invoice_number || "Draft"} — {cust.name || "—"}
+                      </div>
+                      <div style={{ fontSize: 11, color: CHROME }}>
+                        {jobCount} job{jobCount === 1 ? "" : "s"}{inv.due_date ? " · due " + new Date(inv.due_date).toLocaleDateString("en-KE") : ""}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: statusColor, textTransform: "uppercase" }}>{inv.status}</span>
+                  </div>
+                  {inv.notes && <div style={{ fontSize: 11, color: CHROME, marginTop: 6 }}>{inv.notes}</div>}
+                  <div style={{ display: "flex", gap: 14, marginTop: 8 }}>
+                    {inv.status === "draft" && (
+                      <>
+                        <span onClick={function () { issueInvoice(inv); }} style={{ fontSize: 11, color: SIGNAL, fontWeight: 700, cursor: "pointer", textDecoration: "underline" }}>
+                          Issue
+                        </span>
+                        <span onClick={function () { deleteDraftInvoice(inv); }} style={{ fontSize: 11, color: ALERT, cursor: "pointer", textDecoration: "underline" }}>
+                          Delete draft
+                        </span>
+                      </>
+                    )}
+                    {inv.status === "issued" && (
+                      <span onClick={function () { markInvoicePaid(inv); }} style={{ fontSize: 11, color: SIGNAL, fontWeight: 700, cursor: "pointer", textDecoration: "underline" }}>
+                        Mark Paid
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+
+      {showInvoiceModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 20 }}>
+          <div style={{ width: "100%", maxWidth: 460, maxHeight: "85vh", overflowY: "auto", background: STEEL, borderRadius: 14, padding: 20, border: "1px solid " + CHROME + "33" }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: PAPER, marginBottom: 12 }}>New Invoice</div>
+            {invoiceError && <div style={{ fontSize: 12, color: ALERT, marginBottom: 10 }}>{invoiceError}</div>}
+
+            {!invoiceCustomer ? (
+              <div style={{ display: "flex", gap: 10 }}>
+                <input value={invoicePhone} onChange={function (e) { setInvoicePhone(e.target.value); }}
+                  placeholder="Customer's phone number"
+                  style={{ flex: 1, background: "rgba(255,255,255,0.04)", color: PAPER, border: "1px solid rgba(143,166,184,0.3)", borderRadius: 8, padding: "10px", fontSize: 13 }} />
+                <button onClick={invoiceSearchCustomer} style={{
+                  padding: "0 18px", borderRadius: 8, border: "1.5px solid " + SIGNAL, background: "transparent",
+                  color: SIGNAL, fontWeight: 700, fontSize: 13, cursor: "pointer",
+                }}>
+                  Find
+                </button>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 13, color: PAPER, fontWeight: 700, marginBottom: 4 }}>{invoiceCustomer.name}</div>
+                <span onClick={function () { setInvoiceCustomer(null); setInvoiceCandidateJobs([]); setInvoicePhone(""); }}
+                  style={{ fontSize: 11, color: CHROME, textDecoration: "underline", cursor: "pointer" }}>
+                  Change customer
+                </span>
+
+                <div style={{ fontSize: 11, color: CHROME, marginTop: 14, marginBottom: 6 }}>Unpaid completed jobs</div>
+                {invoiceCandidateJobs.length === 0 ? (
+                  <div style={{ fontSize: 13, color: CHROME, marginBottom: 14 }}>No unpaid jobs for this customer.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+                    {invoiceCandidateJobs.map(function (j) {
+                      var v = j.auto_vehicles || {};
+                      return (
+                        <label key={j.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, background: "rgba(255,255,255,0.02)", cursor: "pointer" }}>
+                          <input type="checkbox" checked={!!invoiceSelectedJobIds[j.id]}
+                            onChange={function (e) {
+                              setInvoiceSelectedJobIds(function (prev) { return Object.assign({}, prev, { [j.id]: e.target.checked }); });
+                            }} style={{ width: 16, height: 16 }} />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 12, color: PAPER }}>{v.reg_number || "—"} {v.make ? "(" + v.make + ")" : ""}</div>
+                            <div style={{ fontSize: 10, color: CHROME }}>{new Date(j.completed_at).toLocaleDateString("en-KE")}</div>
+                          </div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: SIGNAL }}>{money(payableAmount(j))}</div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, color: CHROME, marginBottom: 4 }}>Notes / payment terms (optional)</div>
+                  <input value={invoiceNotes} onChange={function (e) { setInvoiceNotes(e.target.value); }}
+                    placeholder="e.g. Net 30, pay via bank transfer to..."
+                    style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.04)", color: PAPER, border: "1px solid rgba(143,166,184,0.3)", borderRadius: 8, padding: "10px", fontSize: 13 }} />
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, color: CHROME, marginBottom: 4 }}>Due date (optional)</div>
+                  <input type="date" value={invoiceDueDate} onChange={function (e) { setInvoiceDueDate(e.target.value); }}
+                    style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.04)", color: PAPER, border: "1px solid rgba(143,166,184,0.3)", borderRadius: 8, padding: "10px", fontSize: 13 }} />
+                </div>
+              </>
+            )}
+
+            <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+              <button onClick={function () {
+                setShowInvoiceModal(false); setInvoicePhone(""); setInvoiceCustomer(null);
+                setInvoiceCandidateJobs([]); setInvoiceSelectedJobIds({}); setInvoiceNotes(""); setInvoiceDueDate("");
+              }} style={{ flex: 1, background: "transparent", color: CHROME, border: "1.5px solid " + CHROME + "55", borderRadius: 8, padding: "10px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                Cancel
+              </button>
+              {invoiceCustomer && (
+                <button onClick={createDraftInvoice} disabled={invoiceSaving} style={{
+                  flex: 1, background: SIGNAL, color: INK, border: "none", borderRadius: 8, padding: "10px",
+                  fontSize: 13, fontWeight: 800, cursor: "pointer", opacity: invoiceSaving ? 0.6 : 1,
+                }}>
+                  Save Draft
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {refundJob && (function () {
         var payable = payableAmount(refundJob);
         var alreadyRefunded = refundJob.refunded_amount || 0;
