@@ -19,7 +19,7 @@ Trimora Auto's roadmap (Phase 5/6, per the Auto handover) was touched.
 ## Repo / project identifiers (unchanged, re-verify anyway)
 
 - POS repo: `github.com/kimmsbeauty/Trimora-POS`, branch `main`
-- **Latest commit as of this handover: `8c46c723bd7675c599f1aadb107dd290f9d2bc28`**
+- **Latest commit as of this handover: `725eec6a059d277d6a238c6f931705f91fbcca50`** (originally written at `8c46c72`; see the Addendum section below for what changed after that)
 - Supabase project (POS/production): `ukoccobbjeomjwjcvrma` ("kimmsbeauty", eu-west-1)
 - Live tenant count: **5** salons now (Kimms Beauty Parlour, Grace
   Beauty, Lavish Lux Spa, Urban Streets Beauty, plus one Auto-vertical
@@ -127,11 +127,24 @@ session also reported independently).
    flagged repeatedly during the session, worth confirming it actually
    happened.
 7. Everything already flagged-but-not-fixed in the two prior handovers
-   (mutable `search_path` on ~16 functions, dead `products` table,
-   `stock_log`/`stock_movements` missing `salon_id`, the orphaned
+   (mutable `search_path` on ~16 functions — **now resolved, see
+   Addendum**, dead `products` table, `stock_log`/`stock_movements`
+   missing `salon_id`, the orphaned
    `015_allow_anon_payment_status_update.sql` migration file) —
-   **untouched this session**, still open, still someone's call on
-   priority.
+   remaining items untouched this session, still open, still someone's
+   call on priority.
+8. **6 `SECURITY DEFINER` views** flagged by the advisor
+   (`platform_stats`, `salon_directory`, `auto_platform_jobs`,
+   `public_salon_directory`, `public_rating_lookup`,
+   `public_staff_directory`, `public_auto_job_rating_lookup`) — not
+   investigated per-view this session. Several are probably intentional
+   (the `public_*` ones exist specifically to expose curated data
+   pre-auth), but that's an assumption, not a verified fact. Needs its
+   own pass before touching any of them.
+9. **`auth_leaked_password_protection` is disabled** in Supabase Auth —
+   real, low-effort improvement (checks new passwords against
+   HaveIBeenPwned), not yet done. Not confirmed whether it's reachable
+   from a migration/SQL or only via the dashboard/Management API.
 
 ---
 
@@ -155,6 +168,14 @@ session also reported independently).
   (`039`, then `040` again) purely from working in parallel. Always
   check `supabase/migrations/` on a fresh `git fetch` before naming a
   new migration file, don't just increment from local memory.
+- Don't assume a `REVOKE EXECUTE ... FROM <role>` migration actually
+  removed that role's access — Postgres's default `PUBLIC` grant on
+  functions means every role inherits execute rights through `PUBLIC`
+  regardless of a role-specific revoke. Always revoke from `PUBLIC`
+  explicitly too, and verify via
+  `information_schema.role_routine_grants` afterward rather than
+  trusting the migration succeeded silently. This bit this session
+  once already (see Addendum).
 
 ---
 
@@ -194,6 +215,90 @@ session also reported independently).
 
 ---
 
+## Addendum — later the same day: advisor sweep and grant cleanup
+
+After the sections above were written, one more round happened,
+prompted by checking whether the "mutable `search_path`" issue flagged
+in the prior handovers was still open.
+
+**It wasn't** — already resolved (likely predates this session; not
+otherwise documented where/when).
+
+That check surfaced something bigger: a full Supabase security-advisor
+pass showing ~20 `SECURITY DEFINER` functions flagged as callable by
+`anon`/`authenticated`, including several touching super-admin actions,
+invoicing, and wallet balances. Rather than assume the linter's blanket
+warning meant a real hole, **every one of the 12 highest-value flagged
+functions was read in full** (`suspend_salon`, `reactivate_salon`,
+`super_admin_update_salon`, `super_admin_update_plan_price`,
+`superadmin_set_module`, `record_subscription_payment`,
+`create_invite`, `get_admin_audit_log`, `log_admin_action`,
+`issue_auto_invoice`, `mark_auto_invoice_paid`,
+`apply_wallet_transaction`). **All 12 were already correctly gated
+internally** — either an `auth.jwt() -> app_metadata ->> is_super_admin`
+check or an `auth_salon_id() IS NULL` check, matching the pattern
+already proven safe in `super_admin_reset_salon_pin`. This was linter
+noise, not a new vulnerability.
+
+Fixed anyway, as defense-in-depth / to reduce future advisor noise:
+revoked unnecessary `anon` execute grants on those 12 functions
+(`044_revoke_anon_public_grants_admin_functions.sql`).
+
+**A real mistake happened and was caught mid-process, worth knowing
+about if you touch grants on this schema again**: the first attempt
+(`REVOKE EXECUTE ... FROM anon`) did not actually work. Postgres grants
+`EXECUTE ON FUNCTION` to `PUBLIC` by default at creation time unless
+explicitly revoked, and every role — including `anon` — inherits
+execute rights through `PUBLIC` regardless of an anon-specific revoke.
+This was caught by re-querying
+`information_schema.role_routine_grants` immediately after applying the
+first migration and finding `PUBLIC` still listed as a grantee. A
+second migration (`REVOKE ... FROM PUBLIC`) was required, and the
+final, correct combined form is what's in `044_*.sql` — the repo does
+not contain the incomplete intermediate version, only the corrected
+one, with the lesson documented in the migration's own comments.
+**If you ever write a grant-revocation migration on this schema,
+revoke from `PUBLIC` explicitly, not just the specific role you're
+targeting — this is the second time in this session `PUBLIC` grants
+caused a check to fail silently** (the first being the original
+`pin_reset_tokens` tautological-policy finding, a different kind of
+bug but the same broader lesson: verify grants directly, don't infer
+them from a role-specific query alone).
+
+Deliberately did **not** revoke the `authenticated` grant on any of
+these 12, despite the linter suggesting it — super admins connect as
+ordinary `authenticated` Supabase Auth sessions, distinguished by JWT
+`app_metadata`, not by a separate Postgres role. Revoking
+`authenticated` would have broken the real Super Admin dashboard.
+
+**Two more things surfaced by the same advisor pass, explicitly not
+acted on — added to "what's still open" below:**
+- 6 `SECURITY DEFINER` views (`platform_stats`, `salon_directory`,
+  `auto_platform_jobs`, plus 3 `public_*`-prefixed ones that are
+  probably intentionally public). Views bypassing RLS via
+  `SECURITY DEFINER` is a different risk shape than functions — some of
+  these are almost certainly intentional (the public directory views
+  exist specifically to expose curated data pre-auth), but that wasn't
+  confirmed per-view this session. Needs its own careful pass; getting
+  it wrong could silently break the public booking page.
+- `auth_leaked_password_protection` is disabled in Supabase Auth
+  (checks new passwords against HaveIBeenPwned). Real, low-effort
+  improvement, but it's an Auth-config toggle — not confirmed whether
+  it's reachable via SQL/migration from here or only via the dashboard/
+  Management API.
+
+Verified this round: grants confirmed via
+`information_schema.role_routine_grants` (exact `{authenticated,
+postgres, service_role}` on all 12, no `anon`, no `PUBLIC`), and a
+fresh advisor re-run confirming all 12
+`anon_security_definer_function_executable` warnings for these
+functions cleared with no new findings introduced.
+
+**Latest commit as of this addendum:
+`725eec6a059d277d6a238c6f931705f91fbcca50`**
+
+---
+
 ## Sensible next steps (not a mandate)
 
 1. Get a real person to log into a real (non-Kimms) salon's POS using
@@ -208,9 +313,16 @@ session also reported independently).
    squeezing into a future security session the way this one squeezed
    in a dependency-hygiene pass.
 6. Re-triage the still-open items from the two prior handovers
-   (mutable search_path, dead `products` table, etc.) — none of them
-   got any closer to resolved this session; they're not forgotten, just
+   (dead `products` table, `stock_log`/`stock_movements` missing
+   `salon_id`, etc. — search_path is now resolved) — none of them got
+   any closer to resolved this session; they're not forgotten, just
    still nobody's explicit priority.
+7. Get the 6 `SECURITY DEFINER` views checked properly — low urgency
+   given several are probably intentional, but "probably" isn't
+   "verified."
+8. Turn on `auth_leaked_password_protection` in Supabase Auth — cheap
+   win, just needs someone to check whether it's a dashboard-only
+   toggle or reachable from a migration.
 
 ## What to attach in the new chat
 
