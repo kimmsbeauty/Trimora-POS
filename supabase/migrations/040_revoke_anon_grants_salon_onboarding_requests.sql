@@ -1,0 +1,16 @@
+-- Already applied to and verified against the live database; this
+-- migration file brings history back in sync with prod.
+--
+-- All 4 existing RLS policies on salon_onboarding_requests require
+-- `authenticated` plus a specific app_metadata flag (is_sales_rep or
+-- is_super_admin) -- none target `anon` at all, meaning anonymous
+-- access was never intended here. anon previously held full
+-- SELECT/INSERT/UPDATE/DELETE/REFERENCES/TRIGGER/TRUNCATE at the table
+-- level. RLS already blocked the row-level operations (no matching
+-- anon policy = deny), but TRUNCATE is NOT governed by RLS in Postgres
+-- at all -- so the anon grant on TRUNCATE specifically was a real,
+-- live gap regardless of policies, not just defense-in-depth.
+--
+-- Same pattern as migration 032 (revoke_anon_grants_auto_onboarding_requests),
+-- just for the Salon-side equivalent table.
+REVOKE ALL ON public.salon_onboarding_requests FROM anon;

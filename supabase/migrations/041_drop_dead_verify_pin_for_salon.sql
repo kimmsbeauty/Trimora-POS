@@ -1,0 +1,14 @@
+-- Already applied to and verified against the live database; this
+-- migration file brings history back in sync with prod.
+--
+-- Confirmed unused: no reference anywhere in src/ (grepped both the
+-- exact function name and the "verify_pin" naming pattern) and no
+-- Edge Function calls it either. Dropped entirely rather than just
+-- tightening its grants -- it's a SECURITY DEFINER function verifying
+-- a PIN via unsalted MD5 (pin_hash = md5(p_pin)) with no rate-limiting
+-- or lockout, unlike verify_staff_pin which got check_pin_lockout()
+-- wired into it in migration 036 earlier this session. It was also
+-- callable by anon and PUBLIC. Removing the function removes the
+-- attack surface outright rather than leaving a weaker, unprotected
+-- PIN-check path sitting next to the one that was just hardened.
+DROP FUNCTION IF EXISTS public.verify_pin_for_salon(uuid, text, text);
