@@ -145,12 +145,17 @@ var KNOWN_SALON_SCOPED_BUT_NOT_CLIENT_QUERIED = [
 // dbDirect() GET path and filtered by salon_id the same way PostgREST
 // lets you filter any view. Confirmed live (2026-07-07): SECURITY
 // DEFINER views exist for public_staff_directory, public_salon_directory,
-// public_rating_lookup, platform_stats, salon_directory -- of those,
-// only public_staff_directory is registered in TENANT_TABLES today
-// (the others are queried via RPC/different paths, not dbDirect GETs).
-var KNOWN_VIEWS_QUERIED_LIKE_TABLES = [
-  "public_staff_directory",
-];
+// public_rating_lookup, platform_stats, salon_directory. As of migration
+// 050 (2026-07-16), public_staff_directory moved off this path entirely --
+// the bare view had no per-salon scoping built in (anon SELECT + no
+// filtering meant any caller could omit salon_id and enumerate every
+// tenant's staff), so it's now fetched via the staff_directory_lookup RPC,
+// which takes p_salon_id as a required argument instead of an optional
+// client-supplied query-string filter. None of the remaining views in
+// this list are queried via dbDirect GETs (RPC/different paths instead),
+// so this list is intentionally empty for now -- kept as a named list
+// rather than deleted, so the next view added here is a deliberate choice.
+var KNOWN_VIEWS_QUERIED_LIKE_TABLES = [];
 
 describe("TENANT_TABLES stays in sync with the known tenant-scoped schema", () => {
   test("every table known to be salon_id-scoped AND client-queried is registered", () => {

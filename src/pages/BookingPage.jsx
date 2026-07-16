@@ -73,9 +73,19 @@ export default function BookingPage() {
 
   useEffect(() => {
     async function loadBookingData() {
+      // public_staff_directory (the old raw view) is no longer anon-readable
+      // -- it had no per-salon scoping built in, so any caller could omit
+      // the salon_id filter and enumerate every salon's staff. This calls
+      // staff_directory_lookup instead, which requires salon.id as a
+      // mandatory RPC argument. services/categories don't carry that same
+      // risk (no cross-tenant data in either), so they still load the same
+      // way regardless of whether salon.id has resolved yet.
+      const staffPromise = salon?.id
+        ? dbRpc("staff_directory_lookup", { p_salon_id: salon.id })
+        : Promise.resolve(null);
       const [sv, st, cats] = await Promise.all([
         db("GET", "services", null, "?active=eq.true&order=cat.asc,name.asc"),
-        db("GET", "public_staff_directory", null, "?active=eq.true&order=created_at.asc"),
+        staffPromise,
         db("GET", "salon_service_categories", null, "?active=eq.true&order=sort_order.asc"),
       ]);
       if (Array.isArray(sv)) setBookingServices(sv);
@@ -83,7 +93,7 @@ export default function BookingPage() {
       if (Array.isArray(cats) && cats.length > 0) setCategories(cats.map(c => c.name));
     }
     loadBookingData();
-  }, []);
+  }, [salon?.id]);
 
   async function confirm() {
     if (!sel.name || !sel.phone) return alert("Please enter your name and phone number");
@@ -126,14 +136,18 @@ export default function BookingPage() {
     // This no longer directly confirms payment -- it records the customer's
     // CLAIM that they paid, timestamped, and staff confirm it from the POS
     // app after checking their own M-Pesa SMS/app (see POSApp.jsx's
-    // confirmPayment()). The anon RLS policy on bookings only allows this
+    // confirmPayment()). claim_booking_payment_status only allows this
     // exact transition (pending -> awaiting_confirmation), never straight
     // to paid_upfront -- that requires an authenticated staff action now.
+    // The RPC also requires the caller to know the booking's phone number,
+    // closing the old gap where bookings.id's sequential bigint made the
+    // row guessable (see migration 049).
     if (savedBooking?.id) {
-      await db("PATCH", "bookings", {
-        payment_status: "awaiting_confirmation",
-        payment_claimed_at: new Date().toISOString(),
-      }, `?id=eq.${savedBooking.id}`);
+      await dbRpc("claim_booking_payment_status", {
+        p_booking_id: savedBooking.id,
+        p_phone: savedBooking.phone,
+        p_new_status: "awaiting_confirmation",
+      });
     }
     setPaymentStatus("awaiting_confirmation");
     setShowMpesa(false);
@@ -141,7 +155,13 @@ export default function BookingPage() {
   }
 
   async function handlePayLater() {
-    if (savedBooking?.id) await db("PATCH", "bookings", { payment_status: "pay_later" }, `?id=eq.${savedBooking.id}`);
+    if (savedBooking?.id) {
+      await dbRpc("claim_booking_payment_status", {
+        p_booking_id: savedBooking.id,
+        p_phone: savedBooking.phone,
+        p_new_status: "pay_later",
+      });
+    }
     setPaymentStatus("pay_later");
     setShowMpesa(false);
     setDone(true);

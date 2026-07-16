@@ -71,14 +71,23 @@ describe("BookingPage — full booking + payment-claim flow (mocked db)", () => 
     useSalon.mockReturnValue(FAKE_SALON);
     db.mockImplementation((method, table) => {
       if (method === "GET" && table === "services") return Promise.resolve(FAKE_SERVICES);
-      if (method === "GET" && table === "public_staff_directory") return Promise.resolve(FAKE_STAFF);
       if (method === "GET" && table === "salon_service_categories") return Promise.resolve(FAKE_CATEGORIES);
       if (method === "POST" && table === "bookings") return Promise.resolve([{ id: "booking-uuid-99" }]);
       if (method === "POST" && table === "customers") return Promise.resolve([{ id: "cust-1" }]);
-      if (method === "PATCH" && table === "bookings") return Promise.resolve([{ id: "booking-uuid-99" }]);
       return Promise.resolve(null);
     });
-    dbRpc.mockResolvedValue([]); // public_customer_lookup: no existing customer found
+    // Per-function responses -- staff now comes from staff_directory_lookup
+    // (the RPC that replaced the raw public_staff_directory view read, see
+    // migration 050), alongside the pre-existing public_customer_lookup and
+    // claim_booking_payment_status RPCs. Tests below override individual
+    // functions via mockImplementation rather than a single mockResolvedValue,
+    // so overriding the customer-lookup response doesn't also blank out staff.
+    dbRpc.mockImplementation((fn) => {
+      if (fn === "staff_directory_lookup") return Promise.resolve(FAKE_STAFF);
+      if (fn === "public_customer_lookup") return Promise.resolve([]); // no existing customer found
+      if (fn === "claim_booking_payment_status") return Promise.resolve(true);
+      return Promise.resolve(null);
+    });
   });
 
   test("customer can walk the full wizard and confirm a booking", async () => {
@@ -122,6 +131,12 @@ describe("BookingPage — full booking + payment-claim flow (mocked db)", () => 
       }));
     });
 
+    // Staff list is fetched via the scoped RPC, not a raw public_staff_directory
+    // read -- confirms the salon id is always passed as a mandatory argument.
+    expect(dbRpc).toHaveBeenCalledWith("staff_directory_lookup", {
+      p_salon_id: "salon-uuid-1",
+    });
+
     // New customer lookup + creation (no existing customer, per the
     // dbRpc mock above returning an empty array).
     expect(dbRpc).toHaveBeenCalledWith("public_customer_lookup", {
@@ -137,9 +152,11 @@ describe("BookingPage — full booking + payment-claim flow (mocked db)", () => 
     fireEvent.click(screen.getByText("MOCK_PAY_LATER"));
 
     await waitFor(() => {
-      expect(db).toHaveBeenCalledWith(
-        "PATCH", "bookings", { payment_status: "pay_later" }, "?id=eq.booking-uuid-99"
-      );
+      expect(dbRpc).toHaveBeenCalledWith("claim_booking_payment_status", {
+        p_booking_id: "booking-uuid-99",
+        p_phone: "0712345678",
+        p_new_status: "pay_later",
+      });
     });
 
     // Confirmation screen
@@ -147,7 +164,12 @@ describe("BookingPage — full booking + payment-claim flow (mocked db)", () => 
   });
 
   test("does not attempt to create a customer if the phone number already exists", async () => {
-    dbRpc.mockResolvedValue([{ id: "existing-cust-1" }]); // existing customer found
+    dbRpc.mockImplementation((fn) => {
+      if (fn === "staff_directory_lookup") return Promise.resolve(FAKE_STAFF);
+      if (fn === "public_customer_lookup") return Promise.resolve([{ id: "existing-cust-1" }]); // existing customer found
+      if (fn === "claim_booking_payment_status") return Promise.resolve(true);
+      return Promise.resolve(null);
+    });
 
     render(<BookingPage />);
     await waitFor(() => expect(screen.getByText("Haircut")).toBeInTheDocument());
@@ -180,8 +202,12 @@ describe("BookingPage — full booking + payment-claim flow (mocked db)", () => 
     render(<BookingPage />);
     await waitFor(() => expect(screen.getByText("Haircut")).toBeInTheDocument());
     fireEvent.click(screen.getByText("Haircut"));
-    await waitFor(() => expect(screen.getByText("Jane")).toBeInTheDocument());
-    fireEvent.click(screen.getByText("Jane"));
+    // Staff loading also requires salon.id now (staff_directory_lookup takes
+    // it as a mandatory RPC argument, mirroring the customer-lookup guard
+    // below), so with salon.id missing, bookingStaff never populates --
+    // only the always-present "Any available" fallback option renders.
+    await waitFor(() => expect(screen.getByText("Any available")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Any available"));
     await waitFor(() => expect(screen.getByText("10:00")).toBeInTheDocument());
     fireEvent.change(screen.getByDisplayValue(""), { target: { value: "2026-08-01" } });
     fireEvent.click(screen.getByText("10:00"));
@@ -195,7 +221,8 @@ describe("BookingPage — full booking + payment-claim flow (mocked db)", () => 
     // on salon.id -- db.js's own tenant resolution handles that layer).
     await waitFor(() => expect(db).toHaveBeenCalledWith("POST", "bookings", expect.any(Object)));
 
-    // But the customer lookup/create is skipped entirely, not guessed.
+    // Staff lookup and customer lookup/create are both skipped entirely,
+    // not guessed -- neither RPC call ever fires without a resolved salon.id.
     expect(dbRpc).not.toHaveBeenCalled();
     expect(db).not.toHaveBeenCalledWith("POST", "customers", expect.any(Object));
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining("Refusing customer lookup"));
