@@ -6,6 +6,14 @@ import { GOLD, GOLD_DIM, BLACK, WHITE, DARK, CREAM, GREEN, RED, AMBER } from "..
 // are module-level values/derived values the parent already owned there,
 // threaded through as props rather than duplicated. All handlers/state are
 // passed down unchanged (props-only, not a context migration).
+//
+// The suspend-salon modal JSX (suspendModal/suspendReason/suspendSalon) was
+// relocated into this component in a later commit -- it originally lived in
+// SuperAdminDashboard.jsx's own (default salons-list-view) return tree, a
+// separate render tree from this one, so it could never actually render:
+// setSuspendModal(s) is only ever called from the "Suspend Salon" button
+// below, which only exists on this page. Identical bug class, and fix, to
+// the payment modal earlier in this file.
 export default function DetailView({
   selectedSalon, setView, detailReturnView, setSelectedSalon,
   Badge, StatCard, fmt, PLANS,
@@ -15,6 +23,7 @@ export default function DetailView({
   setResetPinModal, setResetPinRole, setResetPinValue, setResetPinConfirm, setResetPinError,
   reactivateSalon, actionLoading, setSuspendModal,
   paymentModal, payPlan, setPayPlan, payAmount, payNotes, setPayNotes, paymentSaving, recordPayment,
+  suspendModal, suspendReason, setSuspendReason, suspendSalon,
 }) {
   var s = selectedSalon;
   return (
@@ -245,6 +254,39 @@ export default function DetailView({
         </div>
       </div>
     )}
+
+      {suspendModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 2000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div style={{ background: WHITE, borderRadius: "20px 20px 0 0", padding: "24px 20px 32px", width: "100%", maxWidth: 480 }}>
+            <div style={{ fontSize: 15, fontWeight: 900, color: RED, marginBottom: 6 }}>⛔ Suspend Salon</div>
+            <div style={{ fontSize: 13, color: "#555", marginBottom: 16 }}>
+              You are about to suspend <b>{suspendModal.name}</b>. Their POS and booking page will be blocked immediately.
+            </div>
+            <label style={{ fontSize: 11, fontWeight: 800, color: "#888", display: "block", marginBottom: 6, textTransform: "uppercase" }}>Reason (optional)</label>
+            <input
+              value={suspendReason}
+              onChange={function(e) { setSuspendReason(e.target.value); }}
+              placeholder="e.g. Non-payment, policy violation..."
+              style={{ width: "100%", borderRadius: 10, border: "1.5px solid #ddd", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, marginBottom: 16 }}
+            />
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <button
+                onClick={function() { suspendSalon(suspendModal, suspendReason); }}
+                disabled={actionLoading}
+                style={{ width: "100%", background: RED, color: WHITE, border: "none", borderRadius: 12, padding: "14px 0", fontWeight: 900, fontSize: 14, cursor: "pointer" }}
+              >
+                {actionLoading ? "Suspending..." : "Confirm Suspend"}
+              </button>
+              <button
+                onClick={function() { setSuspendModal(null); setSuspendReason(""); }}
+                style={{ width: "100%", background: WHITE, color: "#888", border: "1.5px solid #ddd", borderRadius: 12, padding: "12px 0", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
