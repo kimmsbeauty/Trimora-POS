@@ -30,7 +30,7 @@
 // (or trigger revisiting this decision if it turns out to fight the
 // codebase rather than fit it).
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { db } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
 import { SUPABASE_URL, SUPABASE_KEY } from "../../lib/constants";
@@ -168,6 +168,18 @@ export default function AutoSettingsPage() {
   var [receiptSaved, setReceiptSaved] = useState(false);
   var [receiptError, setReceiptError] = useState("");
 
+  // ── Coupons ──────────────────────────────────────────────────────
+  // Unlimited uses until expiry, no per-redemption tracking needed --
+  // much simpler than Membership/Referral turned out to be. Applied
+  // via a code lookup at checkout (BoardPage.jsx), not tied to any one
+  // customer, so managed here in Settings rather than on a customer's
+  // detail page the way Membership Plans are sold.
+  var [coupons, setCoupons] = useState([]);
+  var [showCouponEditor, setShowCouponEditor] = useState(false);
+  var [couponForm, setCouponForm] = useState({ code: "", discount_pct: "", expires_at: "" });
+  var [couponSaving, setCouponSaving] = useState(false);
+  var [couponError, setCouponError] = useState("");
+
   useEffect(function () {
     if (!salon || !salon.id) return;
     (async function () {
@@ -190,6 +202,14 @@ export default function AutoSettingsPage() {
     })();
     setSalonDisplayName(salon.name || "");
   }, [salon && salon.id]);
+
+  var loadCoupons = useCallback(async function () {
+    if (!salon || !salon.id) return;
+    var rows = await db("GET", "auto_coupons", null, "?order=created_at.desc");
+    setCoupons(rows || []);
+  }, [salon && salon.id]);
+
+  useEffect(function () { loadCoupons(); }, [loadCoupons]);
 
   async function saveBranding() {
     setBrandingError("");
@@ -279,6 +299,33 @@ export default function AutoSettingsPage() {
     if (ok === null) { setReceiptError("Save failed."); return; }
     setReceiptSaved(true);
     autoResetSaved(setReceiptSaved);
+  }
+
+  async function createCoupon() {
+    if (couponSaving) return;
+    setCouponError("");
+    var code = couponForm.code.trim().toUpperCase();
+    var pct = parseInt(couponForm.discount_pct, 10);
+    if (!code) { setCouponError("Enter a code."); return; }
+    if (isNaN(pct) || pct <= 0 || pct > 100) { setCouponError("Enter a whole number between 1 and 100."); return; }
+    if (coupons.some(function (c) { return c.code === code; })) { setCouponError("That code already exists."); return; }
+
+    setCouponSaving(true);
+    var ok = await db("POST", "auto_coupons", {
+      salon_id: salon.id, code: code, discount_pct: pct,
+      expires_at: couponForm.expires_at ? new Date(couponForm.expires_at + "T23:59:59").toISOString() : null,
+      active: true,
+    });
+    setCouponSaving(false);
+    if (ok === null) { setCouponError("Save failed."); return; }
+    setCouponForm({ code: "", discount_pct: "", expires_at: "" });
+    setShowCouponEditor(false);
+    loadCoupons();
+  }
+
+  async function toggleCouponActive(coupon) {
+    await db("PATCH", "auto_coupons", { active: !coupon.active }, "?id=eq." + coupon.id);
+    loadCoupons();
   }
 
   // ── Subscription -- ported from SalonSettingsPage ────────────────────
@@ -528,7 +575,7 @@ export default function AutoSettingsPage() {
       <div style={{ padding: "20px 20px 4px" }}>
         <div style={{ fontSize: 20, fontWeight: 800, color: PAPER }}>Settings</div>
         <div style={{ fontSize: 12, color: CHROME, marginTop: 2 }}>
-          Branding, Contact & Payments, M-Pesa, PIN Management, Business Info, Preferences, Referrals, Tax (VAT), Receipt, Subscription.
+          Branding, Contact & Payments, M-Pesa, PIN Management, Business Info, Preferences, Referrals, Tax (VAT), Receipt, Coupons, Subscription.
         </div>
       </div>
       <div style={{ padding: 20, maxWidth: 480, margin: "0 auto" }}>
@@ -779,6 +826,64 @@ export default function AutoSettingsPage() {
 
           {receiptError && <div style={{ color: ALERT, fontSize: 12, marginBottom: 8 }}>{receiptError}</div>}
           <SaveBtn onClick={saveReceiptSettings} saving={receiptSaving} saved={receiptSaved} />
+        </div>
+
+        {/* ── COUPONS ──────────────────────────────────────────── */}
+        <div style={sectionStyle}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: coupons.length > 0 || showCouponEditor ? 10 : 0 }}>
+            <div style={sectionTitleStyle}><span>🎟️</span> Coupons</div>
+            <div onClick={function () { setShowCouponEditor(!showCouponEditor); setCouponError(""); }} style={{ fontSize: 12, color: SIGNAL, fontWeight: 700, cursor: "pointer" }}>
+              {showCouponEditor ? "Cancel" : "+ New Coupon"}
+            </div>
+          </div>
+
+          {showCouponEditor && (
+            <div style={{ marginBottom: 12, padding: 12, borderRadius: 10, border: "1px solid " + CHROME + "22", background: "rgba(255,255,255,0.02)" }}>
+              <input value={couponForm.code}
+                onChange={function (e) { setCouponForm(Object.assign({}, couponForm, { code: e.target.value.toUpperCase() })); }}
+                placeholder="CODE (e.g. WELCOME10)"
+                style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.04)", color: PAPER, border: "1px solid rgba(143,166,184,0.3)", borderRadius: 8, padding: "10px", fontSize: 13, marginBottom: 8, textTransform: "uppercase" }} />
+              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                <input type="number" value={couponForm.discount_pct}
+                  onChange={function (e) { setCouponForm(Object.assign({}, couponForm, { discount_pct: e.target.value })); }}
+                  placeholder="% off"
+                  style={{ flex: 1, background: "rgba(255,255,255,0.04)", color: PAPER, border: "1px solid rgba(143,166,184,0.3)", borderRadius: 8, padding: "10px", fontSize: 13 }} />
+                <input type="date" value={couponForm.expires_at}
+                  onChange={function (e) { setCouponForm(Object.assign({}, couponForm, { expires_at: e.target.value })); }}
+                  style={{ flex: 1, background: "rgba(255,255,255,0.04)", color: PAPER, border: "1px solid rgba(143,166,184,0.3)", borderRadius: 8, padding: "10px", fontSize: 13 }} />
+              </div>
+              <div style={{ fontSize: 10, color: CHROME, marginBottom: 8 }}>Leave the date blank for a coupon that never expires.</div>
+              {couponError && <div style={{ fontSize: 12, color: ALERT, marginBottom: 8 }}>{couponError}</div>}
+              <button onClick={createCoupon} disabled={couponSaving} style={{
+                width: "100%", background: SIGNAL, color: INK, border: "none", borderRadius: 8, padding: "10px",
+                fontSize: 13, fontWeight: 800, cursor: "pointer", opacity: couponSaving ? 0.6 : 1,
+              }}>
+                Create coupon
+              </button>
+            </div>
+          )}
+
+          {coupons.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {coupons.map(function (c) {
+                var expired = c.expires_at && new Date(c.expires_at) < new Date();
+                return (
+                  <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", borderRadius: 8, background: "rgba(255,255,255,0.02)", opacity: (c.active && !expired) ? 1 : 0.5 }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: PAPER, fontFamily: "monospace" }}>{c.code}</div>
+                      <div style={{ fontSize: 10, color: CHROME }}>
+                        {c.discount_pct}% off{c.expires_at ? " · expires " + new Date(c.expires_at).toLocaleDateString("en-KE") : " · no expiry"}
+                        {expired ? " (expired)" : ""}
+                      </div>
+                    </div>
+                    <span onClick={function () { toggleCouponActive(c); }} style={{ fontSize: 10, color: CHROME, textDecoration: "underline", cursor: "pointer" }}>
+                      {c.active ? "Deactivate" : "Reactivate"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* ── SUBSCRIPTION ─────────────────────────────────────── */}

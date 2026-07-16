@@ -16,6 +16,7 @@ export const TENANT_TABLES = new Set([
   "auto_membership_plans", "customer_memberships", "customer_wallet_transactions",
   "auto_referrals",
   "auto_refunds",
+  "auto_coupons",
 ]);
 
 const QUEUE_STORAGE_KEY = "trimora_offline_queue";

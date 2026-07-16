@@ -135,6 +135,14 @@ export default function BoardPage() {
   // between visits is never stale.
   var membershipsState = useState({}); var membershipsByCustomerId = membershipsState[0]; var setMembershipsByCustomerId = membershipsState[1];
   var referralsState = useState([]); var referrals = referralsState[0]; var setReferrals = referralsState[1];
+  // Coupon: unlike membership/referral, nothing is pre-fetched -- it's
+  // an explicit staff action (type a code, hit Apply), looked up on
+  // demand. Keyed by job.id, same "one object, keyed" pattern as
+  // commissionEdits, since these are per-job inputs inside a .map() and
+  // can't be their own useState calls.
+  var couponInputState = useState({}); var couponInputByJobId = couponInputState[0]; var setCouponInputByJobId = couponInputState[1];
+  var couponErrorState = useState({}); var couponErrorByJobId = couponErrorState[0]; var setCouponErrorByJobId = couponErrorState[1];
+  var couponApplyingState = useState(null); var couponApplyingJobId = couponApplyingState[0]; var setCouponApplyingJobId = couponApplyingState[1];
   var busyState = useState(false); var busy = busyState[0]; var setBusy = busyState[1];
   var salon = useSalon();
   // Phase 5: completing a job requires collecting payment first --
@@ -288,6 +296,38 @@ export default function BoardPage() {
     var asReferrer = referrals.filter(function (r) { return r.referrer_customer_id === job.customer_id && r.referrer_reward_status === "pending"; })[0];
     if (asReferrer) return { referral: asReferrer, role: "referrer" };
     return null;
+  }
+
+  // Coupon: entering one is a deliberate staff action, so it's allowed
+  // to override whatever else was in the discount slot -- an auto-
+  // applied Referral, a manually-applied Membership, or nothing at all.
+  // Unlimited-use-until-expiry means this is a pure lookup with no
+  // redemption bookkeeping, unlike Membership/Referral.
+  async function applyCoupon(job) {
+    var rawCode = (couponInputByJobId[job.id] || "").trim().toUpperCase();
+    if (!rawCode) return;
+    setCouponApplyingJobId(job.id);
+    setCouponErrorByJobId(function (prev) { return Object.assign({}, prev, { [job.id]: "" }); });
+    var rows = await db("GET", "auto_coupons", null, "?code=eq." + encodeURIComponent(rawCode) + "&active=eq.true&limit=1");
+    setCouponApplyingJobId(null);
+    var coupon = rows && rows[0];
+    if (!coupon) {
+      setCouponErrorByJobId(function (prev) { return Object.assign({}, prev, { [job.id]: "Coupon not found or inactive." }); });
+      return;
+    }
+    if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
+      setCouponErrorByJobId(function (prev) { return Object.assign({}, prev, { [job.id]: "That coupon has expired." }); });
+      return;
+    }
+    setCommissionEdits(function (prev) {
+      var next = Object.assign({}, prev);
+      next[job.id] = Object.assign({}, next[job.id], {
+        discountType: "pct", discountValue: String(coupon.discount_pct),
+        discountSource: "coupon", discountCouponCode: coupon.code,
+      });
+      return next;
+    });
+    setCouponInputByJobId(function (prev) { return Object.assign({}, prev, { [job.id]: "" }); });
   }
 
   // Referral rewards apply automatically, unlike Membership's manual
@@ -935,6 +975,7 @@ export default function BoardPage() {
               var membershipApplied = edits.discountType === "membership";
               var referralMatch = isReadyForCollection ? findReferralMatch(job) : null;
               var referralApplied = edits.discountSource === "referral";
+              var couponApplied = edits.discountSource === "coupon";
 
               return (
                 <div key={job.id} style={{
@@ -1087,6 +1128,45 @@ export default function BoardPage() {
                             style={{ fontSize: 11, color: CHROME, textDecoration: "underline", cursor: "pointer" }}>
                             Remove
                           </span>
+                        </div>
+                      )}
+
+                      {couponApplied ? (
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+                          <span style={{ fontSize: 11, color: SIGNAL, fontWeight: 700 }}>
+                            ✓ Coupon {edits.discountCouponCode} applied — {edits.discountValue}% off (−KSh {(pricing ? pricing.discountAmount : 0).toLocaleString()})
+                          </span>
+                          <span onClick={function () { setDiscount({ discountType: null, discountValue: "", discountSource: undefined, discountCouponCode: undefined }); }}
+                            style={{ fontSize: 11, color: CHROME, textDecoration: "underline", cursor: "pointer" }}>
+                            Remove
+                          </span>
+                        </div>
+                      ) : (
+                        <div style={{ marginBottom: 10 }}>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <input value={couponInputByJobId[job.id] || ""}
+                              onChange={function (e) {
+                                var v = e.target.value.toUpperCase();
+                                setCouponInputByJobId(function (prev) { return Object.assign({}, prev, { [job.id]: v }); });
+                              }}
+                              placeholder="Coupon code"
+                              style={{
+                                flex: 1, background: "rgba(255,255,255,0.04)", color: PAPER,
+                                border: "1px solid rgba(143,166,184,0.3)", borderRadius: 6, padding: "6px 8px", fontSize: 11, textTransform: "uppercase",
+                              }} />
+                            <button onClick={function () { applyCoupon(job); }}
+                              disabled={couponApplyingJobId === job.id || !(couponInputByJobId[job.id] || "").trim()}
+                              style={{
+                                background: "transparent", color: SIGNAL, border: "1.5px solid " + SIGNAL,
+                                borderRadius: 6, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                                opacity: couponApplyingJobId === job.id ? 0.6 : 1,
+                              }}>
+                              Apply
+                            </button>
+                          </div>
+                          {couponErrorByJobId[job.id] && (
+                            <div style={{ fontSize: 10, color: ALERT, marginTop: 4 }}>{couponErrorByJobId[job.id]}</div>
+                          )}
                         </div>
                       )}
 

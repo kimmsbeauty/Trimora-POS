@@ -103,6 +103,11 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
                   // policy: an append-only ledger, same convention as
                   // customer_wallet_transactions). Queried/written from
                   // ReportsPage.jsx.
+  "auto_coupons", // added 2026-07-15 alongside Coupons -- salon_id
+                  // column, standard select/insert/update/delete
+                  // policies via auth_salon_id(). Managed from
+                  // AutoSettingsPage.jsx (create/deactivate), looked
+                  // up from BoardPage.jsx at checkout.
 ];
 
 // Tables confirmed live (2026-07-07) to have a salon_id column, but
