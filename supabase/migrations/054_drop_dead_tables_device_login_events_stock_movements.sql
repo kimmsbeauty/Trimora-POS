@@ -1,0 +1,33 @@
+-- Dead-code cleanup (found during a full dead-code sweep of the
+-- schema, not part of the original security audit).
+--
+-- device_login_events: rate-limit table added alongside the original
+-- Critical-1 stopgap for silent-device-login. When that endpoint was
+-- later fully deprecated (audit Critical-1 real fix -- PIN-first
+-- login), the code using this table was intentionally stripped, but
+-- the table itself was never cleaned up. Confirmed zero references
+-- anywhere in src/, any Edge Function, or any SQL function body.
+-- Contained 3 rows of ephemeral login-attempt timestamps with no
+-- business or audit value.
+--
+-- stock_movements: RLS was correctly configured (migration 046, join
+-- through stock.salon_id), but nothing has ever written to it --
+-- confirmed 0 rows, no trigger populates it, zero references anywhere
+-- in src/, any Edge Function, or any SQL function body.
+--
+-- NOT touched in this migration, deliberately: stock_log (20 rows of
+-- real historical data, same "nothing currently reads/writes it"
+-- shape as stock_movements, but has actual data behind it) and
+-- products (10 rows, already flagged in the 2026-07-08 handover as
+-- dead, same reasoning). Both are real historical business data
+-- predating this cleanup, not ephemeral tracking tables -- dropping
+-- either is a product decision (wire up vs. delete), not a unilateral
+-- dead-code removal, so both are left as-is pending that decision.
+--
+-- Applied directly to the live DB and verified 2026-07-17: DROP TABLE
+-- succeeded without needing CASCADE for either table, confirming
+-- nothing else in the schema depended on them. Full test suite
+-- (187/187) and production build both verified clean afterward.
+
+DROP TABLE public.device_login_events;
+DROP TABLE public.stock_movements;
