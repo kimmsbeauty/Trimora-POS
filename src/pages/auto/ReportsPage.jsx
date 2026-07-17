@@ -172,8 +172,53 @@ export default function ReportsPage({ isAdmin }) {
     }
     await db("PATCH", "auto_jobs", jobPatch, "?id=eq." + job.id);
 
+    // Wallet credit-back: if any of this job was paid from the customer's
+    // wallet, that portion needs to come back on refund, or the customer
+    // is out real money with no way to get it back short of a manual
+    // staff-side wallet topup. Same proportional-reduction math as
+    // commission above, applied to wallet_amount_used instead: the total
+    // wallet credit owed once newRefundedAmount is reached, minus what's
+    // already been credited back for alreadyRefunded, so a full refund
+    // spread across multiple partial refunds still nets out to exactly
+    // wallet_amount_used in total (up to rounding).
+    if (job.wallet_amount_used > 0 && job.customer_id) {
+      var walletOwedByNow = Math.round((job.wallet_amount_used * newRefundedAmount) / payable);
+      var walletAlreadyCredited = Math.round((job.wallet_amount_used * alreadyRefunded) / payable);
+      var walletCreditThisRefund = walletOwedByNow - walletAlreadyCredited;
+      if (walletCreditThisRefund > 0) {
+        await dbRpcAuth("apply_wallet_transaction", {
+          p_customer_id: job.customer_id, p_type: "credit", p_amount: walletCreditThisRefund,
+          p_reference_type: "auto_job_refund", p_reference_id: job.id,
+          p_notes: "Refund on job " + job.id + (refundReason.trim() ? ": " + refundReason.trim() : ""),
+        });
+        // Best-effort, same convention as stock restoration below: the
+        // auto_refunds record is what matters for the books; if the wallet
+        // credit fails (e.g. a network blip), it's not surfaced as a
+        // refund failure, but it IS a real gap worth checking manually --
+        // unlike stock, this is real customer money.
+      }
+    }
+
     if (isNowFullyRefunded) {
       await restoreStockForJob(job);
+
+      // Referral reward reversion: only on a FULL refund, mirroring the
+      // stock-restoration scoping above -- a partial refund doesn't
+      // undo the visit that earned the reward, only a full one does.
+      // Reverts status back to "pending" rather than clearing the job
+      // link, so the existing redemption UI (BoardPage.jsx) can offer it
+      // again on a future job without any schema change.
+      var referralRows = await db("GET", "auto_referrals", null,
+        "?status=eq.redeemed&or=(referred_job_id.eq." + job.id + ",referrer_job_id.eq." + job.id + ")");
+      if (Array.isArray(referralRows)) {
+        for (var i = 0; i < referralRows.length; i++) {
+          var ref = referralRows[i];
+          var revertPatch = {};
+          if (ref.referred_job_id === job.id) revertPatch.referred_reward_status = "pending";
+          if (ref.referrer_job_id === job.id) revertPatch.referrer_reward_status = "pending";
+          await db("PATCH", "auto_referrals", revertPatch, "?id=eq." + ref.id);
+        }
+      }
     }
 
     // Loyalty: a partial refund only walks back total_spend by the
@@ -294,6 +339,17 @@ export default function ReportsPage({ isAdmin }) {
 
   async function markInvoicePaid(invoice) {
     var result = await dbRpcAuth("mark_auto_invoice_paid", { p_invoice_id: invoice.id });
+    if (result.error) { alert(result.error); return; }
+    load();
+  }
+
+  // Only 'issued' -> 'void' is allowed (see migration 051) -- a paid
+  // invoice needs a refund, not a void, since money's already changed
+  // hands and that has its own reconciliation concerns.
+  async function voidInvoice(invoice) {
+    if (!window.confirm("Void " + (invoice.invoice_number || "this invoice") + "? This can't be undone.")) return;
+    var reason = window.prompt("Reason for voiding (optional):") || "";
+    var result = await dbRpcAuth("void_auto_invoice", { p_invoice_id: invoice.id, p_reason: reason });
     if (result.error) { alert(result.error); return; }
     load();
   }
@@ -816,7 +872,7 @@ export default function ReportsPage({ isAdmin }) {
             {invoices.map(function (inv) {
               var cust = inv.customers || {};
               var jobCount = (inv.auto_invoice_jobs || []).length;
-              var statusColor = inv.status === "paid" ? SIGNAL : inv.status === "issued" ? PAPER : CHROME;
+              var statusColor = inv.status === "paid" ? SIGNAL : inv.status === "issued" ? PAPER : inv.status === "void" ? ALERT : CHROME;
               return (
                 <div key={inv.id} style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid " + CHROME + "22", background: "rgba(255,255,255,0.02)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -831,6 +887,9 @@ export default function ReportsPage({ isAdmin }) {
                     <span style={{ fontSize: 11, fontWeight: 800, color: statusColor, textTransform: "uppercase" }}>{inv.status}</span>
                   </div>
                   {inv.notes && <div style={{ fontSize: 11, color: CHROME, marginTop: 6 }}>{inv.notes}</div>}
+                  {inv.status === "void" && inv.void_reason && (
+                    <div style={{ fontSize: 11, color: ALERT, marginTop: 6 }}>Voided: {inv.void_reason}</div>
+                  )}
                   <div style={{ display: "flex", gap: 14, marginTop: 8 }}>
                     {inv.status === "draft" && (
                       <>
@@ -843,9 +902,14 @@ export default function ReportsPage({ isAdmin }) {
                       </>
                     )}
                     {inv.status === "issued" && (
-                      <span onClick={function () { markInvoicePaid(inv); }} style={{ fontSize: 11, color: SIGNAL, fontWeight: 700, cursor: "pointer", textDecoration: "underline" }}>
-                        Mark Paid
-                      </span>
+                      <>
+                        <span onClick={function () { markInvoicePaid(inv); }} style={{ fontSize: 11, color: SIGNAL, fontWeight: 700, cursor: "pointer", textDecoration: "underline" }}>
+                          Mark Paid
+                        </span>
+                        <span onClick={function () { voidInvoice(inv); }} style={{ fontSize: 11, color: ALERT, cursor: "pointer", textDecoration: "underline" }}>
+                          Void
+                        </span>
+                      </>
                     )}
                   </div>
                 </div>
