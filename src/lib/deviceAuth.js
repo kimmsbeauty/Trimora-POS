@@ -83,31 +83,13 @@ export async function signInDevice(email, password) {
   }
 }
 
-// Replaces the human-facing email+password device login. Given just the
-// salon_id (already resolvable from the URL slug before any auth exists),
-// silently establishes a device session in the background - no email,
-// no password, anywhere, ever, for normal use.
-export async function silentDeviceLogin(salonId) {
-  try {
-    var res = await fetch(SUPABASE_URL + "/functions/v1/silent-device-login", {
-      method: "POST",
-      headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({ salon_id: salonId }),
-    });
-
-    var data = await res.json().catch(function() { return {}; });
-
-    if (!res.ok || !data.access_token) {
-      return { ok: false, error: (data && data.error) || "Could not connect to this salon. Please contact support." };
-    }
-
-    persistSession(data, salonId);
-
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: "Could not reach server. Check your connection." };
-  }
-}
+// silentDeviceLogin() -- called the now-deprecated silent-device-login
+// Edge Function (audit Critical-1: minted a session from a public
+// salon_id, no proof of identity). Confirmed via a repo-wide search
+// that nothing imported/called this wrapper anymore before removing it
+// -- the real login path is LoginPage.jsx's verifyPin(), which calls
+// device-pin-login instead and establishes the session only after the
+// PIN itself is verified.
 
 async function refreshAccessToken(auth) {
   try {
