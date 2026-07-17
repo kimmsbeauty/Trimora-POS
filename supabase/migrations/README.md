@@ -87,10 +87,19 @@ keeping its original content and history intact:
 - `009_rls_stock_log_stock_movements.sql` → `046_rls_stock_log_stock_movements.sql`
 - `015_allow_anon_payment_status_update.sql` → `047_allow_anon_payment_status_update.sql`
 - `029_superadmin_auto_health_and_analytics.sql` → `048_superadmin_auto_health_and_analytics.sql`
+- `053_scope_rating_lookups_by_token.sql` → `055_scope_rating_lookups_by_token.sql` *(a second, independent `053` collision — see the RECURRING PATTERN note below)*
 
 If you're setting up a fresh database from these files, run them in the
 numeric order shown above (the renamed files' *content* still reflects when
 they were originally written, not the number they now carry).
+
+**RECURRING PATTERN, read before naming your next migration:** this has now
+happened twice (`009`/`015`/`029` in one batch, `053` independently a week
+later) from different concurrent sessions each picking the next number
+without re-checking the live file list first. If you're about to name a
+migration file, run `git pull && ls supabase/migrations/ | sort | tail -5`
+immediately before choosing a number — don't trust what a summary or an
+earlier turn in your own conversation told you the highest number was.
 
 ## RPCs in supabase/sql/ (also already run)
 
@@ -100,12 +109,25 @@ they were originally written, not the number they now carry).
 | `super_admin_update_salon.sql` | Full version with comments |
 | `audit_log.sql` | Full version with comments |
 
+## Migrations 051-055 (2026-07-17)
+
+| File | Description |
+|---|---|
+| `051_void_auto_invoice.sql` | **Feature fix:** `void_auto_invoice` RPC + `voided_at`/`void_reason` columns. `auto_invoices.status`'s CHECK constraint allowed `'void'` since the table was created, but no RPC/UI ever implemented it. |
+| `052_anon_read_salon_enabled_modules.sql` | **Production bug fix:** `salon_enabled_modules` had RLS enabled with an `authenticated`-only policy, but `AutoApp.jsx`'s `ModuleGate` checks it pre-login (as `anon`) by design. Every salon with Auto enabled was showing "Trimora Auto isn't turned on" to every visitor, regardless of actual state. Added the missing `anon` SELECT policy. |
+| `053_scope_public_services_and_categories_lookup.sql` | **Security fix:** replaced unscoped anon `SELECT` on `services`/`salon_service_categories` (zero row filtering, scrapeable platform-wide price list) with `public_services_lookup(p_salon_id)` / `public_service_categories_lookup(p_salon_id)` RPCs. |
+| `054_drop_dead_tables_device_login_events_stock_movements.sql` | **Cleanup:** dropped `device_login_events` (dead since the real PIN-first login fix replaced the code that used it) and `stock_movements` (correctly RLS-scoped per migration `046`, but confirmed 0 rows, never written to). `stock_log` and `products` were deliberately left alone — both have real historical data, dropping either is a product decision, not dead-code removal. |
+| `055_scope_rating_lookups_by_token.sql` *(renamed from a second, independent `053`)* | **Security fix:** replaced unscoped anon `SELECT` on `public_rating_lookup`/`public_auto_job_rating_lookup` (zero row filtering — anyone could pull every feedback token/client name/visit date platform-wide) with `rating_lookup_by_token(p_token)` / `auto_job_rating_lookup_by_token(p_token)` RPCs. |
+
 ## Notes
 
 - `public_salon_directory` — anon-readable, used by booking page and DeviceGate. Also now exposes `subscription_plan`/`subscription_status`/`subscription_expires_at` — `amount_paid` deliberately excluded, that stays super-admin-only via `salon_directory`.
 - `salon_directory` — authenticated + super-admin-gated, used by Super Admin only.
 - `public_staff_directory` (the view) is no longer anon/authenticated-readable as of migration `050` — use the `staff_directory_lookup(p_salon_id)` RPC instead.
 - `bookings`'s anon payment-status transition is no longer a raw RLS-gated UPDATE as of migration `049` — use the `claim_booking_payment_status(p_booking_id, p_phone, p_new_status)` RPC instead.
+- `services`/`salon_service_categories` are no longer anon-readable directly as of migration `053` — use `public_services_lookup(p_salon_id)` / `public_service_categories_lookup(p_salon_id)` instead. Authenticated staff access (POSApp.jsx) is untouched — those tables correctly remain in `db.js`'s `TENANT_TABLES`.
+- `public_rating_lookup`/`public_auto_job_rating_lookup` are no longer anon-readable directly as of migration `055` — use `rating_lookup_by_token(p_token)` / `auto_job_rating_lookup_by_token(p_token)` instead.
+- `device_login_events` and `stock_movements` no longer exist as of migration `054` (dropped, confirmed dead).
 - **Refund reconciliation** (2026-07-17, no migration file — frontend-only, `src/pages/auto/ReportsPage.jsx`'s `processRefund`): a refund on a job now credits back any `wallet_amount_used` proportionally via the existing `apply_wallet_transaction` RPC, and reverts any `auto_referrals` reward this job redeemed back to `pending` on a **full** refund only (mirrors the existing full-refund-only stock restoration). Membership needed no equivalent fix — `customer_memberships` has no per-visit usage counter, it's a time-window unlimited-use benefit, so there's nothing to "give back" on a refund.
 - All admin-facing RPCs use `SECURITY DEFINER` + a JWT `is_super_admin` (`app_metadata`) check, verified directly against every such function's source as of 2026-07-16 — none trust a client-passed `salon_id` as authorization.
 - PIN hashing: bcrypt (work factor 10) via pgcrypto. Legacy MD5 rows

@@ -1,7 +1,7 @@
 // src/lib/constants.js
 //
-// SUPABASE_URL/SUPABASE_KEY now prefer REACT_APP_SUPABASE_URL /
-// REACT_APP_SUPABASE_KEY (set in .env locally, or in Vercel's project
+// SUPABASE_URL/SUPABASE_KEY now prefer VITE_SUPABASE_URL /
+// VITE_SUPABASE_KEY (set in .env locally, or in Vercel's project
 // settings for production), falling back to the previous hardcoded
 // values if those env vars aren't set anywhere. This is deliberately
 // non-breaking: until the Vercel project env vars are actually added,
