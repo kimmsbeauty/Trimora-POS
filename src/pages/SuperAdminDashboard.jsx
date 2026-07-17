@@ -749,11 +749,14 @@ export default function SuperAdminDashboard({ onLogout }) {
       if (!rpcRes.ok) {
         var rpcErr = await rpcRes.json().catch(function() { return {}; });
         setManualLoading(false);
-        return alert("Salon setup failed: " + (rpcErr.message || JSON.stringify(rpcErr)));
+        return alert((manualModuleKey === "auto" ? "Car wash" : "Salon") + " setup failed: " + (rpcErr.message || JSON.stringify(rpcErr)));
       }
 
       setManualLoading(false);
-      setManualDone("✅ " + manualName + " onboarded successfully! POS: /" + slug + "/pos");
+      // Was hardcoded to /pos regardless of module -- a car wash onboarded
+      // here has no /pos route, only /auto (see AutoApp.jsx's ModuleGate).
+      setManualDone("✅ " + manualName + " onboarded successfully! " +
+        (manualModuleKey === "auto" ? "Auto: /" + slug + "/auto" : "POS: /" + slug + "/pos"));
       logAction(manualModuleKey === "auto" ? "manual_onboard_auto" : "manual_onboard", null, manualName.trim(), "Slug: " + slug + " · Email: " + manualEmail.trim());
       setManualName(""); setManualEmail(""); setManualPass("");
       setManualStaff(""); setManualAdmin("");
@@ -1335,13 +1338,17 @@ export default function SuperAdminDashboard({ onLogout }) {
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 2000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
           <div style={{ background: WHITE, borderRadius: "20px 20px 0 0", padding: "24px 20px 32px", width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}>
             <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 4 }}>{manualModuleKey === "auto" ? "🚗 Onboard Car Wash" : "🏪 Manual Onboarding"}</div>
-            <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>{manualModuleKey === "auto" ? "Create a salon with Auto enabled from the start, without an invite link." : "Create a salon directly without an invite link."}</div>
+            <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>{manualModuleKey === "auto" ? "Create a car wash with Auto enabled from the start, without an invite link." : "Create a salon directly without an invite link."}</div>
 
-            {[
+            {(manualModuleKey === "auto" ? [
+              ["Car Wash Name", manualName, setManualName, "text", "e.g. High Point Carwash"],
+              ["Owner Email", manualEmail, setManualEmail, "email", "owner@example.com"],
+              ["Temporary Password", manualPass, setManualPass, "password", "Min 6 characters"],
+            ] : [
               ["Salon Name", manualName, setManualName, "text", "e.g. Grace Beauty Studio"],
               ["Owner Email", manualEmail, setManualEmail, "email", "owner@salon.com"],
               ["Temporary Password", manualPass, setManualPass, "password", "Min 6 characters"],
-            ].map(function(field) {
+            ]).map(function(field) {
               return (
                 <div key={field[0]} style={{ marginBottom: 10 }}>
                   <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 5, textTransform: "uppercase" }}>{field[0]}</label>
@@ -1373,7 +1380,9 @@ export default function SuperAdminDashboard({ onLogout }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <button onClick={manualOnboard} disabled={manualLoading}
                 style={{ width: "100%", background: DARK, color: WHITE, border: "none", borderRadius: 12, padding: "14px 0", fontWeight: 900, fontSize: 14, cursor: "pointer", opacity: manualLoading ? 0.7 : 1 }}>
-                {manualLoading ? "Creating salon..." : "🏪 Create Salon"}
+                {manualModuleKey === "auto"
+                  ? (manualLoading ? "Creating car wash..." : "🚗 Create Car Wash")
+                  : (manualLoading ? "Creating salon..." : "🏪 Create Salon")}
               </button>
               <button onClick={function() { setManualModal(false); setManualDone(""); }}
                 style={{ width: "100%", background: WHITE, color: "#888", border: "1.5px solid #ddd", borderRadius: 12, padding: "12px 0", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
@@ -1395,15 +1404,15 @@ export default function SuperAdminDashboard({ onLogout }) {
             <input
               value={inviteEmail}
               onChange={function(e) { setInviteEmail(e.target.value); setInviteLink(""); }}
-              placeholder="salon@example.com"
+              placeholder={inviteModuleKey === "auto" ? "owner@example.com" : "salon@example.com"}
               style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM + "44", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, marginBottom: 12 }}
             />
 
-            <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 6, textTransform: "uppercase" }}>Salon Name (optional — pre-fills the form)</label>
+            <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 6, textTransform: "uppercase" }}>{inviteModuleKey === "auto" ? "Car Wash Name" : "Salon Name"} (optional — pre-fills the form)</label>
             <input
               value={inviteName}
               onChange={function(e) { setInviteName(e.target.value); setInviteLink(""); }}
-              placeholder="e.g. Grace Beauty Studio"
+              placeholder={inviteModuleKey === "auto" ? "e.g. High Point Carwash" : "e.g. Grace Beauty Studio"}
               style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM + "44", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, marginBottom: 16 }}
             />
 
