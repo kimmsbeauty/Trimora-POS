@@ -119,6 +119,12 @@ earlier turn in your own conversation told you the highest number was.
 | `054_drop_dead_tables_device_login_events_stock_movements.sql` | **Cleanup:** dropped `device_login_events` (dead since the real PIN-first login fix replaced the code that used it) and `stock_movements` (correctly RLS-scoped per migration `046`, but confirmed 0 rows, never written to). `stock_log` and `products` were deliberately left alone — both have real historical data, dropping either is a product decision, not dead-code removal. |
 | `055_scope_rating_lookups_by_token.sql` *(renamed from a second, independent `053`)* | **Security fix:** replaced unscoped anon `SELECT` on `public_rating_lookup`/`public_auto_job_rating_lookup` (zero row filtering — anyone could pull every feedback token/client name/visit date platform-wide) with `rating_lookup_by_token(p_token)` / `auto_job_rating_lookup_by_token(p_token)` RPCs. |
 
+## Migration 056 (2026-07-17)
+
+| File | Description |
+|---|---|
+| `056_drop_dead_products_stock_log_tables.sql` | **Cleanup:** dropped `products` (10 rows) and `stock_log` (20 rows) -- the two tables deliberately left alone in migration 054 pending a product decision. Investigated properly this time: neither has a `salon_id` column (both predate the multi-tenant migration), neither is in `db.js`'s `TENANT_TABLES` set, and `stock_log` has zero references in `src/`. Row content confirmed to be pre-multi-tenant test/seed data (products: generic 10-item retail catalog; stock_log: 20 rows written in an 18-minute window on 2026-06-14, several against a `product_name='Test'` with a `product_id` that was never in `products`) -- not real business records worth preserving live. Both exported to CSV before the drop. `DROP TABLE` succeeded without `CASCADE` for either, confirming zero live dependents.
+
 ## Notes
 
 - `public_salon_directory` — anon-readable, used by booking page and DeviceGate. Also now exposes `subscription_plan`/`subscription_status`/`subscription_expires_at` — `amount_paid` deliberately excluded, that stays super-admin-only via `salon_directory`.
