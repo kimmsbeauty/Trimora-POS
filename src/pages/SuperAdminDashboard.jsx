@@ -459,16 +459,6 @@ export default function SuperAdminDashboard({ onLogout }) {
     setTimeout(function() { setAddRepDone(false); setAddRepModal(false); }, 2000);
   }
 
-  // Loaded once on first open — plans rarely change.
-  async function loadPlans() {
-    if (plansLoaded) return;
-    setPlansLoading(true);
-    var rows = await saFetch("GET", "subscription_plans", "?order=sort_order.asc");
-    if (rows) setPlans(rows);
-    setPlansLoaded(true);
-    setPlansLoading(false);
-  }
-
   async function updatePlanPrice(key, newPrice) {
     setPlanError("");
     var price = parseInt(newPrice, 10);
@@ -503,29 +493,6 @@ export default function SuperAdminDashboard({ onLogout }) {
     var rows = await saFetch("GET", "subscription_plans", "?order=sort_order.asc&is_active=eq.true");
     if (rows) setPlans(rows);
     setPlansLoaded(true);
-  }
-
-  async function savePlanPrice(key, newPrice) {
-    setPlanError("");
-    var price = parseInt(newPrice, 10);
-    if (isNaN(price) || price < 0) { setPlanError("Enter a valid price (0 or more)."); return; }
-    setPlanSaving(true);
-    var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
-    if (!token) { setPlanSaving(false); setPlanError("Session expired. Please sign out and sign in again."); return; }
-    var res = await fetch(SUPABASE_URL + "/rest/v1/rpc/super_admin_update_plan_price", {
-      method: "POST",
-      headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json" },
-      body: JSON.stringify({ p_key: key, p_price_kes: price }),
-    });
-    setPlanSaving(false);
-    if (res.ok) {
-      logAction("update_plan_price", null, null, key + " → KSh " + price.toLocaleString());
-      setPlanEditing(null);
-      await loadPlans();
-    } else {
-      var err = await res.json().catch(function() { return {}; });
-      setPlanError(err.message || "Failed to save price.");
-    }
   }
 
   // Loaded once, lazily, only when Analytics is opened — avoids
