@@ -1,0 +1,36 @@
+name: Build & Test
+
+# Flagged in the 2026-07-16 handover as a real gap: with no CI, test-suite
+# health depended entirely on whoever last ran `react-scripts test` by hand
+# before pushing -- easy for that discipline to lapse, especially with
+# multiple concurrent sessions now a confirmed pattern on this repo.
+# This doesn't replace real-transaction/real-device testing (see
+# supabase/migrations/README.md and the handover doc for what's still only
+# logic-verified), it just guarantees the automated part of the safety net
+# actually runs on every push instead of relying on memory.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: CI=true npm run build
+
+      - name: Test
+        run: CI=true npm test -- --watchAll=false
