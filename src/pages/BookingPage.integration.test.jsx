@@ -1,4 +1,4 @@
-// src/pages/BookingPage.integration.test.js
+// src/pages/BookingPage.integration.test.jsx
 //
 // Step 5 regression safety net (booking half). Logic-only / mock-only,
 // no live database, no Supabase branch, no network -- db() and dbRpc()
@@ -19,25 +19,26 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import BookingPage from "./BookingPage";
 
-jest.mock("../lib/db", () => ({
-  db: jest.fn(),
-  dbRpc: jest.fn(),
+vi.mock("../lib/db", () => ({
+  db: vi.fn(),
+  dbRpc: vi.fn(),
 }));
 
-jest.mock("../lib/SalonContext", () => ({
-  useSalon: jest.fn(),
-  fetchPublicSalonBranding: jest.fn(),
+vi.mock("../lib/SalonContext", () => ({
+  useSalon: vi.fn(),
+  fetchPublicSalonBranding: vi.fn(),
 }));
 
-jest.mock("../components/MpesaPaymentModal", () => {
-  return function MockMpesaPaymentModal(props) {
+vi.mock("../components/MpesaPaymentModal", () => {
+  function MockMpesaPaymentModal(props) {
     return (
       <div>
         <button onClick={props.onPaid}>MOCK_PAID</button>
         <button onClick={props.onPayLater}>MOCK_PAY_LATER</button>
       </div>
     );
-  };
+  }
+  return { default: MockMpesaPaymentModal };
 });
 
 import { db, dbRpc } from "../lib/db";
@@ -67,7 +68,7 @@ var FAKE_CATEGORIES = [
 
 describe("BookingPage — full booking + payment-claim flow (mocked db)", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     useSalon.mockReturnValue(FAKE_SALON);
     db.mockImplementation((method, table) => {
       if (method === "POST" && table === "bookings") return Promise.resolve([{ id: "booking-uuid-99" }]);

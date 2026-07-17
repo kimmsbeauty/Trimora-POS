@@ -2,7 +2,7 @@ import GeminiProvider from "./GeminiProvider";
 
 describe("GeminiProvider.classifyQuestion", () => {
   beforeEach(() => {
-    global.fetch = jest.fn();
+    global.fetch = vi.fn();
   });
 
   test("calls the ai-classify-question edge function with the question text", async () => {

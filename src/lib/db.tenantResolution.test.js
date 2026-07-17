@@ -15,8 +15,8 @@ var originalFetch = global.fetch;
 describe("db.js tenant resolution refusal", () => {
   beforeEach(() => {
     setCurrentSalonId(null);
-    global.fetch = jest.fn();
-    jest.spyOn(console, "error").mockImplementation(() => {});
+    global.fetch = vi.fn();
+    vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   afterEach(() => {

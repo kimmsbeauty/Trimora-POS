@@ -24,20 +24,20 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import POSApp from "./POSApp";
 
-jest.mock("../lib/db", () => ({
-  db: jest.fn(),
+vi.mock("../lib/db", () => ({
+  db: vi.fn(),
   offlineQueue: [],
-  syncOfflineQueue: jest.fn().mockResolvedValue(undefined),
+  syncOfflineQueue: vi.fn().mockResolvedValue(undefined),
 }));
 
-jest.mock("../lib/SalonContext", () => ({
-  useSalon: jest.fn(),
-  fetchPublicSalonBranding: jest.fn().mockResolvedValue(null),
+vi.mock("../lib/SalonContext", () => ({
+  useSalon: vi.fn(),
+  fetchPublicSalonBranding: vi.fn().mockResolvedValue(null),
 }));
 
-jest.mock("../lib/pwaManifest.js", () => ({
-  setPwaManifest: jest.fn(),
-  setLegacyPwaManifest: jest.fn(),
+vi.mock("../lib/pwaManifest.js", () => ({
+  setPwaManifest: vi.fn(),
+  setLegacyPwaManifest: vi.fn(),
 }));
 
 import { db } from "../lib/db";
@@ -67,7 +67,7 @@ var FAKE_SERVICE = { id: "svc-1", name: "Haircut", cat: "Hair", price: 500, acti
 
 describe("POSApp — checkout (Cash sale) integration", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     useSalon.mockReturnValue(FAKE_SALON);
     db.mockImplementation(function (method, table) {
       if (method === "GET" && table === "sales") return Promise.resolve([]);

@@ -1,4 +1,4 @@
-jest.mock("../db", () => ({ db: jest.fn() }));
+vi.mock("../db", () => ({ db: vi.fn() }));
 
 import { db } from "../db";
 import { getRevenueSummary, getCustomerSummary, getTopItems, classifyQuestion } from "./AIService";
@@ -45,7 +45,7 @@ describe("AIService.getRevenueSummary", () => {
   });
 
   test("excludes rows with a non-ISO date and logs a warning instead of skewing the total", async () => {
-    var errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    var errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     db.mockResolvedValue([
       { total: 1000, payment: "Cash", date: "2026-07-01" },
       { total: 9999, payment: "Cash", date: "01/07/2026" },
@@ -121,7 +121,7 @@ describe("AIService.getTopItems", () => {
 
 describe("AIService.classifyQuestion (Gemini-first, local fallback)", () => {
   beforeEach(() => {
-    global.fetch = jest.fn();
+    global.fetch = vi.fn();
   });
 
   test("uses Gemini's classification when the edge function succeeds", async () => {
@@ -137,7 +137,7 @@ describe("AIService.classifyQuestion (Gemini-first, local fallback)", () => {
   });
 
   test("falls back to the local classifier if Gemini is not configured (e.g. 503)", async () => {
-    var warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    var warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     global.fetch.mockResolvedValue({ ok: false, status: 503 });
 
     var result = await classifyQuestion("how much did we generate this week?");
@@ -148,7 +148,7 @@ describe("AIService.classifyQuestion (Gemini-first, local fallback)", () => {
   });
 
   test("falls back to the local classifier if the network call fails entirely", async () => {
-    var warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    var warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     global.fetch.mockRejectedValue(new Error("network down"));
 
     var result = await classifyQuestion("how many customers visited today?");
@@ -158,7 +158,7 @@ describe("AIService.classifyQuestion (Gemini-first, local fallback)", () => {
   });
 
   test("falls back to the local classifier if Gemini returns malformed data", async () => {
-    var warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    var warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     global.fetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
 
     var result = await classifyQuestion("what items sold most this month?");

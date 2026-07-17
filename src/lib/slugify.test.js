@@ -8,7 +8,7 @@
 import { generateUniqueSlug } from "./slugify";
 import { db } from "./db";
 
-jest.mock("./db", () => ({ db: jest.fn() }));
+vi.mock("./db", () => ({ db: vi.fn() }));
 
 describe("generateUniqueSlug", () => {
   beforeEach(() => {

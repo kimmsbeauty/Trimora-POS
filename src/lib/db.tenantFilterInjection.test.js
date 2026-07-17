@@ -26,8 +26,8 @@ var originalFetch = global.fetch;
 describe("db.js TENANT_TABLES filter/body injection", () => {
   beforeEach(() => {
     setCurrentSalonId("real-salon-uuid-123");
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([{ id: 1 }]) });
-    jest.spyOn(console, "error").mockImplementation(() => {});
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([{ id: 1 }]) });
+    vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   afterEach(() => {

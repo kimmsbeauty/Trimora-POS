@@ -19,7 +19,7 @@ describe("todayStr", () => {
     // Fixed reference date: Jan 5, 2026 -- both month and day are
     // single digits, the exact case that breaks without padStart.
     var fixed = new Date(2026, 0, 5); // months are 0-indexed
-    var spy = jest.spyOn(global, "Date").mockImplementation(() => fixed);
+    var spy = vi.spyOn(global, "Date").mockImplementation(function() { return fixed; });
     expect(todayStr()).toBe("2026-01-05");
     spy.mockRestore();
   });

@@ -20,11 +20,11 @@ import "@testing-library/jest-dom";
 import React from "react";
 import SuperAdminDashboard from "./SuperAdminDashboard";
 
-jest.mock("../lib/superAdminAuth", () => ({
-  saFetch: jest.fn(),
-  superAdminLogout: jest.fn(),
-  getSuperAdminSession: jest.fn(),
-  getSuperAdminToken: jest.fn(),
+vi.mock("../lib/superAdminAuth", () => ({
+  saFetch: vi.fn(),
+  superAdminLogout: vi.fn(),
+  getSuperAdminSession: vi.fn(),
+  getSuperAdminToken: vi.fn(),
 }));
 
 import { saFetch, getSuperAdminSession } from "../lib/superAdminAuth";
@@ -47,7 +47,7 @@ var FAKE_STATS = {
 };
 
 beforeEach(function () {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   getSuperAdminSession.mockReturnValue({ access_token: "fake-token", email: "admin@trimora.dev" });
   saFetch.mockImplementation(function (method, table) {
     if (table === "salon_directory") return Promise.resolve([FAKE_SALON]);
@@ -59,7 +59,7 @@ beforeEach(function () {
 });
 
 test("Suspend Salon modal opens from the salon detail page", async function () {
-  render(<SuperAdminDashboard onLogout={jest.fn()} />);
+  render(<SuperAdminDashboard onLogout={vi.fn()} />);
 
   var salonRow = await screen.findByText("Test Salon");
   fireEvent.click(salonRow);

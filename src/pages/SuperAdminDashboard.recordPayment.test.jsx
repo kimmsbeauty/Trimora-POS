@@ -61,11 +61,11 @@ class TestErrorBoundary extends React.Component {
   }
 }
 
-jest.mock("../lib/superAdminAuth", () => ({
-  saFetch: jest.fn(),
-  superAdminLogout: jest.fn(),
-  getSuperAdminSession: jest.fn(),
-  getSuperAdminToken: jest.fn(),
+vi.mock("../lib/superAdminAuth", () => ({
+  saFetch: vi.fn(),
+  superAdminLogout: vi.fn(),
+  getSuperAdminSession: vi.fn(),
+  getSuperAdminToken: vi.fn(),
 }));
 
 import { saFetch, getSuperAdminSession } from "../lib/superAdminAuth";
@@ -88,7 +88,7 @@ var FAKE_STATS = {
 };
 
 beforeEach(function () {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   getSuperAdminSession.mockReturnValue({ access_token: "fake-token", email: "admin@trimora.dev" });
   saFetch.mockImplementation(function (method, table) {
     if (table === "salon_directory") return Promise.resolve([FAKE_SALON]);
@@ -102,7 +102,7 @@ beforeEach(function () {
 test("Record Payment modal opens from the salon detail page and shows real KES amounts", async function () {
   render(
     <TestErrorBoundary>
-      <SuperAdminDashboard onLogout={jest.fn()} />
+      <SuperAdminDashboard onLogout={vi.fn()} />
     </TestErrorBoundary>
   );
 
