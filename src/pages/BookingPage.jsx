@@ -77,16 +77,31 @@ export default function BookingPage() {
       // -- it had no per-salon scoping built in, so any caller could omit
       // the salon_id filter and enumerate every salon's staff. This calls
       // staff_directory_lookup instead, which requires salon.id as a
-      // mandatory RPC argument. services/categories don't carry that same
-      // risk (no cross-tenant data in either), so they still load the same
-      // way regardless of whether salon.id has resolved yet.
+      // mandatory RPC argument.
+      //
+      // services now goes through the same pattern (public_services_lookup),
+      // for the identical structural reason -- services_anon_select had no
+      // salon_id scoping either, so any caller could bypass the app's own
+      // client-side filter and dump every salon's full service catalog and
+      // pricing in one unauthenticated call. A prior version of this
+      // comment argued services/categories "don't carry that same risk" as
+      // staff data and left it unscoped; the product owner disagreed
+      // (competitive-intelligence exposure, and inconsistent with staff/
+      // bookings being closed the same session for weaker reasoning) --
+      // closed here the same way.
       const staffPromise = salon?.id
         ? dbRpc("staff_directory_lookup", { p_salon_id: salon.id })
         : Promise.resolve(null);
+      const servicesPromise = salon?.id
+        ? dbRpc("public_services_lookup", { p_salon_id: salon.id })
+        : Promise.resolve(null);
+      const categoriesPromise = salon?.id
+        ? dbRpc("public_service_categories_lookup", { p_salon_id: salon.id })
+        : Promise.resolve(null);
       const [sv, st, cats] = await Promise.all([
-        db("GET", "services", null, "?active=eq.true&order=cat.asc,name.asc"),
+        servicesPromise,
         staffPromise,
-        db("GET", "salon_service_categories", null, "?active=eq.true&order=sort_order.asc"),
+        categoriesPromise,
       ]);
       if (Array.isArray(sv)) setBookingServices(sv);
       if (Array.isArray(st)) setBookingStaff(st);

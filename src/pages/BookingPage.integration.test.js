@@ -70,20 +70,24 @@ describe("BookingPage — full booking + payment-claim flow (mocked db)", () => 
     jest.clearAllMocks();
     useSalon.mockReturnValue(FAKE_SALON);
     db.mockImplementation((method, table) => {
-      if (method === "GET" && table === "services") return Promise.resolve(FAKE_SERVICES);
-      if (method === "GET" && table === "salon_service_categories") return Promise.resolve(FAKE_CATEGORIES);
       if (method === "POST" && table === "bookings") return Promise.resolve([{ id: "booking-uuid-99" }]);
       if (method === "POST" && table === "customers") return Promise.resolve([{ id: "cust-1" }]);
       return Promise.resolve(null);
     });
-    // Per-function responses -- staff now comes from staff_directory_lookup
-    // (the RPC that replaced the raw public_staff_directory view read, see
-    // migration 050), alongside the pre-existing public_customer_lookup and
-    // claim_booking_payment_status RPCs. Tests below override individual
-    // functions via mockImplementation rather than a single mockResolvedValue,
-    // so overriding the customer-lookup response doesn't also blank out staff.
+    // Per-function responses -- staff comes from staff_directory_lookup
+    // (migration 050), services/categories from public_services_lookup /
+    // public_service_categories_lookup (migration 051, same reason:
+    // services_anon_select and salon_service_categories_anon_select were
+    // both unscoped anon SELECT policies, replaced with mandatory-
+    // p_salon_id RPCs). Alongside the pre-existing public_customer_lookup
+    // and claim_booking_payment_status RPCs. Tests below override
+    // individual functions via mockImplementation rather than a single
+    // mockResolvedValue, so overriding the customer-lookup response
+    // doesn't also blank out staff/services/categories.
     dbRpc.mockImplementation((fn) => {
       if (fn === "staff_directory_lookup") return Promise.resolve(FAKE_STAFF);
+      if (fn === "public_services_lookup") return Promise.resolve(FAKE_SERVICES);
+      if (fn === "public_service_categories_lookup") return Promise.resolve(FAKE_CATEGORIES);
       if (fn === "public_customer_lookup") return Promise.resolve([]); // no existing customer found
       if (fn === "claim_booking_payment_status") return Promise.resolve(true);
       return Promise.resolve(null);
@@ -166,6 +170,8 @@ describe("BookingPage — full booking + payment-claim flow (mocked db)", () => 
   test("does not attempt to create a customer if the phone number already exists", async () => {
     dbRpc.mockImplementation((fn) => {
       if (fn === "staff_directory_lookup") return Promise.resolve(FAKE_STAFF);
+      if (fn === "public_services_lookup") return Promise.resolve(FAKE_SERVICES);
+      if (fn === "public_service_categories_lookup") return Promise.resolve(FAKE_CATEGORIES);
       if (fn === "public_customer_lookup") return Promise.resolve([{ id: "existing-cust-1" }]); // existing customer found
       if (fn === "claim_booking_payment_status") return Promise.resolve(true);
       return Promise.resolve(null);
@@ -191,42 +197,34 @@ describe("BookingPage — full booking + payment-claim flow (mocked db)", () => 
     expect(db).not.toHaveBeenCalledWith("POST", "customers", expect.any(Object));
   });
 
-  test("refuses the customer lookup/create (rather than guessing a salon) if salon.id is somehow missing", async () => {
+  test("loads nothing and refuses customer lookup/create if salon.id is somehow missing", async () => {
     // Defensive case only -- SalonGate is expected to guarantee this never
     // happens in real routing (see the comment above confirm() in
     // BookingPage.jsx), but this proves the refusal actually fires instead
     // of silently falling back to another salon's id.
+    //
+    // Prior to migration 051, services/categories loaded via a plain,
+    // unscoped anon table read that didn't need salon.id at all, so a
+    // customer could still see and pick a service even in this broken
+    // state -- only staff lookup and the final customer lookup/create
+    // were guarded. Now that services/categories are also scoped RPCs
+    // requiring p_salon_id (the actual security fix), NOTHING loads
+    // without a resolved salon.id -- a strictly stronger defensive
+    // posture, and this test now verifies that directly rather than
+    // trying to preserve a wizard walkthrough that's no longer reachable
+    // through the UI in this scenario.
     useSalon.mockReturnValue({ slug: "test-salon", name: "Test Salon", enabled_payment_methods: ["Cash"] }); // no id
-    jest.spyOn(console, "error").mockImplementation(() => {});
 
     render(<BookingPage />);
-    await waitFor(() => expect(screen.getByText("Haircut")).toBeInTheDocument());
-    fireEvent.click(screen.getByText("Haircut"));
-    // Staff loading also requires salon.id now (staff_directory_lookup takes
-    // it as a mandatory RPC argument, mirroring the customer-lookup guard
-    // below), so with salon.id missing, bookingStaff never populates --
-    // only the always-present "Any available" fallback option renders.
-    await waitFor(() => expect(screen.getByText("Any available")).toBeInTheDocument());
-    fireEvent.click(screen.getByText("Any available"));
-    await waitFor(() => expect(screen.getByText("10:00")).toBeInTheDocument());
-    fireEvent.change(screen.getByDisplayValue(""), { target: { value: "2026-08-01" } });
-    fireEvent.click(screen.getByText("10:00"));
-    fireEvent.click(screen.getByText("Continue →"));
-    await waitFor(() => expect(screen.getByPlaceholderText("Your name")).toBeInTheDocument());
-    fireEvent.change(screen.getByPlaceholderText("Your name"), { target: { value: "Someone" } });
-    fireEvent.change(screen.getByPlaceholderText(/Phone number/), { target: { value: "0799999999" } });
-    fireEvent.click(screen.getByText("Confirm Booking 👑"));
 
-    // The booking itself still gets created (booking write doesn't depend
-    // on salon.id -- db.js's own tenant resolution handles that layer).
-    await waitFor(() => expect(db).toHaveBeenCalledWith("POST", "bookings", expect.any(Object)));
+    // Services never load -- the "coming soon" fallback shows instead of
+    // any real service, so there is no way to even start a booking.
+    await waitFor(() => expect(screen.getByText("Services coming soon")).toBeInTheDocument());
+    expect(screen.queryByText("Haircut")).not.toBeInTheDocument();
 
-    // Staff lookup and customer lookup/create are both skipped entirely,
-    // not guessed -- neither RPC call ever fires without a resolved salon.id.
+    // Confirms none of the three salon.id-gated RPCs (staff, services,
+    // categories) were ever called -- all three short-circuit to
+    // Promise.resolve(null) locally without touching dbRpc at all.
     expect(dbRpc).not.toHaveBeenCalled();
-    expect(db).not.toHaveBeenCalledWith("POST", "customers", expect.any(Object));
-    expect(console.error).toHaveBeenCalledWith(expect.stringContaining("Refusing customer lookup"));
-
-    console.error.mockRestore();
   });
 });
