@@ -1,9 +1,14 @@
 // src/pages/AutoRatingPage.jsx
 //
 // Mirrors RatingPage.jsx's structure and, critically, its security
-// pattern: looks up the job via the narrow public_auto_job_rating_lookup
-// view (feedback_token, client name, date only -- never payment,
-// commission, or vehicle details) rather than auto_jobs directly.
+// pattern: looks up the job via auto_job_rating_lookup_by_token, which
+// requires the token as a mandatory RPC argument (feedback_token,
+// client name, date only -- never payment, commission, or vehicle
+// details) rather than the old public_auto_job_rating_lookup view,
+// which granted anon SELECT with no row filtering built in -- anyone
+// bypassing the app UI could omit the token filter entirely and pull
+// every job's feedback token/client/date across the whole platform.
+// See migration 053 (audit follow-up).
 // Dynamically salon-branded (primary/secondary colors from context),
 // same as RatingPage.jsx -- this represents the SALON's brand to the
 // customer, not Trimora's or Auto's internal staff-facing theme.
@@ -11,7 +16,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import SalonBrandmark from "../components/SalonBrandmark";
-import { db } from "../lib/db.js";
+import { db, dbRpc } from "../lib/db.js";
 import { todayStr, nowTime } from "../lib/utils.js";
 import { BLACK, GOLD, DARK, WHITE } from "../lib/constants.js";
 import { lighten, darken } from "../lib/colorUtils";
@@ -55,8 +60,7 @@ export default function AutoRatingPage() {
   useEffect(function () {
     async function loadJob() {
       try {
-        var data = await db("GET", "public_auto_job_rating_lookup", null,
-          "?feedback_token=eq." + encodeURIComponent(token) + "&limit=1");
+        var data = await dbRpc("auto_job_rating_lookup_by_token", { p_token: token });
         if (Array.isArray(data) && data.length > 0) {
           setJob(data[0]);
         } else {

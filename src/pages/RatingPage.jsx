@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import SalonBrandmark from "../components/SalonBrandmark";
 import GoldBtn from "../components/GoldBtn";
-import { db } from "../lib/db.js";
+import { db, dbRpc } from "../lib/db.js";
 import { todayStr, nowTime } from "../lib/utils.js";
 import { BLACK, GOLD, DARK, WHITE } from "../lib/constants.js";
 import { lighten, darken } from "../lib/colorUtils";
@@ -51,13 +51,18 @@ export default function RatingPage() {
   var submittingState = useState(false); var submitting = submittingState[0]; var setSubmitting = submittingState[1];
   var doneState = useState(false); var done = doneState[0]; var setDone = doneState[1];
 
-  // Look up the sale by its public token via the narrow public_rating_lookup
-  // view, which only exposes client name + date — never commission,
-  // totals, or other customers' data.
+  // Look up the sale by its public token via rating_lookup_by_token,
+  // which requires the token as a mandatory RPC argument (rather than
+  // an optional client-supplied query-string filter on a bare
+  // anon-readable view) -- only exposes client name + date for the one
+  // matching sale, never commission, totals, or other customers' data,
+  // and never the rest of the platform's tokens either. See migration
+  // 053 (audit follow-up: public_rating_lookup previously granted anon
+  // SELECT with no row filtering built in).
   useEffect(function() {
     async function loadSale() {
       try {
-        var data = await db("GET", "public_rating_lookup", null, "?feedback_token=eq." + encodeURIComponent(token) + "&limit=1");
+        var data = await dbRpc("rating_lookup_by_token", { p_token: token });
         if (Array.isArray(data) && data.length > 0) {
           setSale(data[0]);
         } else {

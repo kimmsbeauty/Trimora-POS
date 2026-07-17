@@ -145,16 +145,40 @@ var KNOWN_SALON_SCOPED_BUT_NOT_CLIENT_QUERIED = [
 // dbDirect() GET path and filtered by salon_id the same way PostgREST
 // lets you filter any view. Confirmed live (2026-07-07): SECURITY
 // DEFINER views exist for public_staff_directory, public_salon_directory,
-// public_rating_lookup, platform_stats, salon_directory. As of migration
-// 050 (2026-07-16), public_staff_directory moved off this path entirely --
-// the bare view had no per-salon scoping built in (anon SELECT + no
-// filtering meant any caller could omit salon_id and enumerate every
-// tenant's staff), so it's now fetched via the staff_directory_lookup RPC,
-// which takes p_salon_id as a required argument instead of an optional
-// client-supplied query-string filter. None of the remaining views in
-// this list are queried via dbDirect GETs (RPC/different paths instead),
-// so this list is intentionally empty for now -- kept as a named list
-// rather than deleted, so the next view added here is a deliberate choice.
+// public_rating_lookup, platform_stats, salon_directory, plus
+// public_auto_job_rating_lookup and auto_platform_jobs (not present at
+// the 2026-07-07 baseline, added since).
+//
+// As of migration 050 (2026-07-16), public_staff_directory moved off
+// this path entirely -- the bare view had no per-salon scoping built
+// in (anon SELECT + no filtering meant any caller could omit salon_id
+// and enumerate every tenant's staff), so it's now fetched via the
+// staff_directory_lookup RPC, which takes p_salon_id as a required
+// argument instead of an optional client-supplied query-string filter.
+//
+// As of migration 053 (2026-07-17), public_rating_lookup and
+// public_auto_job_rating_lookup moved off this path too, for the exact
+// same reason -- this comment previously (incorrectly) claimed neither
+// was queried via dbDirect GETs, but RatingPage.jsx and
+// AutoRatingPage.jsx both were doing exactly that
+// (?feedback_token=eq.<token>&limit=1 as a client-side-only filter on
+// an anon-SELECT-granted view with zero server-side row restriction).
+// Both now use rating_lookup_by_token(p_token) /
+// auto_job_rating_lookup_by_token(p_token) RPCs instead, and anon/
+// authenticated SELECT was revoked from both underlying views.
+//
+// platform_stats, salon_directory, and auto_platform_jobs are not
+// queried via dbDirect GETs (super-admin dashboard only, via a
+// different path) and each already has an internal
+// `is_super_admin` check in its own WHERE clause -- confirmed safe,
+// left as-is. public_salon_directory remains queried via dbDirect
+// GETs and is intentionally, safely public (booking-page directory
+// lookup by slug; every column it exposes is meant to be public, e.g.
+// till/paybill numbers customers need to pay).
+//
+// This list is intentionally empty -- kept as a named list rather than
+// deleted, so the next view added here is a deliberate choice, not an
+// oversight.
 var KNOWN_VIEWS_QUERIED_LIKE_TABLES = [];
 
 describe("TENANT_TABLES stays in sync with the known tenant-scoped schema", () => {
