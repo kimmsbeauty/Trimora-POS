@@ -125,6 +125,54 @@ earlier turn in your own conversation told you the highest number was.
 |---|---|
 | `056_drop_dead_products_stock_log_tables.sql` | **Cleanup:** dropped `products` (10 rows) and `stock_log` (20 rows) -- the two tables deliberately left alone in migration 054 pending a product decision. Investigated properly this time: neither has a `salon_id` column (both predate the multi-tenant migration), neither is in `db.js`'s `TENANT_TABLES` set, and `stock_log` has zero references in `src/`. Row content confirmed to be pre-multi-tenant test/seed data (products: generic 10-item retail catalog; stock_log: 20 rows written in an 18-minute window on 2026-06-14, several against a `product_name='Test'` with a `product_id` that was never in `products`) -- not real business records worth preserving live. Both exported to CSV before the drop. `DROP TABLE` succeeded without `CASCADE` for either, confirming zero live dependents.
 
+## Migrations 057-078 (2026-07-18) — recovered orphaned migrations
+
+**Background:** an audit of `supabase_migrations.schema_migrations` against this
+folder found 22 migrations that had been applied directly to production
+(2026-07-03 through 2026-07-16) but were never committed here as files. Several
+back entire live features — customer wallets, auto invoices, split
+payments/refunds, coupons, memberships — meaning those schemas existed only in
+production, nowhere in version control, until now.
+
+Each was backfilled verbatim from `schema_migrations` and individually
+spot-verified against live schema state (tables/columns/constraints/policies
+actually present) before being added here — not just trusted blindly. One
+important lesson from that verification: **`schema_migrations.statements` is
+not always reliable.** While checking these, a different, already-tracked
+migration (the old `022_auto_job_queue_bay.sql`, unrelated to this batch) was
+found to have a `schema_migrations` record containing SQL that could not have
+executed as written (an FK constraint added on a column that was never
+created in the same batch). `022`'s own file header already documented that
+it had been hand-corrected against live state for exactly this reason — but
+it's a reminder that this table records what was *submitted*, not
+necessarily proof of what *ran*. Treat `schema_migrations` as a lead to
+verify, not a source of truth on its own.
+
+| File | Applied | Description |
+|---|---|---|
+| `057_secure_legacy_stock_tables.sql` | 2026-07-03 | Enabled RLS (default-deny) on legacy `stock_log`/`stock_movements`. **Not safely re-runnable after `056`** — both tables were later dropped (migrations `054`/`056`); kept for audit-trail completeness only. |
+| `058_remove_public_mpesa_payment_policies.sql` | 2026-07-03 | Removed two mislabeled RLS policies on `salon_mpesa_payments` that were actually grantable to `public`, not `service_role` as named — a financial-fraud vector. |
+| `059_lock_pin_reset_tokens.sql` | 2026-07-03 | Removed an unrestricted anon-readable policy on `pin_reset_tokens` (unused feature, zero functional impact). |
+| `060_secure_customers_public_lookup.sql` | 2026-07-03 | Replaced an open anon-SELECT on `customers` (full-table scrape via anon key) with a scoped `public_customer_lookup(salon_id, phone)` RPC. |
+| `061_remove_blanket_stock_expenses_feedback_policies.sql` | 2026-07-03 | Removed redundant "allow all" policies on `stock`/`expenses`/`feedback` left over from a pre-`DeviceGate` routing model. |
+| `062_auto_job_queue_bay_missing_delete_policies.sql` | 2026-07-08 | Added missing DELETE policies on `auto_bays`/`auto_jobs`/`auto_job_services`. |
+| `063_add_subscription_fields_to_public_salon_directory.sql` | 2026-07-14 | Exposed subscription plan/status/expiry on the public salon directory view. |
+| `064_create_auto_membership_plans_and_customer_memberships.sql` | 2026-07-14 | New feature: Auto membership plans + `apply`/purchase tracking. |
+| `065_allow_membership_discount_type_on_auto_jobs.sql` | 2026-07-14 | Allowed `'membership'` as a job discount type. |
+| `066_create_customer_wallet.sql` | 2026-07-14 | New feature: customer wallet balance + atomic `apply_wallet_transaction` RPC. |
+| `067_create_auto_referrals.sql` | 2026-07-15 | New feature: customer referral rewards. |
+| `068_add_tax_settings_to_salon_settings.sql` | 2026-07-15 | Per-salon tax rate/PIN settings. |
+| `069_add_split_payments_and_refunds.sql` | 2026-07-15 | Split-payment breakdown + partial-refund tracking on Auto jobs. |
+| `070_add_receipt_customization_settings.sql` | 2026-07-15 | Receipt footer message + staff/vehicle display toggles. |
+| `071_create_auto_coupons.sql` | 2026-07-15 | New feature: percentage-discount coupon codes. |
+| `072_add_auto_coupons_uppercase_check.sql` | 2026-07-15 | Defense-in-depth: enforced uppercase coupon codes at the DB level. |
+| `073_create_auto_invoices.sql` | 2026-07-16 | New feature: Auto invoicing (`issue_auto_invoice`/`mark_auto_invoice_paid` RPCs). |
+| `074_add_fleet_vehicle_fields.sql` | 2026-07-16 | Fleet/company vehicle flag + name. |
+| `075_create_auto_vehicle_inspections.sql` | 2026-07-16 | Check-in/pickup vehicle inspection records. |
+| `076_fix_platform_stats_and_add_combined_pl.sql` | 2026-07-16 | Added a combined salon+auto P&L (`net_profit`) to `platform_stats`. |
+| `077_revoke_anon_grants_super_admin_and_scoped_functions.sql` | 2026-07-16 | Revoked unnecessary `anon` execute grants on 12 admin-facing functions. |
+| `078_revoke_public_grant_super_admin_and_scoped_functions.sql` | 2026-07-16 | Follow-up: revoked the same functions' `PUBLIC` grant, since `anon` inherits through `PUBLIC` regardless of a role-specific revoke. |
+
 ## Notes
 
 - `public_salon_directory` — anon-readable, used by booking page and DeviceGate. Also now exposes `subscription_plan`/`subscription_status`/`subscription_expires_at` — `amount_paid` deliberately excluded, that stays super-admin-only via `salon_directory`.
