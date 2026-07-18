@@ -5,9 +5,12 @@
 // `adjustStock` handler still live in and are owned by POSApp.jsx; this
 // component is purely presentational.
 
+import { useState } from "react";
 import { db } from "../../lib/db.js";
 import { fmt } from "../../lib/utils.js";
 import GoldBtn from "../../components/GoldBtn";
+import CsvImportModal from "../../components/CsvImportModal.jsx";
+import { STOCK_CONFIG } from "../../lib/csvImport.js";
 import { GOLD, GOLD_DIM, DARK, WHITE, RED, GREEN, AMBER } from "../../lib/constants.js";
 
 export default function InventoryView({
@@ -19,12 +22,33 @@ export default function InventoryView({
   setNewProduct,
   adjustStock,
 }) {
+  var showImportState = useState(false); var showImport = showImportState[0]; var setShowImport = showImportState[1];
+
+  async function refreshProducts() {
+    // Bumped past the original page-load limit=50 -- that cap was tuned
+    // for a normal page load, not for confirming a bulk CSV import that
+    // may itself add well past 50 rows in one go.
+    var fresh = await db("GET", "stock", null, "?order=name.asc&limit=1000");
+    if (fresh) setProducts(fresh);
+  }
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
         <div style={{ fontWeight: 900, fontSize: 18, color: DARK }}>Product Stock</div>
-        <GoldBtn onClick={function() { setShowAddProduct(function(p) { return !p; }); }} style={{ padding: "8px 16px", fontSize: 12 }}>+ Add Product</GoldBtn>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={function() { setShowImport(true); }} style={{ background: "none", border: "1.5px solid " + GOLD_DIM, borderRadius: 10, padding: "8px 14px", fontSize: 12, color: GOLD_DIM, cursor: "pointer", fontWeight: 700 }}>Import CSV</button>
+          <GoldBtn onClick={function() { setShowAddProduct(function(p) { return !p; }); }} style={{ padding: "8px 16px", fontSize: 12 }}>+ Add Product</GoldBtn>
+        </div>
       </div>
+      <CsvImportModal
+        open={showImport}
+        onClose={function() { setShowImport(false); }}
+        config={STOCK_CONFIG}
+        entityLabel="Products"
+        existingRows={products}
+        onDone={refreshProducts}
+      />
       <div style={{ fontSize: 12, color: "#888", marginBottom: 14 }}>Tap + or − to adjust stock</div>
       {showAddProduct && (
         <div style={{ background: WHITE, borderRadius: 14, padding: 16, marginBottom: 16, border: "1.5px solid " + GOLD }}>

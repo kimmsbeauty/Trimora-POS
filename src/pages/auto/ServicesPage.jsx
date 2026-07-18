@@ -13,6 +13,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { db } from "../../lib/db";
+import CsvImportModal from "../../components/CsvImportModal.jsx";
+import { AUTO_SERVICES_CONFIG, STOCK_CONFIG } from "../../lib/csvImport.js";
 import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "./theme";
 
 export default function ServicesPage({ isAdmin }) {
@@ -45,6 +47,14 @@ export default function ServicesPage({ isAdmin }) {
   var baysState = useState([]); var bays = baysState[0]; var setBays = baysState[1];
   var showAddBayState = useState(false); var showAddBay = showAddBayState[0]; var setShowAddBay = showAddBayState[1];
   var newBayLabelState = useState(""); var newBayLabel = newBayLabelState[0]; var setNewBayLabel = newBayLabelState[1];
+
+  // CSV import (see src/lib/csvImport.js) -- stock/parts import is the
+  // first stock-creation entry point Auto has ever had; nothing else in
+  // this app lets an Auto business add a new stock/parts item.
+  var showImportServicesState = useState(false);
+  var showImportServices = showImportServicesState[0]; var setShowImportServices = showImportServicesState[1];
+  var showImportStockState = useState(false);
+  var showImportStock = showImportStockState[0]; var setShowImportStock = showImportStockState[1];
 
   var load = useCallback(async function () {
     var results = await Promise.all([
@@ -186,10 +196,23 @@ export default function ServicesPage({ isAdmin }) {
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: CHROME }}>
               Services ({services.length})
             </span>
-            <span onClick={function () { setShowAdd(!showAdd); }} style={{ cursor: "pointer", color: SIGNAL, fontSize: 12, fontWeight: 800 }}>
-              {showAdd ? "Cancel" : "+ Add service"}
-            </span>
+            <div style={{ display: "flex", gap: 12 }}>
+              <span onClick={function () { setShowImportServices(true); }} style={{ cursor: "pointer", color: CHROME, fontSize: 12, fontWeight: 800 }}>
+                Import CSV
+              </span>
+              <span onClick={function () { setShowAdd(!showAdd); }} style={{ cursor: "pointer", color: SIGNAL, fontSize: 12, fontWeight: 800 }}>
+                {showAdd ? "Cancel" : "+ Add service"}
+              </span>
+            </div>
           </div>
+          <CsvImportModal
+            open={showImportServices}
+            onClose={function () { setShowImportServices(false); }}
+            config={AUTO_SERVICES_CONFIG}
+            entityLabel="Auto Services"
+            existingRows={services}
+            onDone={load}
+          />
 
           {showAdd && (
             <div style={{ marginBottom: 16, padding: 12, borderRadius: 10, background: "rgba(255,255,255,0.02)" }}>
@@ -319,6 +342,29 @@ export default function ServicesPage({ isAdmin }) {
               );
             })}
           </div>
+        </div>
+
+        <div style={Object.assign({}, panelStyle, { marginTop: 16 })}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: CHROME }}>
+              Stock / Parts ({stockList.length})
+            </span>
+            <span onClick={function () { setShowImportStock(true); }} style={{ cursor: "pointer", color: SIGNAL, fontSize: 12, fontWeight: 800 }}>
+              Import CSV
+            </span>
+          </div>
+          <div style={{ fontSize: 12, color: CHROME }}>
+            Bulk-add or update parts and consumables (shampoo, wax, towels, etc.) via CSV -- these show up in
+            "Manage stock" above to link to a service, and in the Board/Reports stock counts.
+          </div>
+          <CsvImportModal
+            open={showImportStock}
+            onClose={function () { setShowImportStock(false); }}
+            config={STOCK_CONFIG}
+            entityLabel="Stock/Parts"
+            existingRows={stockList}
+            onDone={load}
+          />
         </div>
 
         <div style={Object.assign({}, panelStyle, { marginTop: 16 })}>
