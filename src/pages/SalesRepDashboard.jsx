@@ -68,7 +68,7 @@ export default function SalesRepDashboard({ onLogout }) {
   }
 
   async function handleSubmit() {
-    if (!salonName.trim()) { setSubmitError("Salon name is required."); return; }
+    if (!salonName.trim()) { setSubmitError(requestType === "auto" ? "Car wash name is required." : "Salon name is required."); return; }
     setSubmitting(true);
     setSubmitError("");
 
@@ -141,7 +141,7 @@ export default function SalesRepDashboard({ onLogout }) {
           </div>
 
           <input
-            placeholder="Salon name *"
+            placeholder={requestType === "auto" ? "Car wash name *" : "Salon name *"}
             value={salonName}
             onChange={function(e) { setSalonName(e.target.value); setSubmitError(""); }}
             style={{ width: "100%", borderRadius: 8, border: "1.5px solid " + GOLD_DIM + "33", padding: "10px 12px", fontSize: 13, boxSizing: "border-box", marginBottom: 8, fontFamily: "inherit" }}
