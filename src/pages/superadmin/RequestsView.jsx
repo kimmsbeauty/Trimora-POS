@@ -11,6 +11,11 @@ export default function RequestsView({
   addRepModal, setAddRepModal, addRepEmail, setAddRepEmail,
   addRepPass, setAddRepPass, addRepError, setAddRepError,
   addRepDone, addRepLoading, addSalesRep,
+  salesReps, salesRepsLoading, salesRepsLoaded,
+  repActionId, repActionError,
+  suspendRep, unsuspendRep,
+  deleteRepModal, setDeleteRepModal,
+  deleteRepLoading, deleteRep,
 }) {
   return (
     <div style={{ minHeight: "100vh", background: CREAM, padding: "0 0 80px" }}>
@@ -31,7 +36,67 @@ export default function RequestsView({
         </div>
       </div>
 
+      {/* Sales rep management */}
+      <div style={{ padding: "16px 16px 0" }}>
+        <div style={{ fontSize: 13, fontWeight: 900, color: DARK, marginBottom: 8 }}>Sales Reps</div>
+
+        {repActionError && (
+          <div style={{ color: "#EF4444", fontSize: 12, marginBottom: 10, padding: "8px 12px", background: "rgba(239,68,68,0.08)", borderRadius: 8 }}>
+            {repActionError}
+          </div>
+        )}
+
+        {salesRepsLoading ? (
+          <div style={{ textAlign: "center", padding: 20, color: "#888", fontSize: 12 }}>Loading...</div>
+        ) : salesRepsLoaded && salesReps.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 20, color: "#888", fontSize: 12, background: WHITE, borderRadius: 12, border: "1.5px solid " + GOLD_DIM + "33" }}>
+            No sales reps yet.
+          </div>
+        ) : (
+          salesReps.map(function(rep) {
+            var isBanned = rep.banned_until && new Date(rep.banned_until) > new Date();
+            var busy = repActionId === rep.id;
+            return (
+              <div key={rep.id} style={{ background: WHITE, borderRadius: 12, padding: 14, marginBottom: 10, border: "1.5px solid " + GOLD_DIM + "33" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: DARK }}>{rep.email}</div>
+                    <div style={{ fontSize: 10, color: "#aaa", marginTop: 2 }}>
+                      Added {new Date(rep.created_at).toLocaleString("en-KE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                      {" · "}
+                      {rep.last_sign_in_at ? "Last signed in " + new Date(rep.last_sign_in_at).toLocaleDateString("en-KE", { day: "numeric", month: "short" }) : "Never signed in"}
+                    </div>
+                  </div>
+                  <div style={{ padding: "3px 10px", borderRadius: 20, fontSize: 10, fontWeight: 800, background: isBanned ? "#FEE2E2" : "#D1FAE5", color: isBanned ? "#991B1B" : "#065F46" }}>
+                    {isBanned ? "⏸ Suspended" : "✅ Active"}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 8 }}>
+                  {isBanned ? (
+                    <button onClick={function() { unsuspendRep(rep); }} disabled={busy}
+                      style={{ flex: 1, background: "#D1FAE5", color: "#065F46", border: "none", borderRadius: 8, padding: "9px 0", fontWeight: 900, fontSize: 12, cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.6 : 1 }}>
+                      {busy ? "Working..." : "▶ Unsuspend"}
+                    </button>
+                  ) : (
+                    <button onClick={function() { suspendRep(rep); }} disabled={busy}
+                      style={{ flex: 1, background: "#FEF3C7", color: "#92400E", border: "none", borderRadius: 8, padding: "9px 0", fontWeight: 900, fontSize: 12, cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.6 : 1 }}>
+                      {busy ? "Working..." : "⏸ Suspend"}
+                    </button>
+                  )}
+                  <button onClick={function() { setDeleteRepModal(rep); }} disabled={busy}
+                    style={{ flex: 1, background: "#FEE2E2", color: "#991B1B", border: "none", borderRadius: 8, padding: "9px 0", fontWeight: 900, fontSize: 12, cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.6 : 1 }}>
+                    🗑 Delete
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
       <div style={{ padding: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 900, color: DARK, marginBottom: 8 }}>Onboarding Requests</div>
         {requestsLoading ? (
           <div style={{ textAlign: "center", padding: 40, color: "#888" }}>Loading...</div>
         ) : onboardingRequests.length === 0 ? (
@@ -114,6 +179,29 @@ export default function RequestsView({
               <button onClick={rejectRequest}
                 style={{ flex: 1, background: "#EF4444", color: WHITE, border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 900, fontSize: 13, cursor: "pointer" }}>
                 Confirm Reject
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete sales rep confirmation modal */}
+      {deleteRepModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 100 }}>
+          <div style={{ background: WHITE, borderRadius: 16, padding: 24, maxWidth: 380, width: "100%" }}>
+            <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 4 }}>Delete Sales Rep</div>
+            <div style={{ fontSize: 12, color: "#888", marginBottom: 14 }}>{deleteRepModal.email}</div>
+            <div style={{ fontSize: 12, color: "#991B1B", marginBottom: 14, padding: "8px 12px", background: "rgba(239,68,68,0.08)", borderRadius: 8 }}>
+              This permanently deletes the account. It cannot be undone — consider Suspend instead if you might need this rep again.
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={function() { setDeleteRepModal(null); }} disabled={deleteRepLoading}
+                style={{ flex: 1, background: GRAY, color: DARK, border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 700, fontSize: 13, cursor: deleteRepLoading ? "not-allowed" : "pointer" }}>
+                Cancel
+              </button>
+              <button onClick={deleteRep} disabled={deleteRepLoading}
+                style={{ flex: 1, background: "#EF4444", color: WHITE, border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 900, fontSize: 13, cursor: deleteRepLoading ? "not-allowed" : "pointer", opacity: deleteRepLoading ? 0.7 : 1 }}>
+                {deleteRepLoading ? "Deleting..." : "Confirm Delete"}
               </button>
             </div>
           </div>

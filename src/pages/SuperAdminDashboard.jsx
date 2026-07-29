@@ -159,6 +159,14 @@ export default function SuperAdminDashboard({ onLogout }) {
   var [addRepError,  setAddRepError]  = useState("");
   var [addRepDone,   setAddRepDone]   = useState(false);
 
+  var [salesReps,        setSalesReps]        = useState([]);
+  var [salesRepsLoading,  setSalesRepsLoading] = useState(false);
+  var [salesRepsLoaded,  setSalesRepsLoaded]   = useState(false);
+  var [repActionId,      setRepActionId]       = useState(null); // id of rep currently being suspended/unsuspended
+  var [repActionError,   setRepActionError]    = useState("");
+  var [deleteRepModal,   setDeleteRepModal]    = useState(null); // the rep object pending delete confirmation
+  var [deleteRepLoading, setDeleteRepLoading]  = useState(false);
+
   var session = getSuperAdminSession();
 
   // Show a session-expired warning inside the dashboard rather than
@@ -244,6 +252,91 @@ export default function SuperAdminDashboard({ onLogout }) {
     }
     setRequestsLoaded(true);
     setRequestsLoading(false);
+  }
+
+  // Loaded once, lazily, only when Onboarding Requests is opened --
+  // same lazy pattern as loadOnboardingRequests, since the rep list
+  // lives on the same view.
+  async function loadSalesReps() {
+    setSalesRepsLoading(true);
+    var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    if (!token) { setSalesRepsLoading(false); return; }
+    var res = await fetch(SUPABASE_URL + "/functions/v1/admin-manage-sales-reps", {
+      method: "POST",
+      headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ op: "list" }),
+    });
+    if (res.ok) {
+      var data = await res.json();
+      setSalesReps(data.reps || []);
+    }
+    setSalesRepsLoaded(true);
+    setSalesRepsLoading(false);
+  }
+
+  async function suspendRep(rep) {
+    setRepActionId(rep.id);
+    setRepActionError("");
+    var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    if (!token) { setRepActionId(null); setRepActionError("Session expired. Please sign out and sign in again."); return; }
+
+    var res = await fetch(SUPABASE_URL + "/functions/v1/admin-manage-sales-reps", {
+      method: "POST",
+      headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ op: "suspend", user_id: rep.id }),
+    });
+    var data = await res.json();
+    setRepActionId(null);
+    if (!res.ok) { setRepActionError(data.error || "Failed to suspend."); return; }
+
+    setSalesReps(function(prev) {
+      return prev.map(function(r) { return r.id === rep.id ? Object.assign({}, r, { banned_until: "9999-12-31T23:59:59Z" }) : r; });
+    });
+    logAction("suspend_sales_rep", null, null, "Suspended sales rep: " + rep.email);
+  }
+
+  async function unsuspendRep(rep) {
+    setRepActionId(rep.id);
+    setRepActionError("");
+    var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    if (!token) { setRepActionId(null); setRepActionError("Session expired. Please sign out and sign in again."); return; }
+
+    var res = await fetch(SUPABASE_URL + "/functions/v1/admin-manage-sales-reps", {
+      method: "POST",
+      headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ op: "unsuspend", user_id: rep.id }),
+    });
+    var data = await res.json();
+    setRepActionId(null);
+    if (!res.ok) { setRepActionError(data.error || "Failed to unsuspend."); return; }
+
+    setSalesReps(function(prev) {
+      return prev.map(function(r) { return r.id === rep.id ? Object.assign({}, r, { banned_until: null }) : r; });
+    });
+    logAction("unsuspend_sales_rep", null, null, "Unsuspended sales rep: " + rep.email);
+  }
+
+  async function deleteRep() {
+    if (!deleteRepModal) return;
+    setDeleteRepLoading(true);
+    var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
+    if (!token) { setDeleteRepLoading(false); setRepActionError("Session expired. Please sign out and sign in again."); return; }
+
+    var res = await fetch(SUPABASE_URL + "/functions/v1/admin-manage-sales-reps", {
+      method: "POST",
+      headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ op: "delete", user_id: deleteRepModal.id }),
+    });
+    var data = await res.json();
+    setDeleteRepLoading(false);
+
+    if (!res.ok) { setRepActionError(data.error || "Failed to delete."); return; }
+
+    var deletedId = deleteRepModal.id;
+    var deletedEmail = deleteRepModal.email;
+    setSalesReps(function(prev) { return prev.filter(function(r) { return r.id !== deletedId; }); });
+    setDeleteRepModal(null);
+    logAction("delete_sales_rep", null, null, "Deleted sales rep: " + deletedEmail);
   }
 
   // Approving reuses the EXISTING create_invite RPC -- no parallel path
@@ -456,6 +549,7 @@ export default function SuperAdminDashboard({ onLogout }) {
     logAction("manual_onboard", null, null, "Created sales rep account: " + addRepEmail.trim());
     setAddRepEmail(""); setAddRepPass("");
     setAddRepDone(true);
+    loadSalesReps();
     setTimeout(function() { setAddRepDone(false); setAddRepModal(false); }, 2000);
   }
 
@@ -1016,6 +1110,11 @@ export default function SuperAdminDashboard({ onLogout }) {
       addRepModal={addRepModal} setAddRepModal={setAddRepModal} addRepEmail={addRepEmail} setAddRepEmail={setAddRepEmail}
       addRepPass={addRepPass} setAddRepPass={setAddRepPass} addRepError={addRepError} setAddRepError={setAddRepError}
       addRepDone={addRepDone} addRepLoading={addRepLoading} addSalesRep={addSalesRep}
+      salesReps={salesReps} salesRepsLoading={salesRepsLoading} salesRepsLoaded={salesRepsLoaded}
+      repActionId={repActionId} repActionError={repActionError}
+      suspendRep={suspendRep} unsuspendRep={unsuspendRep}
+      deleteRepModal={deleteRepModal} setDeleteRepModal={setDeleteRepModal}
+      deleteRepLoading={deleteRepLoading} deleteRep={deleteRep}
     />;
   }
 
@@ -1164,7 +1263,7 @@ export default function SuperAdminDashboard({ onLogout }) {
           {[
             { label: "💲 Plans",      onClick: function() { setView("plans"); loadPlans(); } },
             { label: "📋 Audit Log",  onClick: function() { setView("audit"); loadAuditLog(); } },
-            { label: "🧑‍💼 Requests", onClick: function() { setView("requests"); loadOnboardingRequests(); } },
+            { label: "🧑‍💼 Requests", onClick: function() { setView("requests"); loadOnboardingRequests(); loadSalesReps(); } },
             { label: "🩺 Health",     onClick: function() { setView("health"); } },
             { label: "📊 Analytics",  onClick: function() { setView("analytics"); loadAnalytics(); } },
             { label: "💰 P&L",        onClick: function() { setCombinedPLBackTo("salons"); setView("combinedpl"); } },
