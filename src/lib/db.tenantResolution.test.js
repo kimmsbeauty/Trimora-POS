@@ -10,6 +10,14 @@
 
 import { setCurrentSalonId } from "./currentSalon";
 
+// M4 fix (2026-07-30 audit) made dbDirect() fail closed on tenant tables
+// when there's no device token. The no-resolved-salon tests below return
+// before that check is ever reached (resolvedId is checked first), so
+// this mock only matters for the "WITH a resolved salon" test.
+vi.mock("./deviceAuth", () => ({
+  getValidAccessToken: () => Promise.resolve("fake-device-token"),
+}));
+
 var originalFetch = global.fetch;
 
 describe("db.js tenant resolution refusal", () => {

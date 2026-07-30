@@ -21,6 +21,14 @@
 
 import { setCurrentSalonId } from "./currentSalon";
 
+// M4 fix (2026-07-30 audit) made dbDirect() fail closed on tenant tables
+// when there's no device token, instead of falling back to the anon key.
+// These tests are about salon_id injection, not auth, so give them a
+// resolved token the same way a real logged-in device would have one.
+vi.mock("./deviceAuth", () => ({
+  getValidAccessToken: () => Promise.resolve("fake-device-token"),
+}));
+
 var originalFetch = global.fetch;
 
 describe("db.js TENANT_TABLES filter/body injection", () => {
