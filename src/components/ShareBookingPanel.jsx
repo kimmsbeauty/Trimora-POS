@@ -4,6 +4,15 @@ import { useState, useEffect, useRef } from "react";
 import QRCode from "qrcode";
 import { GOLD, GOLD_LT, GOLD_DIM, BLACK, WHITE, CREAM, DARK, GREEN } from "../lib/constants.js";
 
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export default function ShareBookingPanel({ salon }) {
   // Was previously a single hardcoded `window.location.origin + "/booking"`,
   // completely independent of whatever salonName text was passed in. That
@@ -43,18 +52,26 @@ export default function ShareBookingPanel({ salon }) {
   }
 
   function printQR() {
-    var printWindow = window.open("", "_blank");
+    // Security note (audit M1, 2026-07-30): salonName is settable via the
+    // sales-rep onboarding flow, pre-superadmin-approval, and was being
+    // concatenated unescaped into this HTML string -- a malicious salon
+    // name containing markup would execute in a window that (via
+    // window.open's default opener link) had a live reference back to
+    // this app. Escaping it here, and opening with "noopener" so the print
+    // window can no longer reach back into this one regardless.
+    var safeSalonName = escapeHtml(salonName);
+    var printWindow = window.open("", "_blank", "noopener");
     printWindow.document.write(
-      "<html><head><title>" + salonName + " — Booking QR</title>" +
+      "<html><head><title>" + safeSalonName + " — Booking QR</title>" +
       "<style>body{font-family:sans-serif;text-align:center;padding:40px;}" +
       "h1{font-size:20px;margin-bottom:4px;}p{color:#888;font-size:13px;margin-bottom:24px;}" +
       ".qrbox{display:inline-block;padding:20px;border:2px solid #C9A84C;border-radius:16px;}" +
       ".url{margin-top:16px;font-size:12px;color:#555;word-break:break-all;}</style>" +
       "</head><body>" +
-      "<h1>📅 Book at " + salonName + "</h1>" +
+      "<h1>📅 Book at " + safeSalonName + "</h1>" +
       "<p>Scan to book your appointment online</p>" +
       "<div class='qrbox'>" + qrSvg + "</div>" +
-      "<div class='url'>" + bookingUrl + "</div>" +
+      "<div class='url'>" + escapeHtml(bookingUrl) + "</div>" +
       "</body></html>"
     );
     printWindow.document.close();

@@ -90,6 +90,23 @@ async function dbDirect(method, table, data = null, filters = "") {
 
   const deviceToken = await getValidAccessToken();
 
+  // Security note (audit M4, 2026-07-30): this used to fall through to
+  // the anon key whenever deviceToken was missing, for every table --
+  // that only ever "worked safely" because RLS happens to reject anon on
+  // every tenant-scoped table today, with zero defense-in-depth at this
+  // layer if a future RLS policy were ever misconfigured. Tenant tables
+  // now fail closed here explicitly instead of relying on that. Non-tenant
+  // tables (public_salon_directory, bookings' anon insert, etc.) are
+  // deliberately unaffected -- anon access to those is real, intended
+  // design, not a fallback.
+  if (!deviceToken && TENANT_TABLES.has(table)) {
+    console.error(
+      "[db.js] SECURITY: no device token for tenant-scoped table '" + table + "'. " +
+      "Refusing to fall back to the anon key -- returning null."
+    );
+    return null;
+  }
+
   const url = `${SUPABASE_URL}/rest/v1/${table}${finalFilters}`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
@@ -124,6 +141,15 @@ async function dbDirect(method, table, data = null, filters = "") {
 // session" and fail every time, not just when actually unauthorized.
 export async function dbRpcAuth(functionName, args = {}) {
   const deviceToken = await getValidAccessToken();
+
+  // audit M4: this function exists specifically for RPCs that rely on
+  // auth_salon_id()/auth.uid() -- there's no legitimate anonymous use of
+  // it (see dbRpc() above for that case), so a missing token fails closed
+  // instead of silently calling through with the anon key.
+  if (!deviceToken) {
+    return { error: "Not authenticated. Please sign in again." };
+  }
+
   const url = `${SUPABASE_URL}/rest/v1/rpc/${functionName}`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
