@@ -10,8 +10,22 @@
 // matching salon_settings row (primary_color/secondary_color/logo_url/
 // tagline) and merges it into the resolved salon object, so consumers
 // never need to know it came from a second table. mode="public" already
-// gets these fields for free, since public_salon_directory was widened
-// to include them directly — no change needed for that path.
+// gets these fields for free, since public_salon_directory includes them
+// directly — no change needed for that path.
+//
+// Security note (audit High-2, 2026-07-30): subscription_plan/status/
+// expires_at used to come from public_salon_directory directly, which
+// meant Trimora's own SaaS billing relationship with a tenant was
+// readable by anyone who knew that tenant's slug -- unauthenticated. That
+// view is now cosmetic-and-payment-collection info only (still includes
+// mpesa_till/paybill/account/send_money_phone/contact_phone, which really
+// are meant to be public -- BookingPage shows them to customers so they
+// can pay/contact the salon, same as a till-number sticker in a physical
+// shop). For mode="authenticated" only, subscription state is now read
+// from salon_subscriptions directly, which already carries a
+// "salon_id = auth_salon_id()" RLS policy scoping it to the caller's own
+// salon -- so an authenticated device still can't read another salon's
+// subscription state either.
 //
 // fetchPublicSalonBranding() below is a separate, deliberately decoupled
 // helper for DeviceLoginPage. It needs salon branding for cosmetic
@@ -67,9 +81,22 @@ export function SalonGate({ mode, children }) {
           return;
         }
 
-        // Check subscription expiry (only block on POS/authenticated routes)
-        // Public booking page is never blocked — only warn admin inside POS
         if (mode === "authenticated") {
+          // Subscription state no longer comes from public_salon_directory
+          // (audit High-2) — read it from salon_subscriptions instead, which
+          // is RLS-scoped to the caller's own salon.
+          var subRows = await db("GET", "salon_subscriptions", null, "?salon_id=eq." + encodeURIComponent(resolvedSalon.id) + "&limit=1");
+          if (cancelled) return;
+          var subRow = (subRows && subRows.length > 0) ? subRows[0] : null;
+
+          resolvedSalon = Object.assign({}, resolvedSalon, {
+            subscription_plan:       subRow ? subRow.plan : null,
+            subscription_status:     subRow ? subRow.status : null,
+            subscription_expires_at: subRow ? subRow.expires_at : null,
+          });
+
+          // Check subscription expiry (only block on POS/authenticated routes)
+          // Public booking page is never blocked — only warn admin inside POS
           var subStatus    = resolvedSalon.subscription_status;
           var subExpires   = resolvedSalon.subscription_expires_at;
           var isLifetime   = subStatus === "lifetime";
@@ -89,9 +116,7 @@ export function SalonGate({ mode, children }) {
             // Within grace period — let them in but flag it
             resolvedSalon = Object.assign({}, resolvedSalon, { subscription_grace: true, subscription_days_overdue: daysPast });
           }
-        }
 
-        if (mode === "authenticated") {
           var settingsRows = await db("GET", "salon_settings", null, "?salon_id=eq." + encodeURIComponent(resolvedSalon.id) + "&limit=1");
           if (cancelled) return;
 
@@ -115,11 +140,6 @@ export function SalonGate({ mode, children }) {
               receipt_footer_message: settingsRows[0].receipt_footer_message || null,
               receipt_show_staff: settingsRows[0].receipt_show_staff !== false,
               receipt_show_vehicle: settingsRows[0].receipt_show_vehicle !== false,
-              // subscription fields already on resolvedSalon from public_salon_directory
-              // — preserve them explicitly so they aren't lost in the merge
-              subscription_plan:       resolvedSalon.subscription_plan,
-              subscription_status:     resolvedSalon.subscription_status,
-              subscription_expires_at: resolvedSalon.subscription_expires_at,
             });
           }
         }
