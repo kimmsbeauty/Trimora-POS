@@ -21,8 +21,26 @@ export const TENANT_TABLES = new Set([
   "auto_vehicle_inspections",
 ]);
 
+// See usage in dbDirect() below (M4 fail-closed guard): tables in this
+// set are also in TENANT_TABLES, but have a deliberate, audited anon-read
+// RLS policy meant to work before any device login exists, so the guard
+// must not block them. Currently just salon_enabled_modules -- see the
+// comment at its usage site for the full reasoning.
+export const PRE_LOGIN_READABLE_TENANT_TABLES = new Set(["salon_enabled_modules"]);
+
 const QUEUE_STORAGE_KEY = "trimora_offline_queue";
 const MAX_RETRY_ATTEMPTS = 5;
+
+// L1 (2026-07-30 audit): offline queue payloads sit in localStorage
+// unencrypted until synced -- true client-side encryption isn't practical
+// here (there's no secret to encrypt with that wouldn't itself have to
+// live in localStorage, readable by anything with local device access).
+// What was missing and is fixable: there was no cap on how large this
+// queue could grow. A POS device stuck offline for a long stretch (or a
+// bug that keeps queueing failed writes) had no ceiling. Capping it here
+// means a shared/lost device holds a bounded, not unbounded, amount of
+// customer data in plaintext.
+const MAX_QUEUE_LENGTH = 500;
 
 export const offlineQueue = [];
 let isSyncing = false;
@@ -33,6 +51,25 @@ function persistQueue() {
   } catch (e) {
     console.error("Failed to persist offline queue:", e);
   }
+}
+
+// Push a new offline-queued write, then enforce MAX_QUEUE_LENGTH by
+// dropping the OLDEST entries first -- the same call sites that already
+// accept losing an item after MAX_RETRY_ATTEMPTS failures (see
+// syncOfflineQueue below) already have a documented never-throws
+// contract that tolerates a write occasionally not surviving offline
+// queueing; this is the same tradeoff, just triggered by size instead of
+// retry count.
+function pushQueueItem(item) {
+  offlineQueue.push(item);
+  while (offlineQueue.length > MAX_QUEUE_LENGTH) {
+    const dropped = offlineQueue.shift();
+    console.error(
+      "[db.js] Offline queue exceeded " + MAX_QUEUE_LENGTH + " items -- " +
+      "dropping oldest queued write to make room:", dropped
+    );
+  }
+  persistQueue();
 }
 
 // Restore any writes that were still pending when the page last closed or
@@ -98,8 +135,12 @@ async function dbDirect(method, table, data = null, filters = "") {
   // now fail closed here explicitly instead of relying on that. Non-tenant
   // tables (public_salon_directory, bookings' anon insert, etc.) are
   // deliberately unaffected -- anon access to those is real, intended
-  // design, not a fallback.
-  if (!deviceToken && TENANT_TABLES.has(table)) {
+  // design, not a fallback. PRE_LOGIN_READABLE_TENANT_TABLES (defined
+  // above, next to TENANT_TABLES) is the one further exception: tables
+  // that ARE tenant-scoped but also have a deliberate anon-read policy
+  // meant to work before login.
+
+  if (!deviceToken && TENANT_TABLES.has(table) && !PRE_LOGIN_READABLE_TENANT_TABLES.has(table)) {
     console.error(
       "[db.js] SECURITY: no device token for tenant-scoped table '" + table + "'. " +
       "Refusing to fall back to the anon key -- returning null."
@@ -246,8 +287,7 @@ export async function db(method, table, data = null, filters = "") {
   }
 
   if (!navigator.onLine) {
-    offlineQueue.push({ method, table, data, filters, attempts: 0 });
-    persistQueue();
+    pushQueueItem({ method, table, data, filters, attempts: 0 });
     return null;
   }
 
@@ -255,8 +295,7 @@ export async function db(method, table, data = null, filters = "") {
   if (result === null) {
     // The browser thought it was online, but the write still failed —
     // queue it rather than losing it silently.
-    offlineQueue.push({ method, table, data, filters, attempts: 0 });
-    persistQueue();
+    pushQueueItem({ method, table, data, filters, attempts: 0 });
   }
   return result;
 }
