@@ -28,6 +28,9 @@ vi.mock("../lib/db", () => ({
   db: vi.fn(),
   offlineQueue: [],
   syncOfflineQueue: vi.fn().mockResolvedValue(undefined),
+  getDroppedWrites: vi.fn().mockReturnValue([]),
+  clearDroppedWrite: vi.fn(),
+  clearAllDroppedWrites: vi.fn(),
 }));
 
 vi.mock("../lib/SalonContext", () => ({

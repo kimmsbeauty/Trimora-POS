@@ -28,7 +28,7 @@ import {
   rateForStylistName as rateForStylistNameLib,
 } from "../lib/cartMath.js";
 import { buildSaleData, computeStockAfterDeduction } from "../lib/saleLogic.js";
-import { db, offlineQueue, syncOfflineQueue } from "../lib/db.js";
+import { db, offlineQueue, syncOfflineQueue, getDroppedWrites, clearDroppedWrite, clearAllDroppedWrites } from "../lib/db.js";
 import { fmt, todayStr, nowTime } from "../lib/utils.js";
 import { useSalon, fetchPublicSalonBranding } from "../lib/SalonContext";
 import { getValidAccessToken } from "../lib/deviceAuth";
@@ -184,6 +184,11 @@ export default function POSApp({ onLogout, userRole }) {
   var expensesState = useState([]); var expenses = expensesState[0]; var setExpenses = expensesState[1];
   var isOnlineState = useState(navigator.onLine); var isOnline = isOnlineState[0]; var setIsOnline = isOnlineState[1];
   var syncPendingState = useState(false); var syncPending = syncPendingState[0]; var setSyncPending = syncPendingState[1];
+  // M5 (2026-07-30 audit): dropped offline writes need a visible,
+  // dismissable alert -- see db.js's recordDroppedWrite for what gets
+  // captured (table, amount/customer if present, timestamp, reason).
+  var droppedWritesState = useState(function() { return getDroppedWrites(); });
+  var droppedWritesList = droppedWritesState[0]; var setDroppedWritesList = droppedWritesState[1];
   var apptDateState = useState(todayStr()); var apptDate = apptDateState[0]; var setApptDate = apptDateState[1];
   var showAllApptsState = useState(false); var showAllAppts = showAllApptsState[0]; var setShowAllAppts = showAllApptsState[1];
   var calViewState = useState(false); var calView = calViewState[0]; var setCalView = calViewState[1];
@@ -256,6 +261,12 @@ export default function POSApp({ onLogout, userRole }) {
     window.addEventListener("online", goOnline);
     window.addEventListener("offline", goOffline);
     return function() { window.removeEventListener("online", goOnline); window.removeEventListener("offline", goOffline); };
+  }, []);
+
+  useEffect(function() {
+    function onDroppedWritesChanged(e) { setDroppedWritesList(e.detail); }
+    window.addEventListener("trimora:dropped-writes-changed", onDroppedWritesChanged);
+    return function() { window.removeEventListener("trimora:dropped-writes-changed", onDroppedWritesChanged); };
   }, []);
 
   function searchCustomers(q) {
@@ -1042,6 +1053,35 @@ export default function POSApp({ onLogout, userRole }) {
 
       {!isOnline && <div style={{ background: RED, color: WHITE, textAlign: "center", padding: "6px 16px", fontSize: 12, fontWeight: 700 }}>Offline — Sales will sync when connected</div>}
       {syncPending && isOnline && <div style={{ background: GREEN, color: WHITE, textAlign: "center", padding: "6px 16px", fontSize: 12, fontWeight: 700 }}>Syncing offline data...</div>}
+
+      {droppedWritesList.length > 0 && (
+        <div style={{ background: RED, color: WHITE, padding: "10px 16px", fontSize: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontWeight: 800, marginBottom: 6 }}>
+            <span>⚠️ {droppedWritesList.length} offline {droppedWritesList.length === 1 ? "write" : "writes"} could not be saved — check manually</span>
+            <button
+              onClick={function() { clearAllDroppedWrites(); }}
+              style={{ background: "rgba(255,255,255,0.2)", color: WHITE, border: "none", borderRadius: 6, padding: "3px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+            >
+              Dismiss all
+            </button>
+          </div>
+          {droppedWritesList.map(function(w) {
+            return (
+              <div key={w.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", borderTop: "1px solid rgba(255,255,255,0.2)" }}>
+                <span>
+                  {w.table}{w.customer ? " — " + w.customer : ""}{w.amount != null ? " — " + fmt(w.amount) : ""} — {new Date(w.droppedAt).toLocaleString()}
+                </span>
+                <button
+                  onClick={function() { clearDroppedWrite(w.id); }}
+                  style={{ background: "transparent", color: WHITE, border: "1px solid rgba(255,255,255,0.4)", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
+                >
+                  Dismiss
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Top bar */}
       <div style={{ background: "linear-gradient(135deg," + BLACK + " 0%," + secondary + " 60%," + bgStop3 + " 100%)", borderBottom: "2px solid " + primary, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>

@@ -29,6 +29,7 @@ export const TENANT_TABLES = new Set([
 export const PRE_LOGIN_READABLE_TENANT_TABLES = new Set(["salon_enabled_modules"]);
 
 const QUEUE_STORAGE_KEY = "trimora_offline_queue";
+const DROPPED_STORAGE_KEY = "trimora_dropped_writes";
 const MAX_RETRY_ATTEMPTS = 5;
 
 // L1 (2026-07-30 audit): offline queue payloads sit in localStorage
@@ -44,6 +45,75 @@ const MAX_QUEUE_LENGTH = 500;
 
 export const offlineQueue = [];
 let isSyncing = false;
+
+// M5 (2026-07-30 audit): dropped offline writes (a sale, a booking) used
+// to vanish with only a console.error -- nothing told the staff member
+// who made it. This keeps a small persisted, dismissable record of every
+// drop, with enough to manually reconcile: which table, an amount/
+// customer if the payload had one, when it happened, and why. Persisted
+// (survives a refresh) and broadcast via a window event so any mounted
+// UI (POSApp.jsx, AutoApp.jsx, ...) can show it without polling.
+export const droppedWrites = [];
+
+function persistDropped() {
+  try {
+    window.localStorage.setItem(DROPPED_STORAGE_KEY, JSON.stringify(droppedWrites));
+  } catch (e) {
+    console.error("Failed to persist dropped-writes record:", e);
+  }
+}
+
+function broadcastDroppedWrites() {
+  if (typeof window !== "undefined" && window.dispatchEvent) {
+    window.dispatchEvent(new CustomEvent("trimora:dropped-writes-changed", {
+      detail: droppedWrites.slice(),
+    }));
+  }
+}
+
+// Best-effort human-readable summary from whatever shape this table's
+// write happens to have -- not every table has the same fields, so this
+// just checks the common ones rather than requiring per-table mapping.
+function summarizeForReconciliation(item) {
+  var d = item.data || {};
+  var row = Array.isArray(d) ? (d[0] || {}) : d;
+  return {
+    amount: row.total != null ? row.total : (row.amount != null ? row.amount : null),
+    customer: row.customer_name || row.client_name || row.name || null,
+  };
+}
+
+function recordDroppedWrite(item, reason) {
+  var summary = summarizeForReconciliation(item);
+  droppedWrites.push({
+    id: (Date.now().toString(36) + Math.random().toString(36).slice(2)),
+    table: item.table,
+    method: item.method,
+    amount: summary.amount,
+    customer: summary.customer,
+    droppedAt: new Date().toISOString(),
+    reason: reason,
+  });
+  persistDropped();
+  broadcastDroppedWrites();
+}
+
+export function getDroppedWrites() {
+  return droppedWrites.slice();
+}
+
+export function clearDroppedWrite(id) {
+  var idx = droppedWrites.findIndex(function (w) { return w.id === id; });
+  if (idx !== -1) droppedWrites.splice(idx, 1);
+  persistDropped();
+  broadcastDroppedWrites();
+}
+
+export function clearAllDroppedWrites() {
+  droppedWrites.length = 0;
+  persistDropped();
+  broadcastDroppedWrites();
+}
 
 function persistQueue() {
   try {
@@ -68,8 +138,23 @@ function pushQueueItem(item) {
       "[db.js] Offline queue exceeded " + MAX_QUEUE_LENGTH + " items -- " +
       "dropping oldest queued write to make room:", dropped
     );
+    recordDroppedWrite(dropped, "queue_full");
   }
   persistQueue();
+}
+
+// Restore any dropped-write records left from a previous session, so a
+// refresh doesn't clear an unreconciled alert before staff have seen it.
+if (typeof window !== "undefined") {
+  try {
+    const rawDropped = window.localStorage.getItem(DROPPED_STORAGE_KEY);
+    if (rawDropped) {
+      const restoredDropped = JSON.parse(rawDropped);
+      if (Array.isArray(restoredDropped)) droppedWrites.push(...restoredDropped);
+    }
+  } catch (e) {
+    console.error("Failed to restore dropped-writes record:", e);
+  }
 }
 
 // Restore any writes that were still pending when the page last closed or
@@ -264,6 +349,7 @@ export async function syncOfflineQueue() {
       item.attempts = (item.attempts || 0) + 1;
       if (item.attempts >= MAX_RETRY_ATTEMPTS) {
         console.error("Dropping offline-queued write after repeated failures:", item);
+        recordDroppedWrite(item, "retries_exhausted");
         offlineQueue.shift();
       }
       persistQueue();
