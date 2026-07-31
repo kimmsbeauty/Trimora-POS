@@ -20,10 +20,11 @@ name: Manual database backup (free-tier stopgap)
 #
 # Required repo secrets (Settings > Secrets and variables > Actions):
 #   SUPABASE_DB_URL              -- Postgres connection string from
-#     Supabase Dashboard > Project Settings > Database > Connection
-#     string > URI. Use the DIRECT connection (not the pooler/pgbouncer
-#     one) -- pg_dump can have compatibility issues against pooled
-#     connections in transaction mode.
+#     Supabase Dashboard > Connect > Session pooler (NOT Direct
+#     connection -- GitHub-hosted runners have no IPv6 route, and Direct
+#     connections are IPv6-only on the free tier; Session pooler is
+#     IPv4-reachable and, unlike Transaction pooler, behaves enough like
+#     a direct connection for pg_dump to work correctly against it).
 #   BACKUP_ENCRYPTION_PASSPHRASE  -- any strong random passphrase, used
 #     symmetrically to encrypt the dump. Store this passphrase somewhere
 #     safe outside GitHub too (e.g. a password manager) -- if it's lost,
@@ -55,7 +56,15 @@ jobs:
             echo "SUPABASE_DB_URL secret is not set -- see this workflow's own comments for what's needed."
             exit 1
           fi
-          pg_dump "$SUPABASE_DB_URL" --format=custom --no-owner --no-privileges -f trimora-pos-backup.dump
+          # Call the versioned binary explicitly rather than the
+          # unversioned `pg_dump` on PATH: ubuntu-latest ships an older
+          # postgresql-client pre-installed, and installing
+          # postgresql-client-17 alongside it does not reliably make the
+          # unversioned `pg_dump` resolve to the new one (confirmed live:
+          # server version 17.6 vs pg_dump version 16.14, despite this
+          # step installing 17). This avoids depending on PATH/
+          # update-alternatives ordering entirely.
+          /usr/lib/postgresql/17/bin/pg_dump "$SUPABASE_DB_URL" --format=custom --no-owner --no-privileges -f trimora-pos-backup.dump
 
       - name: Encrypt the dump
         env:
