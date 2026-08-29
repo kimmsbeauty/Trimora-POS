@@ -1,0 +1,26 @@
+-- 079_drop_dead_ai_classify_requests_table.sql
+--
+-- ai_classify_requests was created (create_ai_classify_requests_rate_limit_table,
+-- 2026-07-30) as a rate-limit tracking table for the ai-classify-question edge
+-- function, then had its anon/authenticated grants revoked the same day
+-- (revoke_anon_authenticated_grants_ai_classify_requests). Neither of those
+-- two migrations ever made it into this repo's supabase/migrations/ -- only
+-- into Supabase's applied-migration history -- discovered during a 2026-08-29
+-- orphaned-files audit.
+--
+-- Confirmed dead before dropping:
+--   - 0 rows.
+--   - ai-classify-question/index.ts has no Supabase client at all, by explicit
+--     design (see the comment at the top of that file) -- it was never wired
+--     to write here.
+--   - Zero references anywhere else in the app code, RPCs, or edge functions.
+--   - No RLS policies currently defined on it (grants were already revoked to
+--     nothing).
+--   - No other table/constraint references it (only its own PK and its own
+--     FK out to salons) -- safe to drop with no cascading impact.
+--
+-- Applied directly to production on 2026-08-29 (see apply_migration call in
+-- session history); this file backfills the repo to match, same pattern as
+-- migration 055/061's "RECOVERED" backfills.
+
+drop table if exists public.ai_classify_requests;
