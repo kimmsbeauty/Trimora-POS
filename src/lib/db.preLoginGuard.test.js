@@ -18,7 +18,18 @@
 // working. If a future pre-login check needs a new tenant table, this
 // test will fail until that table is deliberately added to
 // PRE_LOGIN_READABLE_TENANT_TABLES (and, in practice, until a matching
-// anon-read RLS policy exists for it -- see M8's reasoning).
+// anon-read/anon-insert RLS policy exists for it -- see M8's reasoning).
+//
+// 2026-08-29: the same M4 guard shipped a second instance of this exact
+// bug, this time against `feedback`. The public rating pages
+// (RatingPage.jsx / AutoRatingPage.jsx, routes /:slug/rate/:token and
+// /:slug/auto/rate/:token) POST to `feedback` with no device token by
+// design -- the customer filling them out has never logged in. M4 didn't
+// account for that either and started failing closed on every feedback
+// submission, even though `feedback` already has a deliberate,
+// audited anon-INSERT RLS policy (feedback_anon_insert, migration 061)
+// scoped to a real salon_id. `feedback` is now in
+// PRE_LOGIN_READABLE_TENANT_TABLES alongside salon_enabled_modules.
 
 import { setCurrentSalonId } from "./currentSalon";
 import { getValidAccessToken } from "./deviceAuth";
@@ -47,8 +58,10 @@ describe("db.js pre-login tenant-table guard (M4 regression)", () => {
     setCurrentSalonId(null);
   });
 
-  test("PRE_LOGIN_READABLE_TENANT_TABLES currently contains exactly salon_enabled_modules", () => {
-    expect(Array.from(PRE_LOGIN_READABLE_TENANT_TABLES)).toEqual(["salon_enabled_modules"]);
+  test("PRE_LOGIN_READABLE_TENANT_TABLES currently contains exactly salon_enabled_modules and feedback", () => {
+    expect(Array.from(PRE_LOGIN_READABLE_TENANT_TABLES).sort()).toEqual(
+      ["feedback", "salon_enabled_modules"].sort()
+    );
   });
 
   test("an ordinary tenant table with no device token still fails closed (real M4 behavior, unaffected)", async () => {
@@ -76,5 +89,35 @@ describe("db.js pre-login tenant-table guard (M4 regression)", () => {
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(result).toEqual([]);
+  });
+
+  test("feedback POST with no device token still proceeds to fetch (public rating page, the bug this regression test guards)", async () => {
+    getValidAccessToken.mockResolvedValue(null);
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([{ id: "fake-feedback-id" }]),
+    });
+
+    var result = await db("POST", "feedback", {
+      rating: 5,
+      note: "It was amazing will be coming back soon",
+      client: "Mercy",
+      feedback_token: "some-token",
+      date: "2026-08-29",
+      time: "10:13",
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([{ id: "fake-feedback-id" }]);
+  });
+
+  test("feedback POST with no device token and no resolved salon still fails closed (unaffected -- salon resolution guard is separate from the token guard)", async () => {
+    getValidAccessToken.mockResolvedValue(null);
+    setCurrentSalonId(null);
+
+    var result = await db("POST", "feedback", { rating: 5 });
+
+    expect(result).toBeNull();
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });

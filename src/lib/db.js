@@ -22,11 +22,26 @@ export const TENANT_TABLES = new Set([
 ]);
 
 // See usage in dbDirect() below (M4 fail-closed guard): tables in this
-// set are also in TENANT_TABLES, but have a deliberate, audited anon-read
-// RLS policy meant to work before any device login exists, so the guard
-// must not block them. Currently just salon_enabled_modules -- see the
-// comment at its usage site for the full reasoning.
-export const PRE_LOGIN_READABLE_TENANT_TABLES = new Set(["salon_enabled_modules"]);
+// set are also in TENANT_TABLES, but have a deliberate, audited anon
+// RLS policy (read and/or insert) meant to work before any device login
+// exists, so the guard must not block them.
+//   - salon_enabled_modules: anon SELECT, used pre-login to know which
+//     modules a salon has enabled.
+//   - feedback: anon INSERT only (feedback_anon_insert, migration 061),
+//     used by the public, unauthenticated rating pages at
+//     /:slug/rate/:token and /:slug/auto/rate/:token (RatingPage.jsx /
+//     AutoRatingPage.jsx). A customer submitting feedback from that link
+//     never has a device token -- the M4 guard below was written with
+//     device-authenticated tenant tables in mind and, without this entry,
+//     wrongly fails every customer feedback submission closed before it
+//     ever reaches Postgres, even though the RLS policy on the DB side
+//     already scopes the insert correctly (WITH CHECK against a real
+//     salon_id). See the 2026-08-29 bug report: "Something went wrong
+//     submitting your feedback" on every attempt.
+export const PRE_LOGIN_READABLE_TENANT_TABLES = new Set([
+  "salon_enabled_modules",
+  "feedback",
+]);
 
 const QUEUE_STORAGE_KEY = "trimora_offline_queue";
 const DROPPED_STORAGE_KEY = "trimora_dropped_writes";
