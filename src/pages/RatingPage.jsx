@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import SalonBrandmark from "../components/SalonBrandmark";
 import GoldBtn from "../components/GoldBtn";
-import { db, dbRpc } from "../lib/db.js";
+import { dbRpc } from "../lib/db.js";
 import { todayStr, nowTime } from "../lib/utils.js";
 import { BLACK, GOLD, DARK, WHITE } from "../lib/constants.js";
 import { lighten, darken } from "../lib/colorUtils";
@@ -83,16 +83,23 @@ export default function RatingPage() {
     if (rating === 0) return alert("Please select a star rating");
     setSubmitting(true);
     try {
-      var saved = await db("POST", "feedback", {
-        rating: rating,
-        note: note,
-        client: sale ? sale.client : null,
-        feedback_token: token,
-        date: todayStr(),
-        time: nowTime(),
+      // Was db("POST", "feedback", {...}) -- that path requires
+      // currentSalonId to already be resolved client-side (set by
+      // SalonGate), which never happens on this page's legacy
+      // unslugged route (/rate/:token, no SalonGate in the tree) and
+      // so failed every submission from that route. This RPC resolves
+      // salon_id server-side from the token itself, the same way
+      // rating_lookup_by_token above already does -- no client-side
+      // tenant resolution required at all. See migration 080.
+      var saved = await dbRpc("submit_sale_feedback", {
+        p_token: token,
+        p_rating: rating,
+        p_note: note,
+        p_date: todayStr(),
+        p_time: nowTime(),
       });
-      // db() fails soft (returns null) rather than throwing, so without this
-      // check a failed write would still show "Thank you!" to the customer.
+      // dbRpc() fails soft (returns null) rather than throwing, so without
+      // this check a failed write would still show "Thank you!" to the customer.
       if (!saved) {
         alert("Something went wrong submitting your feedback. Please try again.");
         return;
