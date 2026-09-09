@@ -62,6 +62,7 @@ export default function CheckoutView({
   stylistsInCart,
   removeFromCart,
   setItemStylist,
+  setItemCommissionOverride,
   serviceTotal,
   showDiscount,
   discountType,
@@ -254,6 +255,21 @@ export default function CheckoutView({
                             <option value="">Select stylist for this item</option>
                             {staffList.map(function(s) { return <option key={s.id} value={s.name}>{s.name}</option>; })}
                           </select>
+                        </div>
+                      )}
+                      {item.type === "service" && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+                          <span style={{ fontSize: 10, color: "#aaa" }}>commission</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={item.commission_override != null ? item.commission_override : ""}
+                            onChange={function(e) { setItemCommissionOverride(item.id, e.target.value); }}
+                            placeholder={Math.round(rateForStylistName(item.stylist) * 100) + "% (default)"}
+                            style={{ width: 90, borderRadius: 8, border: "1.5px solid " + GOLD_DIM + "66", padding: "5px 8px", fontSize: 12, fontFamily: "inherit", outline: "none", color: DARK, background: WHITE }}
+                          />
+                          <span style={{ fontSize: 10, color: "#aaa" }}>% — this sale only</span>
                         </div>
                       )}
                     </div>
