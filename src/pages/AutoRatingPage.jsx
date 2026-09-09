@@ -16,7 +16,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import SalonBrandmark from "../components/SalonBrandmark";
-import { db, dbRpc } from "../lib/db.js";
+import { dbRpc } from "../lib/db.js";
 import { todayStr, nowTime } from "../lib/utils.js";
 import { BLACK, GOLD, DARK, WHITE } from "../lib/constants.js";
 import { lighten, darken } from "../lib/colorUtils";
@@ -81,13 +81,16 @@ export default function AutoRatingPage() {
     if (rating === 0) return alert("Please select a star rating");
     setSubmitting(true);
     try {
-      var saved = await db("POST", "feedback", {
-        rating: rating,
-        note: note,
-        client: job ? job.client : null,
-        feedback_token: token,
-        date: todayStr(),
-        time: nowTime(),
+      // Was db("POST", "feedback", {...}) -- required client-side
+      // salon_id resolution that never happens on the legacy unslugged
+      // route. Resolved server-side from the token instead. See
+      // migration 080 and the matching change in RatingPage.jsx.
+      var saved = await dbRpc("submit_auto_job_feedback", {
+        p_token: token,
+        p_rating: rating,
+        p_note: note,
+        p_date: todayStr(),
+        p_time: nowTime(),
       });
       if (!saved) {
         alert("Something went wrong submitting your feedback. Please try again.");
