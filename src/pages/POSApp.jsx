@@ -499,6 +499,20 @@ export default function POSApp({ onLogout, userRole }) {
   function setItemStylist(id, stylistName) {
     setCart(function(p) { return p.map(function(i) { return i.id === id ? Object.assign({}, i, { stylist: stylistName }) : i; }); });
   }
+  // Lets staff enter a one-off commission % for a single service line
+  // at checkout, overriding the assigned stylist's default rate for
+  // this sale only -- the staff record's own commission_pct is never
+  // touched. Empty string clears back to the stylist's default rate.
+  // cartMath.js's calculateCommission/calculateCommissionByStylist
+  // already read item.commission_override when present -- this is
+  // just the input that sets it.
+  function setItemCommissionOverride(id, pctValue) {
+    setCart(function(p) { return p.map(function(i) {
+      if (i.id !== id) return i;
+      var override = pctValue === "" || pctValue == null ? null : Math.max(0, parseInt(pctValue, 10) || 0);
+      return Object.assign({}, i, { commission_override: override });
+    }); });
+  }
 
   function resetCart() {
     setCart([]); setClientName(""); setClientPhone(""); setSelStaff(""); setPayMethod("Cash");
@@ -1150,6 +1164,7 @@ export default function POSApp({ onLogout, userRole }) {
             stylistsInCart={stylistsInCart}
             removeFromCart={removeFromCart}
             setItemStylist={setItemStylist}
+            setItemCommissionOverride={setItemCommissionOverride}
             serviceTotal={serviceTotal}
             showDiscount={showDiscount}
             discountType={discountType}
