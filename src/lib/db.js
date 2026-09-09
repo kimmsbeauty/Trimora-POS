@@ -40,7 +40,6 @@ export const TENANT_TABLES = new Set([
 //     submitting your feedback" on every attempt.
 export const PRE_LOGIN_READABLE_TENANT_TABLES = new Set([
   "salon_enabled_modules",
-  "feedback",
 ]);
 
 const QUEUE_STORAGE_KEY = "trimora_offline_queue";
