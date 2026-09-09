@@ -4,11 +4,10 @@
 // separate times (2026-08-29 commit 7fe8a61, and again as reported
 // 2026-09-05 / fixed by migration 080 + this file): the public rating
 // pages' feedback submission silently depended on currentSalonId
-// having been resolved client-side by <SalonGate>, which never runs
-// on the legacy /rate/:token route (no :slug, no SalonGate in the
-// tree -- see App.jsx). Nothing caught this until a real customer hit
-// "Something went wrong" in production, more than once, because there
-// was no test exercising a rating page with SalonGate absent.
+// having been resolved client-side by <SalonGate>. Nothing caught this
+// until a real customer hit "Something went wrong" in production, more
+// than once, because there was no test exercising a rating page with
+// SalonGate absent.
 //
 // This file pins down the fix at the level that actually matters:
 // feedback submission must succeed via dbRpc() (a server-side,
@@ -17,6 +16,15 @@
 // explicit test simulating the exact broken scenario (useSalon()
 // returning null, i.e. no SalonGate ancestor at all) so this can't
 // regress a fourth time without a test going red.
+//
+// 2026-09-09: the legacy /rate/:token route that originally exposed
+// this bug (RatingPage with no SalonGate wrapper) was retired in favor
+// of a redirect (LegacyRatingRedirect.jsx, its own test file) that
+// forwards to /:slug/rate/:token before RatingPage ever mounts. So
+// RatingPage is no longer reachable without SalonGate in production --
+// but the invariant itself (never depend on it) is still worth pinning
+// down defensively at the component level, in case routing changes
+// again later.
 
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
@@ -37,10 +45,7 @@ vi.mock("../lib/SalonContext", () => ({
 import { db, dbRpc } from "../lib/db.js";
 import { useSalon, fetchPublicSalonBranding } from "../lib/SalonContext";
 
-function renderOnLegacyRoute(Component, routePath, urlPath) {
-  // Mirrors App.jsx's actual legacy route registration: no :slug
-  // segment, and critically no <SalonGate> wrapper -- exactly what a
-  // pre-2026-08-29 or bookmarked/reshared link still points at.
+function renderWithRoute(Component, routePath, urlPath) {
   return render(
     <MemoryRouter initialEntries={[urlPath]}>
       <Routes>
@@ -59,8 +64,10 @@ async function rateFiveStarsAndSubmit(buttonText) {
 describe("RatingPage — feedback submission never depends on SalonGate/currentSalonId", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // The broken scenario: no SalonGate ancestor, so context is null --
-    // matches rendering on the legacy /rate/:token route exactly.
+    // Defensive scenario: no SalonGate ancestor, so context is null.
+    // No longer reachable this way in production (LegacyRatingRedirect
+    // sits in front of the unslugged route now), kept as a component-
+    // level guard against the invariant regressing again.
     useSalon.mockReturnValue(null);
     fetchPublicSalonBranding.mockResolvedValue(null);
     dbRpc.mockImplementation((fn) => {
@@ -74,8 +81,8 @@ describe("RatingPage — feedback submission never depends on SalonGate/currentS
     });
   });
 
-  test("submits successfully on the legacy unslugged route with no SalonGate in the tree", async () => {
-    renderOnLegacyRoute(RatingPage, "/rate/:token", "/rate/tok-123");
+  test("submits successfully even with SalonGate/useSalon unresolved", async () => {
+    renderWithRoute(RatingPage, "/:slug/rate/:token", "/kimms-beauty/rate/tok-123");
 
     await waitFor(() => expect(screen.getByText(/How was your visit/)).toBeInTheDocument());
     await rateFiveStarsAndSubmit("Submit Feedback 💛");
@@ -95,7 +102,7 @@ describe("RatingPage — feedback submission never depends on SalonGate/currentS
   test("also submits successfully on the slug-prefixed route with SalonGate resolved", async () => {
     useSalon.mockReturnValue({ id: "salon-uuid-1", slug: "kimms-beauty", primary_color: "#C9A84C" });
 
-    renderOnLegacyRoute(RatingPage, "/:slug/rate/:token", "/kimms-beauty/rate/tok-123");
+    renderWithRoute(RatingPage, "/:slug/rate/:token", "/kimms-beauty/rate/tok-123");
 
     await waitFor(() => expect(screen.getByText(/How was your visit/)).toBeInTheDocument());
     await rateFiveStarsAndSubmit("Submit Feedback 💛");
@@ -117,7 +124,7 @@ describe("RatingPage — feedback submission never depends on SalonGate/currentS
     });
     var alertSpy = vi.spyOn(window, "alert").mockImplementation(function () {});
 
-    renderOnLegacyRoute(RatingPage, "/rate/:token", "/rate/tok-123");
+    renderWithRoute(RatingPage, "/:slug/rate/:token", "/kimms-beauty/rate/tok-123");
     await waitFor(() => expect(screen.getByText(/How was your visit/)).toBeInTheDocument());
     await rateFiveStarsAndSubmit("Submit Feedback 💛");
 
@@ -153,7 +160,7 @@ describe("AutoRatingPage — feedback submission never depends on SalonGate/curr
   });
 
   test("submits successfully even if SalonGate has not resolved a salon yet", async () => {
-    renderOnLegacyRoute(AutoRatingPage, "/:slug/auto/rate/:token", "/kimms-carwash/auto/rate/tok-456");
+    renderWithRoute(AutoRatingPage, "/:slug/auto/rate/:token", "/kimms-carwash/auto/rate/tok-456");
 
     await waitFor(() => expect(screen.getByText(/How was your wash/)).toBeInTheDocument());
     await rateFiveStarsAndSubmit("Submit Feedback 🚗");
