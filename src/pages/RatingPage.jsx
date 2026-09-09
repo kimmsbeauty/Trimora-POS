@@ -8,33 +8,19 @@ import { dbRpc } from "../lib/db.js";
 import { todayStr, nowTime } from "../lib/utils.js";
 import { BLACK, GOLD, DARK, WHITE } from "../lib/constants.js";
 import { lighten, darken } from "../lib/colorUtils";
-import { useSalon, fetchPublicSalonBranding } from "../lib/SalonContext";
+import { useSalon } from "../lib/SalonContext";
 
 export default function RatingPage() {
   var params = useParams();
   var token = params.token;
-  var slug = params.slug;
 
-  // This also renders on the legacy unprefixed /rate/:token route. The
-  // slug-prefixed route already resolves branding for free via
-  // SalonGate's mode="public" path (Step A/B). The legacy route has no
-  // SalonGate at all, so it needs the same independent fallback lookup
-  // LoginPage.jsx uses.
-  var contextSalon = useSalon();
-
-  var legacyBrandingState = useState(null);
-  var legacyBranding = legacyBrandingState[0]; var setLegacyBranding = legacyBrandingState[1];
-
-  useEffect(function() {
-    if (contextSalon) return;
-    var cancelled = false;
-    fetchPublicSalonBranding(slug || null).then(function(result) {
-      if (!cancelled) setLegacyBranding(result);
-    });
-    return function() { cancelled = true; };
-  }, [contextSalon, slug]);
-
-  var salon = contextSalon || legacyBranding;
+  // This page now only ever renders under the slug-prefixed route
+  // (/:slug/rate/:token, wrapped in SalonGate) -- the legacy unslugged
+  // /rate/:token route redirects here via LegacyRatingRedirect.jsx
+  // instead of rendering this component directly, so branding is
+  // always available from context; no independent fallback lookup
+  // needed anymore.
+  var salon = useSalon();
   var primary    = (salon && salon.primary_color) || GOLD;
   var secondary  = (salon && salon.secondary_color) || DARK;
   var primaryLt  = lighten(primary, 14);

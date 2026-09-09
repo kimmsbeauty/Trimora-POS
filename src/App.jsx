@@ -7,6 +7,7 @@ import AutoApp from "./pages/AutoApp";
 import SalonBrandmark from "./components/SalonBrandmark";
 import LoginPage from "./pages/LoginPage";
 import RatingPage from "./pages/RatingPage";
+import LegacyRatingRedirect from "./pages/LegacyRatingRedirect";
 import AutoRatingPage from "./pages/AutoRatingPage";
 import TrimoraLandingPage from "./pages/TrimoraLandingPage";
 import { getDeviceLoginStatus, clearDeviceAuth } from "./lib/deviceAuth";
@@ -216,7 +217,7 @@ export default function App() {
         <Route path="/"            element={<RedirectToBooking />} />
         <Route path="/booking"     element={<TrimoraLandingPage />} />
         <Route path="/pos"         element={<TrimoraLandingPage />} />
-        <Route path="/rate/:token" element={<RatingPage />} />
+        <Route path="/rate/:token" element={<LegacyRatingRedirect />} />
         <Route path="/onboard"                element={<OnboardingPage />} />
         <Route path="/terms"                  element={<TermsPage />} />
         <Route path="/superadmin"             element={<SuperAdminGate />} />
