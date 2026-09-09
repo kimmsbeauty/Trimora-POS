@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 import { GOLD, GOLD_LT, GOLD_DIM, BLACK, WHITE, CREAM, DARK, GREEN, RED, AMBER } from "../lib/constants.js";
-import { fmt, todayStr } from "../lib/utils.js";
+import { fmt, todayStr, normalizePhoneForWhatsApp } from "../lib/utils.js";
+
+var FALLBACK_OWNER_PHONE = "0113828280";
 
 export default function EndOfDaySummary({ sales, expenses, staffList, customers, ownerPhone, salonName }) {
+  var waPhone = normalizePhoneForWhatsApp(ownerPhone) || normalizePhoneForWhatsApp(FALLBACK_OWNER_PHONE);
   salonName = salonName || "the salon";
   var openState = useState(false); var open = openState[0]; var setOpen = openState[1];
 
@@ -269,7 +272,7 @@ export default function EndOfDaySummary({ sales, expenses, staffList, customers,
 
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <a
-                href={"https://wa.me/254" + (ownerPhone || "113828280") + "?text=" + encodeURIComponent(buildWhatsAppMessage())}
+                href={"https://wa.me/" + waPhone + "?text=" + encodeURIComponent(buildWhatsAppMessage())}
                 target="_blank" rel="noreferrer"
                 style={{ display: "block", width: "100%", background: "#25D366", color: WHITE, borderRadius: 12, padding: "13px 0", fontWeight: 900, fontSize: 14, textDecoration: "none", textAlign: "center", boxSizing: "border-box" }}
               >

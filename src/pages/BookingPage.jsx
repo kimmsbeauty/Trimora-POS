@@ -5,7 +5,7 @@ import SalonBrandmark from "../components/SalonBrandmark";
 import GoldBtn from "../components/GoldBtn";
 import MpesaPaymentModal from "../components/MpesaPaymentModal";
 import { db, dbRpc } from "../lib/db";
-import { fmt, todayStr, nowTime } from "../lib/utils";
+import { fmt, todayStr, nowTime, normalizePhoneForWhatsApp } from "../lib/utils";
 import { useSalon, fetchPublicSalonBranding } from "../lib/SalonContext";
 import { lighten, darken } from "../lib/colorUtils";
 import {
@@ -46,10 +46,12 @@ export default function BookingPage() {
   const mpesaSendMoney   = (salon && salon.mpesa_send_money_phone)   || null;
   const enabledMethods   = (salon && salon.enabled_payment_methods)  || ["Cash", "Till"];
   const contactPhoneRaw  = (salon && salon.contact_phone)            || null;
-  // Normalize to international format for WhatsApp links (wa.me requires no + and country code)
-  const contactPhone = contactPhoneRaw
-    ? contactPhoneRaw.replace(/\s/g, "").replace(/^\+/, "").replace(/^0/, "254")
-    : null;
+  // Shared with NotificationBell/EndOfDaySummary/ReportsPage -- see
+  // normalizePhoneForWhatsApp in lib/utils.js for why this can't just
+  // replace a leading "0": some salons' contact_phone is already
+  // stored with the "254" prefix, and re-prepending it there produces
+  // an invalid double-prefixed number.
+  const contactPhone = normalizePhoneForWhatsApp(contactPhoneRaw);
 
   // Derive which payment methods are actually configured for this salon
   const hasTill      = enabledMethods.includes("Till")      && !!mpesaTill;

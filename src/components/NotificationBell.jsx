@@ -2,13 +2,16 @@
 
 import { useState } from "react";
 import { GOLD, GOLD_LT, GOLD_DIM, WHITE, DARK, RED, AMBER } from "../lib/constants.js";
-import { fmt } from "../lib/utils.js";
+import { fmt, normalizePhoneForWhatsApp } from "../lib/utils.js";
 
 var LOW_STOCK_THRESHOLD = 3;
+// Fallback destination when a salon hasn't set its own contact_phone yet.
+var FALLBACK_OWNER_PHONE = "0113828280";
 
 export default function NotificationBell({ products, ownerPhone, salonName, feedbacks }) {
   salonName = salonName || "the salon";
   feedbacks = feedbacks || [];
+  var waPhone = normalizePhoneForWhatsApp(ownerPhone) || normalizePhoneForWhatsApp(FALLBACK_OWNER_PHONE);
   var openState = useState(false); var open = openState[0]; var setOpen = openState[1];
 
   var lowStockItems = products.filter(function(p) { return p.stock <= LOW_STOCK_THRESHOLD; });
@@ -84,7 +87,7 @@ export default function NotificationBell({ products, ownerPhone, salonName, feed
               {lowStockItems.length > 0 ? "Low Stock (" + lowStockItems.length + ")" : "All Stocked Up"}
             </div>
             {lowStockItems.length > 0 && (
-              <a href={"https://wa.me/254" + (ownerPhone || "113828280") + "?text=" + encodeURIComponent(buildAllAlertsMessage())} target="_blank" rel="noreferrer" onClick={function() { setOpen(false); }} style={{ background: "#25D366", color: WHITE, borderRadius: 16, padding: "4px 10px", fontSize: 10, fontWeight: 700, textDecoration: "none" }}>
+              <a href={"https://wa.me/" + waPhone + "?text=" + encodeURIComponent(buildAllAlertsMessage())} target="_blank" rel="noreferrer" onClick={function() { setOpen(false); }} style={{ background: "#25D366", color: WHITE, borderRadius: 16, padding: "4px 10px", fontSize: 10, fontWeight: 700, textDecoration: "none" }}>
                 Send All
               </a>
             )}
@@ -103,7 +106,7 @@ export default function NotificationBell({ products, ownerPhone, salonName, feed
                     {p.stock === 0 ? "OUT OF STOCK" : p.stock + " unit" + (p.stock !== 1 ? "s" : "") + " left"}
                   </div>
                 </div>
-                <a href={"https://wa.me/254" + (ownerPhone || "113828280") + "?text=" + encodeURIComponent(buildAlertMessage(p))} target="_blank" rel="noreferrer" onClick={function() { setOpen(false); }} style={{ background: "#25D366", color: WHITE, borderRadius: "50%", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, textDecoration: "none", flexShrink: 0 }}>
+                <a href={"https://wa.me/" + waPhone + "?text=" + encodeURIComponent(buildAlertMessage(p))} target="_blank" rel="noreferrer" onClick={function() { setOpen(false); }} style={{ background: "#25D366", color: WHITE, borderRadius: "50%", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, textDecoration: "none", flexShrink: 0 }}>
                   📲
                 </a>
               </div>

@@ -32,6 +32,9 @@ import { useState, useEffect, useCallback } from "react";
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { db, dbRpcAuth } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
+import { normalizePhoneForWhatsApp } from "../../lib/utils";
+
+var FALLBACK_OWNER_PHONE = "0113828280";
 import AutoExportButton from "../../components/AutoExportButton";
 import AutoAskTrimora from "../../components/AutoAskTrimora";
 import AutoInsightSummary from "../../components/AutoInsightSummary";
@@ -657,7 +660,7 @@ export default function ReportsPage({ isAdmin }) {
         <div style={{ fontSize: 11, color: CHROME, marginTop: 10 }}>Total commission owed: {money(totalCommission)}</div>
         {range === "today" && (
           <a
-            href={"https://wa.me/254" + ((salon && salon.contact_phone) || "113828280").replace(/^0/, "").replace(/\D/g, "") +
+            href={"https://wa.me/" + (normalizePhoneForWhatsApp(salon && salon.contact_phone) || normalizePhoneForWhatsApp(FALLBACK_OWNER_PHONE)) +
               "?text=" + encodeURIComponent(buildEodMessage())}
             target="_blank" rel="noreferrer"
             style={{

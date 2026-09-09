@@ -29,3 +29,24 @@ export function today() {
     day: "numeric",
   });
 }
+
+// Normalizes a Kenyan phone number into the bare-digits, country-code-
+// prefixed form wa.me links require (e.g. "254113828280", no "+", no
+// spaces). Handles every format actually found in this database:
+// local with leading 0 ("0113828280"), already-international with no
+// leading 0 ("254113828280"), and a leading "+" ("+254113828280").
+//
+// FIX: several places used to build wa.me links as
+// "https://wa.me/254" + salon.contact_phone directly. That's only
+// correct if contact_phone is stored in local "0..." form -- for any
+// salon whose number was saved already including "254" (as Kimms
+// Beauty Parlour's is), it double-prepends the country code and
+// produces an invalid, unreachable number. Route every contact_phone
+// / ownerPhone through this function instead of hand-rolling the
+// prefix logic inline.
+export function normalizePhoneForWhatsApp(raw) {
+  if (!raw) return null;
+  var cleaned = String(raw).trim().replace(/\s/g, "").replace(/^\+/, "");
+  if (cleaned.indexOf("254") === 0) return cleaned.replace(/\D/g, "");
+  return cleaned.replace(/^0/, "254").replace(/\D/g, "");
+}
