@@ -575,7 +575,17 @@ export default function POSApp({ onLogout, userRole }) {
 
   async function deleteCustomer(customer) {
     if (!window.confirm("Delete " + customer.name + "?\n\nThis cannot be undone. Their sales history will be kept but they will be removed from the client list.")) return;
-    await db("DELETE", "customers", null, "?id=eq." + customer.id);
+    var result = await db("DELETE", "customers", null, "?id=eq." + customer.id);
+    if (result === null) {
+      // db() returns null on any failed write (network error, RLS denial,
+      // or -- the common real case -- a foreign-key constraint from
+      // marketing_messages/auto_jobs/auto_referrals still pointing at this
+      // customer). Don't touch local state on failure: removing them from
+      // the list here while the row survives server-side is exactly what
+      // made deleted customers silently reappear on next reload.
+      showToast("Couldn't delete " + customer.name + " — they may have marketing or job history attached.", "error");
+      return;
+    }
     setCustomers(function(prev) { return prev.filter(function(c) { return c.id !== customer.id; }); });
   }
 
