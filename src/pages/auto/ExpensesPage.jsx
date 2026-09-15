@@ -75,8 +75,12 @@ export default function ExpensesPage({ isAdmin }) {
   async function deleteExpense(id) {
     if (busy) return;
     setBusy(true);
-    await db("DELETE", "expenses", null, "?id=eq." + id);
+    var result = await db("DELETE", "expenses", null, "?id=eq." + id);
     setBusy(false);
+    if (result === null) {
+      alert("Couldn't delete that expense. Please try again.");
+      return;
+    }
     load();
   }
 

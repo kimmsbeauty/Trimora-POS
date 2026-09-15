@@ -358,7 +358,11 @@ export default function ReportsPage({ isAdmin }) {
   }
 
   async function deleteDraftInvoice(invoice) {
-    await db("DELETE", "auto_invoices", null, "?id=eq." + invoice.id);
+    var result = await db("DELETE", "auto_invoices", null, "?id=eq." + invoice.id);
+    if (result === null) {
+      alert("Couldn't delete that draft invoice. Please try again.");
+      return;
+    }
     load();
   }
 

@@ -145,8 +145,12 @@ export default function ServicesPage({ isAdmin }) {
   async function removeRequiredStock(row) {
     if (busy) return;
     setBusy(true);
-    await db("DELETE", "auto_service_required_stock", null, "?id=eq." + row.id);
+    var result = await db("DELETE", "auto_service_required_stock", null, "?id=eq." + row.id);
     setBusy(false);
+    if (result === null) {
+      alert("Couldn't remove that stock requirement. Please try again.");
+      return;
+    }
     load();
   }
 
