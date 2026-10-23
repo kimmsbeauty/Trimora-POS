@@ -10,7 +10,7 @@ Read this fully before writing code. It is the contract for every session workin
   - Project: https://lovable.dev/projects/eb045c8e-d9a1-49c1-84f9-3fa6e9c2a03e (id `eb045c8e-d9a1-49c1-84f9-3fa6e9c2a03e`)
   - Preview: https://id-preview--eb045c8e-d9a1-49c1-84f9-3fa6e9c2a03e.lovable.app
   - Its code is TanStack Start + Tailwind + shadcn. **Do not copy that code or stack into this repo.** Read it for layout, copy, states and data shapes, then rebuild each screen in Trimora-POS's own style (section 4).
-- **Do not use** the separate Supabase project `Trimora Pet care` (`cxaiyhlaosfsymjgjyby`) as the production database. It duplicates auth, PINs, subscriptions and superadmin. Its `pet_*` permission tables may be ported into the POS database later (section 8); then that project should be paused.
+- **Ignore** the separate Supabase project `Trimora Pet care` (`cxaiyhlaosfsymjgjyby`) entirely (owner decision). Do not read from it, write to it, or port anything from it. Pet lives only in the Trimora-POS database.
 
 ## 2. Hard constraints (from this repo's own history)
 
@@ -37,7 +37,7 @@ Read this fully before writing code. It is the contract for every session workin
 | Shared core tables | `staff`, `customers`, `stock`, `salons` | reuse them; do not copy |
 | Own tables | `auto_*` | `pet_*` |
 | Business type | `salons.business_type` allows `'salon'`, `'auto'` | allow `'pet'` too (migration 035 pattern) |
-| Onboarding | invite with `module_key='auto'` sets `business_type='auto'` | invite with `module_key='pet'` sets `business_type='pet'` (check `create_invite`, `validate_invite`, `complete_salon_onboarding`, `superadmin_set_module` do not hard-code `'auto'`) |
+| Onboarding (owner decision: same logic as the other businesses) | superadmin +Onboard / +Invite from the Car Washes tab creates an invite with `module_key='auto'`; `OnboardingPage` themes itself from the invite; `complete_salon_onboarding` sets `business_type='auto'`; an existing business can be given Auto via `superadmin_set_module`; self-serve requests via `auto_onboarding_requests` | the same, with `module_key='pet'` and `business_type='pet'`: a Pet tab in the superadmin console, a Pet-themed onboarding page, `superadmin_set_module` for existing businesses, and later a `pet_onboarding_requests` table. Check `create_invite`, `validate_invite`, `complete_salon_onboarding`, `superadmin_set_module` do not hard-code `'auto'` |
 | Rating page | `/:slug/auto/rate/:token` | `/:slug/pet/rate/:token` later, optional |
 | Superadmin | module management, health, analytics | add Pet to module management and platform stats (section 7) |
 
@@ -123,13 +123,13 @@ Verify each of these against the live schema before writing SQL; this list is a 
 2. Pet core tables, each with `id uuid`, `salon_id uuid not null references salons(id) on delete cascade`, `created_at`, RLS on: `pet_pets` (owner → shared `customers`), `pet_vaccinations`, `pet_services`, `pet_bookings` and `pet_booking_services`, `pet_kennels`, `pet_boarding_stays`, `pet_invoices` and `pet_invoice_items`, `pet_payments`, `pet_loyalty_*` as needed.
 3. Stock: first read migration 021 and `auto_stock_movements` to see how Auto uses the shared `stock` table, then mirror that (`pet_stock_movements`) rather than inventing a second stock system.
 4. Platform stats: fold Pet revenue into superadmin stats (see migrations 039 and 076). **Known past bug: Auto revenue was missing from platform-wide stats.** Do not repeat it.
-5. Staff roles and permissions: see D1.
+5. Staff roles: the **business admin decides which role each staff member gets** (owner decision). Read how `staff` and the admin/staff PIN distinction work today, then add the smallest additive structure that lets an admin define roles and assign one per staff member, for example `pet_roles` and `pet_staff_roles` keyed by `salon_id` and the shared `staff` id. Roles are data the admin manages, not hard-coded. Lovable's Owner/Admin, Manager, Groomer and Receptionist are only suggested presets the admin may use or change. Login stays the shared PIN login; the PIN-based admin/staff split still gates admin-only screens.
 
 Naming mirrors Lovable's types (`Customer`, `Pet`, `Booking`, `BoardingStay`, `Kennel`, `Invoice`, `StockItem`, `StockMove`, `Loyalty`) and its status enums (`VaccStatus`, `BookingStatus`, `InvoiceStatus`, `KennelStatus`). Keep the same status values in the UI and the database.
 
 ## 8. Order of work
 
-1. Branch. Migration 081: allow `'pet'`, module key plumbing. Superadmin can enable Pet for a business.
+1. Branch. Migration 081: allow `'pet'`, module key plumbing. Superadmin gets a Pet tab: onboard or invite a pet business, or enable Pet for an existing business, exactly like Auto.
 2. `PetApp.jsx`, `ModuleGate`, route `/:slug/pet`, `pet/theme.js`, self-hosted fonts, sidebar shell. Visually identical to Lovable's shell with placeholder pages.
 3. Pets, vaccinations and customers (real tables, tenant-scoped, tests).
 4. Bookings and calendar, grooming board, boarding.
@@ -137,12 +137,15 @@ Naming mirrors Lovable's types (`Customer`, `Pet`, `Booking`, `BoardingStay`, `K
 6. Inventory, loyalty, reports, settings, staff.
 7. Superadmin stats, health and analytics for Pet; end-to-end run on a branch DB; then production.
 
-## 9. Open decisions for the owner (do not guess)
+## 9. Decisions
 
-- **D1 Staff roles.** Lovable shows Owner/Admin, Manager, Groomer, Receptionist. POS today has only staff and admin. Recommended v1: use staff/admin, show the role as a label, port the `pet_permissions` tables later.
-- **D2 Pet onboarding.** New pet businesses join through the invite flow with `module_key='pet'`, or an existing business gets Pet switched on from superadmin (like "add an existing salon")?
-- **D3 The `Trimora Pet care` Supabase project.** Pause or delete once its permission tables are ported.
-- **D4 Branding.** Brand text "Trimora PetCare" vs the module name "Trimora Pet".
+Decided by the owner:
+- **D1 Staff roles:** the business admin decides which roles staff are assigned (section 7, item 5). Staff and admin PIN login is unchanged.
+- **D2 Onboarding:** follow the other businesses' onboarding logic (section 3, Onboarding row). No separate Pet signup flow.
+- **D3 `Trimora Pet care` Supabase project:** ignored (section 1).
+
+Still open (do not guess; ask the owner):
+- **D4 Branding:** brand text "Trimora PetCare" vs module name "Trimora Pet". Until decided, use "Trimora PetCare" in the UI as in the Lovable prototype and keep it in one constant.
 
 ## 10. Definition of done for any change
 
