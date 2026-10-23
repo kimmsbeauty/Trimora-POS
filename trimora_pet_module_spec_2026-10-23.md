@@ -6,7 +6,7 @@ Read this fully before writing code. It is the contract for every session workin
 
 - **Target:** a new **Pet** module inside the existing **Trimora-POS** repo (`kimmsbeauty/Trimora-POS`, branch `main`), running on the existing live Supabase project `ukoccobbjeomjwjcvrma`.
 - **Pattern to copy:** Trimora **Auto** (the second business). Pet is the third. Read `src/pages/AutoApp.jsx`, `src/pages/auto/*`, and migrations 019, 028, 033, 035 before starting.
-- **Visual and behavioural reference:** the Lovable prototype **Trimora PetCare**. The owner approved it: "that's exactly what I want the PetCare POS to look like."
+- **Visual and behavioural reference:** the Lovable prototype (project name **Trimora PetCare**). The owner approved it: "that's exactly what I want the PetCare POS to look like." The product name in the real app is **Trimora Pet** (decision D4).
   - Project: https://lovable.dev/projects/eb045c8e-d9a1-49c1-84f9-3fa6e9c2a03e (id `eb045c8e-d9a1-49c1-84f9-3fa6e9c2a03e`)
   - Preview: https://id-preview--eb045c8e-d9a1-49c1-84f9-3fa6e9c2a03e.lovable.app
   - Its code is TanStack Start + Tailwind + shadcn. **Do not copy that code or stack into this repo.** Read it for layout, copy, states and data shapes, then rebuild each screen in Trimora-POS's own style (section 4).
@@ -72,7 +72,7 @@ Radius base **12px** (cards 12 to 16px, buttons and inputs 8 to 12px). Dark mode
 
 **Layout (exact, from Lovable `app-shell.tsx`):**
 - Desktop: fixed left sidebar 256px wide, `SIDEBAR` background. Mobile (< 1024px): sticky 56px top bar with menu button, brand and a slide-in 288px drawer.
-- Brand block: 40px gold rounded square with a paw icon, "Trimora PetCare" in Fraunces ~15px semibold, caption "BY TRIMORA SYSTEMS" 10px uppercase, wide letter spacing, `SIDEBAR_MUTED`.
+- Brand block: 40px gold rounded square with a paw icon, "Trimora Pet" (replaces the prototype's "Trimora PetCare") in Fraunces ~15px semibold, caption "BY TRIMORA SYSTEMS" 10px uppercase, wide letter spacing, `SIDEBAR_MUTED`.
 - Nav item: 13px medium, 8px 12px padding, 8px radius. Active: translucent white background (7%), 4px gold bar on the left edge, gold icon. Hover: 60% of that.
 - Footer: user card (initials in a gold-tinted circle, name, role), business name and city, and a small gold status line.
 - Content: max width 1200px, padding 16 / 24 / 32px (mobile / tablet / desktop), 24 to 32px vertical.
@@ -139,13 +139,14 @@ Naming mirrors Lovable's types (`Customer`, `Pet`, `Booking`, `BoardingStay`, `K
 
 ## 9. Decisions
 
-Decided by the owner:
+Decided by the owner (all four):
 - **D1 Staff roles:** the business admin decides which roles staff are assigned (section 7, item 5). Staff and admin PIN login is unchanged.
 - **D2 Onboarding:** follow the other businesses' onboarding logic (section 3, Onboarding row). No separate Pet signup flow.
 - **D3 `Trimora Pet care` Supabase project:** ignored (section 1).
 
-Still open (do not guess; ask the owner):
-- **D4 Branding:** brand text "Trimora PetCare" vs module name "Trimora Pet". Until decided, use "Trimora PetCare" in the UI as in the Lovable prototype and keep it in one constant.
+- **D4 Branding:** the product and module name is **Trimora Pet**. Use it for the UI brand text, the superadmin Pet tab, onboarding copy and the "not turned on" screen. Keep it in one constant. Module key stays `pet`.
+
+All four decisions are made; nothing is currently open.
 
 ## 10. Definition of done for any change
 
