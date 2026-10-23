@@ -28,6 +28,8 @@ import CombinedPLView from "./superadmin/CombinedPLView";
 import RequestsView from "./superadmin/RequestsView";
 import CarWashesView from "./superadmin/CarWashesView";
 import AutoRequestsView from "./superadmin/AutoRequestsView";
+import PetBusinessesView from "./superadmin/PetBusinessesView";
+import { moduleLabels } from "../lib/moduleLabels";
 import DetailView from "./superadmin/DetailView";
 
 var GOLD_LT = "#F5E6B8";
@@ -78,6 +80,7 @@ export default function SuperAdminDashboard({ onLogout }) {
   var PRODUCTS = [
     { key: "salons", label: "🏠 Salons", homeView: "salons", views: ["salons", "detail", "plans", "audit", "requests", "health", "analytics"] },
     { key: "auto",   label: "🚗 Auto",   homeView: "carwashes", views: ["carwashes", "autohealth", "autoanalytics", "autoaudit", "autorequests"] },
+    { key: "pet",    label: "🐾 Pet",    homeView: "petbusinesses", views: ["petbusinesses"] },
   ];
 
   var [view,         setView]         = useState("salons"); // "salons" | "detail"
@@ -810,15 +813,15 @@ export default function SuperAdminDashboard({ onLogout }) {
       if (!rpcRes.ok) {
         var rpcErr = await rpcRes.json().catch(function() { return {}; });
         setManualLoading(false);
-        return alert((manualModuleKey === "auto" ? "Car wash" : "Salon") + " setup failed: " + (rpcErr.message || JSON.stringify(rpcErr)));
+        return alert(moduleLabels(manualModuleKey).failurePrefix + " setup failed: " + (rpcErr.message || JSON.stringify(rpcErr)));
       }
 
       setManualLoading(false);
       // Was hardcoded to /pos regardless of module -- a car wash onboarded
       // here has no /pos route, only /auto (see AutoApp.jsx's ModuleGate).
       setManualDone("✅ " + manualName + " onboarded successfully! " +
-        (manualModuleKey === "auto" ? "Auto: /" + slug + "/auto" : "POS: /" + slug + "/pos"));
-      logAction(manualModuleKey === "auto" ? "manual_onboard_auto" : "manual_onboard", null, manualName.trim(), "Slug: " + slug + " · Email: " + manualEmail.trim());
+        (moduleLabels(manualModuleKey).successLabel + ": /" + slug + moduleLabels(manualModuleKey).path));
+      logAction(manualModuleKey ? "manual_onboard_" + manualModuleKey : "manual_onboard", null, manualName.trim(), "Slug: " + slug + " · Email: " + manualEmail.trim());
       setManualName(""); setManualEmail(""); setManualPass("");
       setManualStaff(""); setManualAdmin("");
       await loadData();
@@ -852,7 +855,7 @@ export default function SuperAdminDashboard({ onLogout }) {
       var inviteToken = await res.json();
       var link = window.location.origin + "/onboard?token=" + inviteToken;
       setInviteLink(link);
-      logAction(inviteModuleKey === "auto" ? "generate_invite_auto" : "generate_invite", null, inviteName || null, inviteEmail ? "Pre-filled for: " + inviteEmail : null);
+      logAction(inviteModuleKey ? "generate_invite_" + inviteModuleKey : "generate_invite", null, inviteName || null, inviteEmail ? "Pre-filled for: " + inviteEmail : null);
     } else {
       alert("Failed to generate invite link.");
     }
@@ -897,7 +900,12 @@ export default function SuperAdminDashboard({ onLogout }) {
     }
   }
 
-  async function toggleAutoModule(salon, enabled) {
+  // Auto and Pet share one implementation; toggleAutoModule keeps its
+  // original name/signature because CarWashesView calls it.
+  function toggleAutoModule(salon, enabled) { return setSalonModule(salon, "auto", "Auto", enabled); }
+  function togglePetModule(salon, enabled) { return setSalonModule(salon, "pet", "Trimora Pet", enabled); }
+
+  async function setSalonModule(salon, moduleKey, moduleName, enabled) {
     setActionLoading(true);
     var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
     if (!token) { setActionLoading(false); alert("Session expired. Please sign out and sign in again."); return; }
@@ -910,17 +918,17 @@ export default function SuperAdminDashboard({ onLogout }) {
       },
       body: JSON.stringify({
         p_salon_id:   salon.id,
-        p_module_key: "auto",
+        p_module_key: moduleKey,
         p_enabled:    enabled,
       }),
     });
     setActionLoading(false);
     if (res.ok) {
-      logAction(enabled ? "enable_auto_module" : "disable_auto_module", salon.id, salon.name, null);
+      logAction((enabled ? "enable_" : "disable_") + moduleKey + "_module", salon.id, salon.name, null);
       await loadData();
     } else {
       var err = await res.json().catch(function() { return {}; });
-      alert("Failed to update Auto module: " + (err.message || res.status));
+      alert("Failed to update " + moduleName + " module: " + (err.message || res.status));
     }
   }
 
@@ -1083,6 +1091,131 @@ export default function SuperAdminDashboard({ onLogout }) {
 
   // ── DETAIL VIEW ──────────────────────────────────────────────────
   // ── PLANS VIEW ───────────────────────────────────────────────────
+  // The manual-onboard and invite modals. Declared once and rendered in the main
+  // Salons return AND in the Car Washes / Pet Businesses early returns: those
+  // views return before the main return is reached, so a modal rendered only
+  // there could never open from their "+ Onboard" / "+ Invite" buttons (same
+  // structural bug as the suspend/payment modals, see their tests).
+  var onboardModals = (
+    <>
+      {/* Manual Onboard modal */}
+      {manualModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 2000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div style={{ background: WHITE, borderRadius: "20px 20px 0 0", padding: "24px 20px 32px", width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}>
+            <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 4 }}>{moduleLabels(manualModuleKey).manualTitle}</div>
+            <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>{moduleLabels(manualModuleKey).manualBlurb}</div>
+
+            {[
+              [moduleLabels(manualModuleKey).nameLabel, manualName, setManualName, "text", moduleLabels(manualModuleKey).namePlaceholder],
+              ["Owner Email", manualEmail, setManualEmail, "email", moduleLabels(manualModuleKey).manualEmailPlaceholder],
+              ["Temporary Password", manualPass, setManualPass, "password", "Min 6 characters"],
+            ].map(function(field) {
+              return (
+                <div key={field[0]} style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 5, textTransform: "uppercase" }}>{field[0]}</label>
+                  <input type={field[3]} value={field[1]} onChange={function(e) { field[2](e.target.value); }} placeholder={field[4]}
+                    style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM + "44", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK }} />
+                </div>
+              );
+            })}
+
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 5, textTransform: "uppercase" }}>Staff PIN</label>
+                <input value={manualStaff} onChange={function(e) { setManualStaff(e.target.value.replace(/\D/g, "").slice(0, 6)); }} placeholder="4–6 digits" inputMode="numeric" maxLength={6}
+                  style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM + "44", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, textAlign: "center" }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 5, textTransform: "uppercase" }}>Admin PIN</label>
+                <input value={manualAdmin} onChange={function(e) { setManualAdmin(e.target.value.replace(/\D/g, "").slice(0, 6)); }} placeholder="4–6 digits" inputMode="numeric" maxLength={6}
+                  style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM + "44", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, textAlign: "center" }} />
+              </div>
+            </div>
+
+            {manualDone && (
+              <div style={{ background: "#F0FDF4", border: "1.5px solid #86EFAC", borderRadius: 10, padding: "12px 14px", marginBottom: 12, fontSize: 13, color: "#166534", fontWeight: 700 }}>
+                {manualDone}
+              </div>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <button onClick={manualOnboard} disabled={manualLoading}
+                style={{ width: "100%", background: DARK, color: WHITE, border: "none", borderRadius: 12, padding: "14px 0", fontWeight: 900, fontSize: 14, cursor: "pointer", opacity: manualLoading ? 0.7 : 1 }}>
+                {manualLoading ? moduleLabels(manualModuleKey).creatingBtn : moduleLabels(manualModuleKey).createBtn}
+              </button>
+              <button onClick={function() { setManualModal(false); setManualDone(""); }}
+                style={{ width: "100%", background: WHITE, color: "#888", border: "1.5px solid #ddd", borderRadius: 12, padding: "12px 0", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invite modal */}
+      {inviteModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 2000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div style={{ background: WHITE, borderRadius: "20px 20px 0 0", padding: "24px 20px 32px", width: "100%", maxWidth: 480 }}>
+            <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 4 }}>{moduleLabels(inviteModuleKey).inviteTitle}</div>
+            <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>{moduleLabels(inviteModuleKey).inviteBlurb}</div>
+
+            <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 6, textTransform: "uppercase" }}>Prospect's Email (optional — pre-fills the form)</label>
+            <input
+              value={inviteEmail}
+              onChange={function(e) { setInviteEmail(e.target.value); setInviteLink(""); }}
+              placeholder={moduleLabels(inviteModuleKey).inviteEmailPlaceholder}
+              style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM + "44", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, marginBottom: 12 }}
+            />
+
+            <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 6, textTransform: "uppercase" }}>{moduleLabels(inviteModuleKey).nameLabel} (optional — pre-fills the form)</label>
+            <input
+              value={inviteName}
+              onChange={function(e) { setInviteName(e.target.value); setInviteLink(""); }}
+              placeholder={moduleLabels(inviteModuleKey).namePlaceholder}
+              style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM + "44", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, marginBottom: 16 }}
+            />
+
+            {inviteLink ? (
+              <div>
+                <div style={{ background: "#F0FDF4", border: "1.5px solid #86EFAC", borderRadius: 10, padding: "12px 14px", marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: "#166534", marginBottom: 6 }}>✓ Invite link ready — share this with the prospect:</div>
+                  <div style={{ fontSize: 11, color: "#166534", wordBreak: "break-all", fontFamily: "monospace", background: WHITE, borderRadius: 6, padding: "8px 10px", marginBottom: 8 }}>{inviteLink}</div>
+                  <button
+                    onClick={function() { navigator.clipboard.writeText(inviteLink); alert("Link copied!"); }}
+                    style={{ width: "100%", background: "#22C55E", color: WHITE, border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 800, fontSize: 13, cursor: "pointer" }}
+                  >
+                    📋 Copy Link
+                  </button>
+                </div>
+                <button
+                  onClick={function() { setInviteLink(""); setInviteEmail(""); setInviteName(""); }}
+                  style={{ width: "100%", background: WHITE, color: GOLD_DIM, border: "1.5px solid " + GOLD_DIM, borderRadius: 10, padding: "10px 0", fontWeight: 700, fontSize: 13, cursor: "pointer", marginBottom: 8 }}
+                >
+                  Generate Another
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={generateInvite}
+                disabled={inviteLoading}
+                style={{ width: "100%", background: GOLD_DIM, color: WHITE, border: "none", borderRadius: 12, padding: "14px 0", fontWeight: 900, fontSize: 14, cursor: "pointer", marginBottom: 10, opacity: inviteLoading ? 0.7 : 1 }}
+              >
+                {inviteLoading ? "Generating..." : "Generate Invite Link →"}
+              </button>
+            )}
+
+            <button
+              onClick={function() { setInviteModal(false); setInviteLink(""); setInviteEmail(""); setInviteName(""); }}
+              style={{ width: "100%", background: WHITE, color: "#888", border: "1.5px solid #ddd", borderRadius: 12, padding: "12px 0", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
   if (view === "plans") {
     return <PlansView
       plansLoading={plansLoading} plans={plans} planEditing={planEditing}
@@ -1135,14 +1268,28 @@ export default function SuperAdminDashboard({ onLogout }) {
   // service-role-only action), so this is genuinely new capability, not
   // a UI wired onto something that already worked another way.
   if (view === "carwashes") {
-    return <CarWashesView
+    return <><CarWashesView
       salons={salons} view={view} setView={setView} PRODUCTS={PRODUCTS} Badge={Badge}
       loadAutoAnalytics={loadAutoAnalytics} loadAuditLog={loadAuditLog} loadAutoOnboardingRequests={loadAutoOnboardingRequests} setCombinedPLBackTo={setCombinedPLBackTo}
       setManualModuleKey={setManualModuleKey} setManualModal={setManualModal} setManualDone={setManualDone}
       setInviteModuleKey={setInviteModuleKey} setInviteModal={setInviteModal} setInviteLink={setInviteLink} setInviteEmail={setInviteEmail} setInviteName={setInviteName}
       openSalonDetail={openSalonDetail} actionLoading={actionLoading} toggleAutoModule={toggleAutoModule}
       addExistingSalonId={addExistingSalonId} setAddExistingSalonId={setAddExistingSalonId}
-    />;
+    />{onboardModals}</>;
+  }
+
+  // ── PET BUSINESSES VIEW (Trimora Pet module) ─────────────────────────
+  // Same model as car washes: a business is a tenant with the module
+  // enabled via salon_enabled_modules (module_key='pet'). Pet businesses
+  // are created through the shared onboard/invite flow with module key
+  // 'pet', which sets business_type='pet'.
+  if (view === "petbusinesses") {
+    return <><PetBusinessesView
+      salons={salons} view={view} setView={setView} PRODUCTS={PRODUCTS} Badge={Badge}
+      setManualModuleKey={setManualModuleKey} setManualModal={setManualModal} setManualDone={setManualDone}
+      setInviteModuleKey={setInviteModuleKey} setInviteModal={setInviteModal} setInviteLink={setInviteLink} setInviteEmail={setInviteEmail} setInviteName={setInviteName}
+      openSalonDetail={openSalonDetail} actionLoading={actionLoading} togglePetModule={togglePetModule}
+    />{onboardModals}</>;
   }
 
   // ── AUTO HEALTH VIEW ─────────────────────────────────────────────
@@ -1399,127 +1546,7 @@ export default function SuperAdminDashboard({ onLogout }) {
         })}
       </div>
 
-      {/* Manual Onboard modal */}
-      {manualModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 2000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-          <div style={{ background: WHITE, borderRadius: "20px 20px 0 0", padding: "24px 20px 32px", width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}>
-            <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 4 }}>{manualModuleKey === "auto" ? "🚗 Onboard Car Wash" : "🏪 Manual Onboarding"}</div>
-            <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>{manualModuleKey === "auto" ? "Create a car wash with Auto enabled from the start, without an invite link." : "Create a salon directly without an invite link."}</div>
-
-            {(manualModuleKey === "auto" ? [
-              ["Car Wash Name", manualName, setManualName, "text", "e.g. High Point Carwash"],
-              ["Owner Email", manualEmail, setManualEmail, "email", "owner@example.com"],
-              ["Temporary Password", manualPass, setManualPass, "password", "Min 6 characters"],
-            ] : [
-              ["Salon Name", manualName, setManualName, "text", "e.g. Grace Beauty Studio"],
-              ["Owner Email", manualEmail, setManualEmail, "email", "owner@salon.com"],
-              ["Temporary Password", manualPass, setManualPass, "password", "Min 6 characters"],
-            ]).map(function(field) {
-              return (
-                <div key={field[0]} style={{ marginBottom: 10 }}>
-                  <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 5, textTransform: "uppercase" }}>{field[0]}</label>
-                  <input type={field[3]} value={field[1]} onChange={function(e) { field[2](e.target.value); }} placeholder={field[4]}
-                    style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM + "44", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK }} />
-                </div>
-              );
-            })}
-
-            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 5, textTransform: "uppercase" }}>Staff PIN</label>
-                <input value={manualStaff} onChange={function(e) { setManualStaff(e.target.value.replace(/\D/g, "").slice(0, 6)); }} placeholder="4–6 digits" inputMode="numeric" maxLength={6}
-                  style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM + "44", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, textAlign: "center" }} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 5, textTransform: "uppercase" }}>Admin PIN</label>
-                <input value={manualAdmin} onChange={function(e) { setManualAdmin(e.target.value.replace(/\D/g, "").slice(0, 6)); }} placeholder="4–6 digits" inputMode="numeric" maxLength={6}
-                  style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM + "44", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, textAlign: "center" }} />
-              </div>
-            </div>
-
-            {manualDone && (
-              <div style={{ background: "#F0FDF4", border: "1.5px solid #86EFAC", borderRadius: 10, padding: "12px 14px", marginBottom: 12, fontSize: 13, color: "#166534", fontWeight: 700 }}>
-                {manualDone}
-              </div>
-            )}
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <button onClick={manualOnboard} disabled={manualLoading}
-                style={{ width: "100%", background: DARK, color: WHITE, border: "none", borderRadius: 12, padding: "14px 0", fontWeight: 900, fontSize: 14, cursor: "pointer", opacity: manualLoading ? 0.7 : 1 }}>
-                {manualModuleKey === "auto"
-                  ? (manualLoading ? "Creating car wash..." : "🚗 Create Car Wash")
-                  : (manualLoading ? "Creating salon..." : "🏪 Create Salon")}
-              </button>
-              <button onClick={function() { setManualModal(false); setManualDone(""); }}
-                style={{ width: "100%", background: WHITE, color: "#888", border: "1.5px solid #ddd", borderRadius: 12, padding: "12px 0", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Invite modal */}
-      {inviteModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 2000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-          <div style={{ background: WHITE, borderRadius: "20px 20px 0 0", padding: "24px 20px 32px", width: "100%", maxWidth: 480 }}>
-            <div style={{ fontSize: 15, fontWeight: 900, color: DARK, marginBottom: 4 }}>{inviteModuleKey === "auto" ? "🚗 Invite Car Wash" : "🔗 Generate Invite Link"}</div>
-            <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>{inviteModuleKey === "auto" ? "One-time link, Auto enabled automatically on completion. Expires in 7 days." : "One-time link, expires in 7 days."}</div>
-
-            <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 6, textTransform: "uppercase" }}>Prospect's Email (optional — pre-fills the form)</label>
-            <input
-              value={inviteEmail}
-              onChange={function(e) { setInviteEmail(e.target.value); setInviteLink(""); }}
-              placeholder={inviteModuleKey === "auto" ? "owner@example.com" : "salon@example.com"}
-              style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM + "44", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, marginBottom: 12 }}
-            />
-
-            <label style={{ fontSize: 11, fontWeight: 800, color: GOLD_DIM, display: "block", marginBottom: 6, textTransform: "uppercase" }}>{inviteModuleKey === "auto" ? "Car Wash Name" : "Salon Name"} (optional — pre-fills the form)</label>
-            <input
-              value={inviteName}
-              onChange={function(e) { setInviteName(e.target.value); setInviteLink(""); }}
-              placeholder={inviteModuleKey === "auto" ? "e.g. High Point Carwash" : "e.g. Grace Beauty Studio"}
-              style={{ width: "100%", borderRadius: 10, border: "1.5px solid " + GOLD_DIM + "44", background: CREAM, padding: "11px 13px", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: DARK, marginBottom: 16 }}
-            />
-
-            {inviteLink ? (
-              <div>
-                <div style={{ background: "#F0FDF4", border: "1.5px solid #86EFAC", borderRadius: 10, padding: "12px 14px", marginBottom: 12 }}>
-                  <div style={{ fontSize: 11, fontWeight: 800, color: "#166534", marginBottom: 6 }}>✓ Invite link ready — share this with the prospect:</div>
-                  <div style={{ fontSize: 11, color: "#166534", wordBreak: "break-all", fontFamily: "monospace", background: WHITE, borderRadius: 6, padding: "8px 10px", marginBottom: 8 }}>{inviteLink}</div>
-                  <button
-                    onClick={function() { navigator.clipboard.writeText(inviteLink); alert("Link copied!"); }}
-                    style={{ width: "100%", background: "#22C55E", color: WHITE, border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 800, fontSize: 13, cursor: "pointer" }}
-                  >
-                    📋 Copy Link
-                  </button>
-                </div>
-                <button
-                  onClick={function() { setInviteLink(""); setInviteEmail(""); setInviteName(""); }}
-                  style={{ width: "100%", background: WHITE, color: GOLD_DIM, border: "1.5px solid " + GOLD_DIM, borderRadius: 10, padding: "10px 0", fontWeight: 700, fontSize: 13, cursor: "pointer", marginBottom: 8 }}
-                >
-                  Generate Another
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={generateInvite}
-                disabled={inviteLoading}
-                style={{ width: "100%", background: GOLD_DIM, color: WHITE, border: "none", borderRadius: 12, padding: "14px 0", fontWeight: 900, fontSize: 14, cursor: "pointer", marginBottom: 10, opacity: inviteLoading ? 0.7 : 1 }}
-              >
-                {inviteLoading ? "Generating..." : "Generate Invite Link →"}
-              </button>
-            )}
-
-            <button
-              onClick={function() { setInviteModal(false); setInviteLink(""); setInviteEmail(""); setInviteName(""); }}
-              style={{ width: "100%", background: WHITE, color: "#888", border: "1.5px solid #ddd", borderRadius: 12, padding: "12px 0", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
+      {onboardModals}
 
       {/* Suspend modal */}
       {/* Edit Salon Details modal */}

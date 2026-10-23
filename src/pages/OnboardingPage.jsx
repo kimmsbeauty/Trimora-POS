@@ -23,7 +23,8 @@ import { useState, useEffect } from "react";
 import SalonBrandmark from "../components/SalonBrandmark";
 import GoldBtn from "../components/GoldBtn";
 import { SUPABASE_URL, SUPABASE_KEY, GOLD, GOLD_LT, GOLD_DIM, BLACK, WHITE, RED, GREEN } from "../lib/constants.js";
-import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "./auto/theme";
+import { INK as AUTO_INK, STEEL as AUTO_STEEL, CHROME as AUTO_CHROME, SIGNAL as AUTO_SIGNAL, ALERT as AUTO_ALERT, PAPER as AUTO_PAPER } from "./auto/theme";
+import { SIDEBAR as PET_INK, FOREGROUND as PET_STEEL, SIDEBAR_MUTED as PET_CHROME, PRIMARY as PET_SIGNAL, DESTRUCTIVE as PET_ALERT, SIDEBAR_FG as PET_PAPER, PET_NAME } from "./pet/theme";
 import { persistSession } from "../lib/deviceAuth";
 import { generateUniqueSlug } from "../lib/slugify";
 
@@ -104,7 +105,7 @@ export default function OnboardingPage() {
   }, []);
 
   function validate() {
-    if (!salonName.trim()) return "Please enter your " + (isAuto ? "car wash" : "salon") + " name.";
+    if (!salonName.trim()) return "Please enter your " + thingWord + " name.";
     if (!email.trim())     return "Please enter your email address.";
     if (!password || password.length < 6) return "Password must be at least 6 characters.";
     if (!staffPin || !adminPin) return "Please choose both a staff PIN and an admin PIN.";
@@ -228,7 +229,7 @@ export default function OnboardingPage() {
       // type='auto' salons to /auto anyway. Redirecting directly here
       // just skips that extra round-trip rather than depending on it.
       persistSession(signupData);
-      window.location.href = "/" + slug_result + (isAuto ? "/auto" : "/pos");
+      window.location.href = "/" + slug_result + (isPetInvite ? "/pet" : isAuto ? "/auto" : "/pos");
 
     } catch (e) {
       setLoading(false);
@@ -244,7 +245,24 @@ export default function OnboardingPage() {
   // someone is signing up specifically for a car wash, so this page
   // should look and read like Auto from the first screen, not switch
   // over only after they log in.
-  var isAuto = moduleKey === "auto";
+  //
+  // Trimora Pet invites (module_key='pet') reuse this same fixed-palette
+  // treatment with Pet's own colours: `isAuto` is therefore the "fixed
+  // palette" flag for both modules, and the palette names below are
+  // resolved per module. Wording and the post-signup path use moduleKey /
+  // thingWord so Pet never shows car-wash text or lands on /auto. For salon
+  // and Auto invites every value is identical to before.
+  var isPetInvite = moduleKey === "pet";
+  var isAuto = moduleKey === "auto" || isPetInvite;
+  var INK    = isPetInvite ? PET_INK    : AUTO_INK;
+  var STEEL  = isPetInvite ? PET_STEEL  : AUTO_STEEL;
+  var CHROME = isPetInvite ? PET_CHROME : AUTO_CHROME;
+  var SIGNAL = isPetInvite ? PET_SIGNAL : AUTO_SIGNAL;
+  var ALERT  = isPetInvite ? PET_ALERT  : AUTO_ALERT;
+  var PAPER  = isPetInvite ? PET_PAPER  : AUTO_PAPER;
+  var thingWord   = isPetInvite ? "pet business" : isAuto ? "car wash" : "salon";
+  var thingCap    = thingWord.charAt(0).toUpperCase() + thingWord.slice(1);
+  var productName = isPetInvite ? PET_NAME : isAuto ? "Trimora Auto" : "Trimora POS";
 
   // ── FATAL ERROR ──────────────────────────────────────────────────
   if (fatalError) {
@@ -299,7 +317,7 @@ export default function OnboardingPage() {
           <div style={{ fontSize: 40, marginBottom: 8 }}>📧</div>
           <div style={{ fontSize: 16, fontWeight: 900, color: isAuto ? PAPER : GOLD_LT, marginBottom: 8 }}>Check your email</div>
           <div style={{ fontSize: 13, color: isAuto ? CHROME : "rgba(255,255,255,0.5)", lineHeight: 1.6 }}>
-            We sent a confirmation link to <b style={{ color: isAuto ? SIGNAL : GOLD_DIM }}>{email}</b>. Click it, then contact us to complete your {isAuto ? "car wash" : "salon"} setup.
+            We sent a confirmation link to <b style={{ color: isAuto ? SIGNAL : GOLD_DIM }}>{email}</b>. Click it, then contact us to complete your {thingWord} setup.
           </div>
           <a href="mailto:admin@trimorasystems.com"
             style={{ display: "inline-block", marginTop: 16, color: isAuto ? SIGNAL : GOLD, fontWeight: 800, fontSize: 13 }}>
@@ -317,7 +335,7 @@ export default function OnboardingPage() {
   var dimColor    = isAuto ? CHROME : "rgba(255,255,255,0.5)";
   var accentColor = isAuto ? SIGNAL : GOLD;
   var textColor   = isAuto ? PAPER : WHITE;
-  var thingLabel  = isAuto ? "car wash" : "salon";
+  var thingLabel  = thingWord;
 
   var autoInputStyle = {
     width: "100%", borderRadius: 10,
@@ -335,8 +353,8 @@ export default function OnboardingPage() {
 
         {isAuto ? (
           <>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: CHROME }}>Trimora Auto</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: PAPER, marginTop: 2 }}>🚗 Car Wash Setup</div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: CHROME }}>{isPetInvite ? PET_NAME : "Trimora Auto"}</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: PAPER, marginTop: 2 }}>{isPetInvite ? "🐾 Pet Business Setup" : "🚗 Car Wash Setup"}</div>
           </>
         ) : (
           <SalonBrandmark salon={null} size="md" />
@@ -348,7 +366,7 @@ export default function OnboardingPage() {
           ✓ Invite verified — you're good to go
         </div>
 
-        <input placeholder={isAuto ? "Car wash name" : "Salon name"} value={salonName}
+        <input placeholder={thingCap + " name"} value={salonName}
           onChange={function(e) { setSalonName(e.target.value); setError(""); }}
           disabled={loading} style={effectiveInputStyle} />
 
@@ -383,7 +401,7 @@ export default function OnboardingPage() {
           />
         </div>
         <div style={{ fontSize: 10, color: isAuto ? CHROME + "cc" : "rgba(255,255,255,0.3)", marginBottom: 14, textAlign: "left" }}>
-          Staff PIN: for all staff · Admin PIN: for {isAuto ? "car wash owner" : "salon owner"} only. Both 4–6 digits, must be different.
+          Staff PIN: for all staff · Admin PIN: for {thingWord + " owner"} only. Both 4–6 digits, must be different.
         </div>
 
         {error && (
@@ -407,7 +425,7 @@ export default function OnboardingPage() {
               style={{ color: accentColor, fontWeight: 800, textDecoration: "underline" }}>
               Terms & Conditions
             </a>
-            {" "}of Trimora {isAuto ? "Auto" : "POS"}. I understand the subscription plans, data ownership policy, and the 7-day grace period for late payments.
+            {" "}of {productName}. I understand the subscription plans, data ownership policy, and the 7-day grace period for late payments.
           </label>
         </div>
 
@@ -418,7 +436,7 @@ export default function OnboardingPage() {
             color: INK, fontWeight: 900, fontSize: 15,
             cursor: (loading || !termsAccepted) ? "not-allowed" : "pointer",
           }}>
-            {loading ? "Setting up your car wash..." : "Create my car wash →"}
+            {loading ? "Setting up your " + thingWord + "..." : "Create my " + thingWord + " →"}
           </button>
         ) : (
           <GoldBtn onClick={handleSignup} disabled={loading || !termsAccepted} style={{ width: "100%", marginTop: 4, opacity: !termsAccepted ? 0.5 : 1 }}>
