@@ -172,6 +172,7 @@ verify, not a source of truth on its own.
 | `076_fix_platform_stats_and_add_combined_pl.sql` | 2026-07-16 | Added a combined salon+auto P&L (`net_profit`) to `platform_stats`. |
 | `077_revoke_anon_grants_super_admin_and_scoped_functions.sql` | 2026-07-16 | Revoked unnecessary `anon` execute grants on 12 admin-facing functions. |
 | `078_revoke_public_grant_super_admin_and_scoped_functions.sql` | 2026-07-16 | Follow-up: revoked the same functions' `PUBLIC` grant, since `anon` inherits through `PUBLIC` regardless of a role-specific revoke. |
+| `082_pet_business_type.sql` | 2026-10-23 | Trimora Pet: widens `salons.business_type` CHECK to allow `'pet'`. **Prepared, NOT yet applied anywhere** — test on a Supabase branch first. Rollback in the file header. (079-081 are not listed in this table.) |
 
 ## Notes
 

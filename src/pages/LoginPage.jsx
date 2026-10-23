@@ -9,6 +9,7 @@ import { lighten, darken } from "../lib/colorUtils";
 import { useParams } from "react-router-dom";
 import { useSalon, fetchPublicSalonBranding } from "../lib/SalonContext";
 import { persistSession } from "../lib/deviceAuth";
+import { SIDEBAR as PET_BG, PRIMARY as PET_GOLD, PRIMARY_FG as PET_GOLD_FG, SIDEBAR_FG as PET_FG, SIDEBAR_MUTED as PET_MUTED, DESTRUCTIVE as PET_RED } from "./pet/theme";
 
 var MAX_ATTEMPTS  = 3;
 var LOCKOUT_SECS  = 30;
@@ -46,7 +47,7 @@ async function verifyPin(salonId, role, pin) {
   }
 }
 
-export default function LoginPage({ onLogin, isAuto }) {
+export default function LoginPage({ onLogin, isAuto, isPet }) {
   // This component also renders on the legacy unprefixed /pos route,
   // which is never wrapped in SalonGate — so contextSalon is genuinely
   // null there, not just missing fields. We do an independent,
@@ -101,17 +102,21 @@ export default function LoginPage({ onLogin, isAuto }) {
   // Services), not per-salon custom branding the way POS's own login
   // does. Mirrors the exact isAuto pattern OnboardingPage.jsx already
   // established for the same distinction.
-  var pageBg     = isAuto ? INK : "linear-gradient(160deg," + BLACK + " 0%," + secondary + " 60%," + bgStop3 + " 100%)";
-  var panelBg    = isAuto ? STEEL : "rgba(255,255,255,0.04)";
-  var panelBorder = isAuto ? CHROME + "44" : primaryDim;
-  var accentColor = isAuto ? SIGNAL : primary;
-  var accentColorLt = isAuto ? SIGNAL : primaryLt;
-  var errorColor = isAuto ? ALERT : RED;
-  var textColor  = isAuto ? PAPER : WHITE;
-  var dimColor   = isAuto ? CHROME : "rgba(255,255,255,0.5)";
-  var faintColor = isAuto ? CHROME + "88" : "rgba(255,255,255,0.25)";
+  // Trimora Pet (isPet) likewise uses its own fixed palette from
+  // pet/theme.js rather than per-business branding. Auto and salon values
+  // are unchanged: every ternary below keeps its original isAuto/default arms.
+  var pageBg     = isAuto ? INK : isPet ? PET_BG : "linear-gradient(160deg," + BLACK + " 0%," + secondary + " 60%," + bgStop3 + " 100%)";
+  var panelBg    = isAuto ? STEEL : isPet ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.04)";
+  var panelBorder = isAuto ? CHROME + "44" : isPet ? PET_MUTED + "55" : primaryDim;
+  var accentColor = isAuto ? SIGNAL : isPet ? PET_GOLD : primary;
+  var accentColorLt = isAuto ? SIGNAL : isPet ? PET_GOLD : primaryLt;
+  var errorColor = isAuto ? ALERT : isPet ? PET_RED : RED;
+  var textColor  = isAuto ? PAPER : isPet ? PET_FG : WHITE;
+  var dimColor   = isAuto ? CHROME : isPet ? PET_MUTED : "rgba(255,255,255,0.5)";
+  var faintColor = isAuto ? CHROME + "88" : isPet ? PET_MUTED + "99" : "rgba(255,255,255,0.25)";
   var inputBg    = isAuto ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.06)";
-  var buttonTextColor = isAuto ? INK : BLACK;
+  var buttonTextColor = isAuto ? INK : isPet ? PET_GOLD_FG : BLACK;
+  var fixedTheme = !!(isAuto || isPet);
 
   var pinState     = useState("");
   var pin          = pinState[0]; var setPin = pinState[1];
@@ -251,7 +256,7 @@ export default function LoginPage({ onLogin, isAuto }) {
             <div style={{ fontSize: 13, color: dimColor, marginBottom: 20, lineHeight: 1.6 }}>
               Please wait before trying again.
             </div>
-            <div style={{ background: isAuto ? ALERT + "22" : "rgba(239,68,68,0.15)", border: "1.5px solid " + errorColor, borderRadius: 14, padding: "18px 0", marginBottom: 20 }}>
+            <div style={{ background: fixedTheme ? errorColor + "22" : "rgba(239,68,68,0.15)", border: "1.5px solid " + errorColor, borderRadius: 14, padding: "18px 0", marginBottom: 20 }}>
               <div style={{ fontSize: 11, color: errorColor, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Retry in</div>
               <div style={{ fontSize: 42, fontWeight: 900, color: errorColor, fontFamily: "Georgia,serif" }}>{countdown}s</div>
             </div>
@@ -303,14 +308,14 @@ export default function LoginPage({ onLogin, isAuto }) {
             />
 
             {error && (
-              <div style={{ color: errorColor, fontSize: 12, marginBottom: 8, padding: "6px 10px", background: isAuto ? ALERT + "1a" : "rgba(239,68,68,0.1)", borderRadius: 8, border: "1px solid " + (isAuto ? errorColor + "55" : "rgba(239,68,68,0.3)") }}>
+              <div style={{ color: errorColor, fontSize: 12, marginBottom: 8, padding: "6px 10px", background: fixedTheme ? errorColor + "1a" : "rgba(239,68,68,0.1)", borderRadius: 8, border: "1px solid " + (fixedTheme ? errorColor + "55" : "rgba(239,68,68,0.3)") }}>
                 {error}
               </div>
             )}
 
-            {isAuto ? (
+            {fixedTheme ? (
               <button onClick={handleLogin} disabled={loading} style={{
-                width: "100%", marginTop: 8, background: SIGNAL, color: INK, border: "none", borderRadius: 10,
+                width: "100%", marginTop: 8, background: accentColor, color: buttonTextColor, border: "none", borderRadius: 10,
                 padding: "13px 0", fontWeight: 900, fontSize: 15, cursor: loading ? "default" : "pointer", opacity: loading ? 0.6 : 1,
               }}>
                 {loading ? "Verifying..." : "Login →"}
@@ -332,7 +337,7 @@ export default function LoginPage({ onLogin, isAuto }) {
           </div>
         )}
 
-        {!isAuto && (
+        {!isAuto && !isPet && (
           <div style={{ marginTop: 24, borderTop: "1px solid rgba(201,168,76,0.2)", paddingTop: 16 }}>
             <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginBottom: 8 }}>Are you a customer?</div>
             <a href={bookingHref} style={{ fontSize: 13, color: primaryLt, fontWeight: 700, textDecoration: "none" }}>Book an appointment →</a>

@@ -615,7 +615,7 @@ export default function SuperAdminDashboard({ onLogout }) {
   // filteredSalons and platform_stats above. The Car Washes view and
   // its own Auto Health/Analytics continue to use the full `salons`
   // array (or auto_enabled) directly -- unaffected by this.
-  var realSalons = salons.filter(function(s) { return s.business_type !== "auto"; });
+  var realSalons = salons.filter(function(s) { return s.business_type !== "auto" && s.business_type !== "pet"; });
 
   function salonsByMonth() {
     return salonsByMonthLib(realSalons);
@@ -1069,7 +1069,7 @@ export default function SuperAdminDashboard({ onLogout }) {
   // from salons -- per explicit instruction, they must never appear on
   // the Salons side at all, only under the Auto product tab.
   var filteredSalons = salons.filter(function(s) {
-    if (s.business_type === "auto") return false;
+    if (s.business_type === "auto" || s.business_type === "pet") return false;
     var matchesFilter =
       filter === "all" ||
       (filter === "active"    && !s.suspended) ||
