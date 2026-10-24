@@ -1,21 +1,49 @@
 import {
-  NEXT_STATUSES, isActive, bookingErrorMessage, bookingTotal, totalMinutes, startOfWeek, weekDays, monthGrid,
+  STATUSES, STATUS_LABELS, STATUS_TONES, STATUS_ACTIONS, EDITABLE, NEXT_STATUSES, isActive, bookingErrorMessage, bookingTotal, totalMinutes, startOfWeek, weekDays, monthGrid,
   fromInputs, toDateInput, toTimeInput, addMinutes, bookingsOnDay, rangeBounds, findConflict, validateBooking, filterBookings, dateKey,
 } from "./bookingData";
 
 function at(h, m) { return new Date(2026, 9, 26, h, m).toISOString(); } // Mon 26 Oct 2026, local
-function bk(id, s, e, extra) { return Object.assign({ id: id, starts_at: at(s[0], s[1]), ends_at: at(e[0], e[1]), status: "confirmed", pet_id: "p1", staff_id: "st1" }, extra || {}); }
+function bk(id, s, e, extra) { return Object.assign({ id: id, starts_at: at(s[0], s[1]), ends_at: at(e[0], e[1]), status: "booked", pet_id: "p1", staff_id: "st1" }, extra || {}); }
 
 describe("status rules", function () {
-  it("mirrors the database transitions", function () {
-    expect(NEXT_STATUSES.pending).toEqual(["confirmed", "checked-in", "cancelled"]);
-    expect(NEXT_STATUSES["in-progress"]).toEqual(["completed"]);
-    ["completed", "cancelled", "no-show"].forEach(function (s) { expect(NEXT_STATUSES[s]).toEqual([]); });
+  it("has the prototype's six statuses plus no-show, and no old ones", function () {
+    expect(STATUSES).toEqual(["booked", "checked-in", "in-progress", "ready", "completed", "cancelled", "no-show"]);
+    expect(STATUSES).not.toContain("pending");
+    expect(STATUSES).not.toContain("confirmed");
   });
-  it("cancelled and no-show free the slot", function () {
+  it("labels and colours match the prototype", function () {
+    expect(STATUS_LABELS).toEqual({
+      booked: "Booked", "checked-in": "Checked In", "in-progress": "In Progress", ready: "Ready for Collection",
+      completed: "Completed", cancelled: "Cancelled", "no-show": "No-show",
+    });
+    expect(STATUS_TONES.booked).toBe("info"); expect(STATUS_TONES["checked-in"]).toBe("gold");
+    expect(STATUS_TONES["in-progress"]).toBe("warning"); expect(STATUS_TONES.ready).toBe("violet");
+    expect(STATUS_TONES.completed).toBe("success"); expect(STATUS_TONES.cancelled).toBe("danger");
+    STATUSES.forEach(function (s) { expect(STATUS_LABELS[s]).toBeTruthy(); expect(STATUS_TONES[s]).toBeTruthy(); expect(NEXT_STATUSES[s]).toBeDefined(); });
+  });
+  it("mirrors the database transitions exactly (migration 090)", function () {
+    expect(NEXT_STATUSES).toEqual({
+      booked: ["checked-in", "cancelled", "no-show"],
+      "checked-in": ["in-progress", "cancelled"],
+      "in-progress": ["ready"],
+      ready: ["completed"],
+      completed: [], cancelled: [], "no-show": [],
+    });
+  });
+  it("every move that can be offered has a button label", function () {
+    var targets = {};
+    STATUSES.forEach(function (s) { NEXT_STATUSES[s].forEach(function (t) { targets[t] = true; }); });
+    Object.keys(targets).filter(function (t) { return t !== "cancelled"; }).forEach(function (t) { expect(STATUS_ACTIONS[t]).toBeTruthy(); });
+    expect(STATUS_ACTIONS.ready).toBe("Mark ready");
+  });
+  it("only booked and checked-in bookings can be rescheduled", function () {
+    expect(EDITABLE).toEqual(["booked", "checked-in"]);
+  });
+  it("cancelled and no-show free the slot; booked, in-progress, ready and completed hold it", function () {
     expect(isActive({ status: "cancelled" })).toBe(false);
     expect(isActive({ status: "no-show" })).toBe(false);
-    expect(isActive({ status: "completed" })).toBe(true);
+    ["booked", "checked-in", "in-progress", "ready", "completed"].forEach(function (s) { expect(isActive({ status: s })).toBe(true); });
   });
 });
 

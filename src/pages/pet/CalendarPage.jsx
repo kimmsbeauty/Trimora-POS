@@ -12,7 +12,7 @@ import { db, dbRpcAuth } from "../../lib/db";
 import { fmt } from "../../lib/utils";
 import { MUTED_FG, MUTED, BORDER, FOREGROUND, PRIMARY, CARD } from "./theme";
 import {
-  STATUSES, STATUS_LABELS, STATUS_TONES, NEXT_STATUSES, EDITABLE, isActive, bookingErrorMessage, bookingTotal, totalMinutes,
+  STATUSES, STATUS_LABELS, STATUS_TONES, STATUS_ACTIONS, NEXT_STATUSES, EDITABLE, isActive, bookingErrorMessage, bookingTotal, totalMinutes,
   weekDays, monthGrid, addDays, startOfDay, dateKey, toDateInput, toTimeInput, fromInputs, addMinutes, formatRange, formatTime,
   bookingsOnDay, rangeBounds, findConflict, validateBooking, filterBookings,
 } from "./bookingData";
@@ -385,7 +385,7 @@ export default function CalendarPage() {
                   return s === "cancelled"
                     ? <Button key={s} size="sm" variant="ghost-danger" disabled={saving} onClick={function () { setErr(""); setConfirmCancel(detail); }}>Cancel booking</Button>
                     : <Button key={s} size="sm" variant={s === "no-show" ? "outline" : undefined} disabled={saving} onClick={function () { changeStatus(detail, s); }}>
-                      {s === "confirmed" ? "Confirm" : s === "checked-in" ? "Check in" : s === "in-progress" ? "Start" : s === "completed" ? "Complete" : "Mark no-show"}
+                      {STATUS_ACTIONS[s] || STATUS_LABELS[s]}
                     </Button>;
                 })}
               </div>
