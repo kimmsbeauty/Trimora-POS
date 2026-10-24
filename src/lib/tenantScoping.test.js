@@ -141,6 +141,10 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
                   // salon_id on the row; READ-ONLY for the client (writes go
                   // through the pet_* database functions); CalendarPage.jsx.
   "pet_booking_services", // ditto -- service lines snapshotted at booking time.
+  "pet_kennels", // added 2026-10-24 alongside migration 089 -- kennels; salon_id on
+                 // the row; READ-ONLY for the client (writes go through the pet_*
+                 // database functions); BoardingPage.jsx.
+  "pet_boarding_stays", // ditto -- boarding stays; same read-only rule.
 ];
 
 // Tables confirmed live (2026-07-07) to have a salon_id column, but
