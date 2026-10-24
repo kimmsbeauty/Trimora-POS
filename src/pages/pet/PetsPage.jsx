@@ -132,7 +132,7 @@ export default function PetsPage() {
     setSaving(true); setErr("");
     var ok = await db("DELETE", "pet_pets", null, "?id=eq." + deleting.id);
     setSaving(false);
-    if (!ok) { setErr("Couldn't delete the pet. Check your connection and try again."); return; }
+    if (!ok) { setErr("Couldn't delete the pet. A pet with bookings can't be deleted. Otherwise check your connection and try again."); return; }
     setPets(pets.filter(function (p) { return p.id !== deleting.id; }));
     setVaccs(vaccs.filter(function (v) { return v.pet_id !== deleting.id; }));
     setDeleting(null);

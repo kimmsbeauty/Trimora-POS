@@ -28,6 +28,7 @@ import PlaceholderPage from "./pet/PlaceholderPage";
 import PetsPage from "./pet/PetsPage";
 import CustomersPage from "./pet/CustomersPage";
 import GroomingPage from "./pet/GroomingPage";
+import CalendarPage from "./pet/CalendarPage";
 import StaffPage from "./pet/StaffPage";
 import WorkingAs from "./pet/WorkingAs";
 import { clearPetActor } from "../lib/petActor";
@@ -41,7 +42,7 @@ import {
 } from "./pet/theme";
 
 var PHASES = {
-  checkout: "a later phase", calendar: "a later phase",
+  checkout: "a later phase",
   boarding: "a later phase",
   invoices: "a later phase", supplies: "a later phase", loyalty: "a later phase",
   reports: "a later phase", settings: "a later phase",
@@ -146,6 +147,8 @@ function PetStaffRoute() {
         ? <CustomersPage />
         : activeItem.key === "grooming"
         ? <GroomingPage canEdit={isAdmin} />
+        : activeItem.key === "calendar"
+        ? <CalendarPage />
         : activeItem.key === "staff"
         ? <StaffPage canEdit={isAdmin} />
         : <PlaceholderPage title={activeItem.label} phase={PHASES[activeItem.key]} />}
