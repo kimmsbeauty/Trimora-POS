@@ -145,6 +145,10 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
                   // for the client (writes via pet_* functions); InvoicesPage.jsx.
   "pet_invoice_lines", // ditto -- lines copied from the catalogue at issue time.
   "pet_payments", // ditto -- append-only payment records.
+  "pet_kennels", // added 2026-10-24 alongside migration 089 -- kennels; salon_id on
+                 // the row; READ-ONLY for the client (writes go through the pet_*
+                 // database functions); BoardingPage.jsx.
+  "pet_boarding_stays", // ditto -- boarding stays; same read-only rule.
 ];
 
 // Tables confirmed live (2026-07-07) to have a salon_id column, but
