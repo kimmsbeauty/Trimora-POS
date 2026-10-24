@@ -1,9 +1,9 @@
--- 090_pet_booking_statuses.sql
+-- 092_pet_booking_statuses.sql
 --
 -- Trimora Pet -- align booking statuses with the approved prototype.
 --
 -- STATUS: written for owner review. NOT applied anywhere. Apply only after the
--- owner reviews this SQL and says "apply 090".
+-- owner reviews this SQL and says "apply 092".
 --
 -- WHY: 088 was written before the Lovable prototype could be read, so it assumed the
 -- statuses pending / confirmed / checked-in / in-progress / completed / cancelled /
@@ -12,7 +12,7 @@
 -- ready / completed / cancelled. Owner decision (Option C): the prototype's six
 -- statuses PLUS no-show.
 --
---   old (088)              new (090)
+--   old (088)              new (092)
 --   pending, confirmed  -> booked
 --   checked-in          -> checked-in      (unchanged)
 --   in-progress         -> in-progress     (unchanged)
@@ -47,7 +47,7 @@
 -- step fails, nothing is changed. The first step uses a plain DROP CONSTRAINT (no
 -- IF EXISTS) on purpose, so an unexpected constraint name fails loudly and rolls back.
 --
--- ROLLBACK / RECOVERY: supabase/sql/090_rollback_pet_booking_statuses.sql restores the
+-- ROLLBACK / RECOVERY: supabase/sql/092_rollback_pet_booking_statuses.sql restores the
 -- 088 behaviour in one transaction (constraint, default and the three function bodies,
 -- copied verbatim from 088). Information that cannot be represented again: booked rows
 -- become confirmed (pending is not recreated) and ready rows become in-progress.

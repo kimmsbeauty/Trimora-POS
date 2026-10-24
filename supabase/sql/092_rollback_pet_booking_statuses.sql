@@ -1,9 +1,9 @@
--- supabase/sql/090_rollback_pet_booking_statuses.sql
+-- supabase/sql/092_rollback_pet_booking_statuses.sql
 --
--- MANUAL recovery script for migration 090 (not a migration; never applied automatically).
+-- MANUAL recovery script for migration 092 (not a migration; never applied automatically).
 -- Restores the 088 booking statuses: pending / confirmed / checked-in / in-progress /
 -- completed / cancelled / no-show. Run it ONLY together with rolling the application back to
--- the release that speaks the 088 statuses, and only if 090 has to be undone.
+-- the release that speaks the 088 statuses, and only if 092 has to be undone.
 --
 -- Lossy mappings (no rows are deleted): booked -> confirmed, ready -> in-progress.
 -- One transaction: if any step fails, nothing is changed.

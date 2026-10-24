@@ -22,7 +22,7 @@ describe("status rules", function () {
     expect(STATUS_TONES.completed).toBe("success"); expect(STATUS_TONES.cancelled).toBe("danger");
     STATUSES.forEach(function (s) { expect(STATUS_LABELS[s]).toBeTruthy(); expect(STATUS_TONES[s]).toBeTruthy(); expect(NEXT_STATUSES[s]).toBeDefined(); });
   });
-  it("mirrors the database transitions exactly (migration 090)", function () {
+  it("mirrors the database transitions exactly (migration 092)", function () {
     expect(NEXT_STATUSES).toEqual({
       booked: ["checked-in", "cancelled", "no-show"],
       "checked-in": ["in-progress", "cancelled"],

@@ -1,6 +1,6 @@
 // @vitest-environment node
 //
-// Behavioural test of migration 090 (booking statuses) against a REAL Postgres engine
+// Behavioural test of migration 092 (booking statuses) against a REAL Postgres engine
 // (PGlite, in process): upgrading a database that already holds bookings in every old
 // status, the full from/to status matrix, and the manual rollback script. The stand-in
 // platform tables are NOT the live schema; they only provide the columns the pet
@@ -13,8 +13,8 @@ import { btree_gist } from "@electric-sql/pglite/contrib/btree_gist";
 function read(rel) { return fs.readFileSync(path.join(process.cwd(), rel), "utf8"); }
 var BASE = ["083_pet_pets_vaccinations.sql", "084_pet_customer_profiles.sql", "085_pet_services.sql", "086_pet_roles.sql",
   "087_pet_audit_log.sql", "088_pet_bookings.sql"];
-var UP = read("supabase/migrations/090_pet_booking_statuses.sql");
-var DOWN = read("supabase/sql/090_rollback_pet_booking_statuses.sql");
+var UP = read("supabase/migrations/092_pet_booking_statuses.sql");
+var DOWN = read("supabase/sql/092_rollback_pet_booking_statuses.sql");
 
 var A = "aaaaaaaa-0000-0000-0000-000000000001";
 var CUST = "c0000000-0000-0000-0000-00000000000a";
@@ -70,7 +70,7 @@ async function shape(db) {
   return { con: con, def: def, fns: fns, ov: ov };
 }
 
-describe("migration 090: upgrading a database that already holds bookings", function () {
+describe("migration 092: upgrading a database that already holds bookings", function () {
   var db, before;
   beforeAll(async function () {
     db = await productionLikeDb();
@@ -141,7 +141,7 @@ describe("migration 090: upgrading a database that already holds bookings", func
   }, 90000);
 });
 
-describe("migration 090: the manual rollback script", function () {
+describe("migration 092: the manual rollback script", function () {
   it("restores the exact 088 structure and relabels booked -> confirmed and ready -> in-progress (no row lost)", async function () {
     var db = await productionLikeDb();
     var before = await shape(db);
@@ -169,7 +169,7 @@ describe("migration 090: the manual rollback script", function () {
     expect((await db.query("select public.pet_set_booking_status($1,'completed') as s", [ready])).rows[0].s).toBe("completed");
   }, 90000);
 
-  it("can be followed by applying 090 again (a full round trip)", async function () {
+  it("can be followed by applying 092 again (a full round trip)", async function () {
     var db = await productionLikeDb();
     await db.exec("begin;\n" + UP + "\ncommit;");
     await db.exec(DOWN);

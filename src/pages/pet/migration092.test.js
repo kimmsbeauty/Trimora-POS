@@ -1,11 +1,11 @@
-// Static checks on migration 090 and its rollback script (the behaviour is tested in
-// migration090.db.test.js against a real Postgres engine).
+// Static checks on migration 092 and its rollback script (the behaviour is tested in
+// migration092.db.test.js against a real Postgres engine).
 import fs from "fs";
 import path from "path";
 
 function read(rel) { return fs.readFileSync(path.join(process.cwd(), rel), "utf8"); }
-var up = read("supabase/migrations/090_pet_booking_statuses.sql");
-var down = read("supabase/sql/090_rollback_pet_booking_statuses.sql");
+var up = read("supabase/migrations/092_pet_booking_statuses.sql");
+var down = read("supabase/sql/092_rollback_pet_booking_statuses.sql");
 var m088 = read("supabase/migrations/088_pet_bookings.sql");
 
 function functionsOf(text) {
@@ -15,10 +15,10 @@ function functionsOf(text) {
 }
 function code(text) { return text.split("\n").filter(function (l) { return !/^\s*--/.test(l); }).join("\n"); }
 
-describe("migration 090 (SQL text)", function () {
+describe("migration 092 (SQL text)", function () {
   it("is marked as not applied and says where the rollback is", function () {
     expect(up).toMatch(/NOT applied anywhere/);
-    expect(up).toMatch(/090_rollback_pet_booking_statuses\.sql/);
+    expect(up).toMatch(/092_rollback_pet_booking_statuses\.sql/);
   });
   it("swaps the status rule inside the right steps, in the right order", function () {
     var c = code(up);
@@ -59,7 +59,7 @@ describe("migration 090 (SQL text)", function () {
   });
   it("only changes the intended lines of the three functions compared with 088", function () {
     var a = functionsOf(m088).split("\n"); var b = functionsOf(up).split("\n");
-    // 090 adds a 2-line note above pet_create_booking; everything else is line-for-line comparable
+    // 092 adds a 2-line note above pet_create_booking; everything else is line-for-line comparable
     var bb = b.slice(b.findIndex(function (l) { return /^create or replace function public\.pet_create_booking/.test(l); }));
     var aa = a.slice(a.findIndex(function (l) { return /^create or replace function public\.pet_create_booking/.test(l); }));
     var changed = [];
@@ -84,6 +84,6 @@ describe("rollback script (SQL text)", function () {
     expect(b).toBe(a);
   });
   it("is kept outside the migrations folder so it can never be applied automatically", function () {
-    expect(fs.existsSync(path.join(process.cwd(), "supabase/migrations/090_rollback_pet_booking_statuses.sql"))).toBe(false);
+    expect(fs.existsSync(path.join(process.cwd(), "supabase/migrations/092_rollback_pet_booking_statuses.sql"))).toBe(false);
   });
 });

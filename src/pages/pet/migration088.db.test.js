@@ -1,8 +1,8 @@
 // @vitest-environment node
 //
-// Behavioural test of migration 088 (pet bookings) and 090 (booking statuses) against a
+// Behavioural test of migration 088 (pet bookings) and 092 (booking statuses) against a
 // REAL Postgres engine (PGlite, in process). The existing migration088.test.js only checks
-// the SQL text; this one applies the repo's real migrations 083-088 plus 090 (so it tests
+// the SQL text; this one applies the repo's real migrations 083-088 plus 092 (so it tests
 // the schema as production will have it) and tries to
 // break them: overlaps, back-to-back, cancel/no-show releasing slots, concurrent
 // attempts, the status flow, cross-business access, grants and RLS.
@@ -74,7 +74,7 @@ beforeAll(async function () {
   `);
   // The pet migrations, in repo order (088 triggers the audit function from 087).
   for (var f of ["083_pet_pets_vaccinations.sql", "084_pet_customer_profiles.sql", "085_pet_services.sql", "086_pet_roles.sql",
-    "087_pet_audit_log.sql", "088_pet_bookings.sql", "090_pet_booking_statuses.sql"]) { await db.exec(sql(f)); }
+    "087_pet_audit_log.sql", "088_pet_bookings.sql", "092_pet_booking_statuses.sql"]) { await db.exec(sql(f)); }
   await db.exec(`
     insert into public.salons values ('${A}','A'),('${B}','B');
     insert into public.customers values ('${CUST_A}','${A}','Ann'),('${CUST_A2}','${A}','Cy'),('${CUST_B}','${B}','Bob');
@@ -94,7 +94,7 @@ beforeEach(async function () {
   await as(A);
 });
 
-describe("migrations 088 + 090 (bookings and their statuses) against a real Postgres engine", function () {
+describe("migrations 088 + 092 (bookings and their statuses) against a real Postgres engine", function () {
   it("creates a booking, takes prices from the database and snapshots the service lines", async function () {
     var id = await create({ services: [SVC_BATH, SVC_NAILS], minutes: 90 });
     var b = await row(id);

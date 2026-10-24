@@ -5,7 +5,7 @@
 // the checks here only give faster, friendlier feedback.
 //
 // Statuses follow the approved prototype (booked / checked-in / in-progress / ready /
-// completed / cancelled) plus no-show (migration 090).
+// completed / cancelled) plus no-show (migration 092).
 //
 // Dates: bookings are stored as timestamptz. These helpers use the browser's
 // local time for display and input, via plain Date objects.
@@ -20,7 +20,7 @@ export var STATUS_TONES = {
   booked: "info", "checked-in": "gold", "in-progress": "warning", ready: "violet",
   completed: "success", cancelled: "danger", "no-show": "neutral",
 };
-// Same moves the database allows (090_pet_booking_statuses.sql).
+// Same moves the database allows (092_pet_booking_statuses.sql).
 export var NEXT_STATUSES = {
   booked: ["checked-in", "cancelled", "no-show"],
   "checked-in": ["in-progress", "cancelled"],

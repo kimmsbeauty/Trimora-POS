@@ -1,5 +1,5 @@
--- supabase/tests/090_pet_booking_statuses.sql
--- Run on a scratch/staging database ONLY, with migrations 083-088 and 090 applied.
+-- supabase/tests/092_pet_booking_statuses.sql
+-- Run on a scratch/staging database ONLY, with migrations 083-088 and 092 applied.
 -- Self-cleaning: raises its results so the transaction rolls back. Expected FAILED=0.
 -- A NULL outcome counts as a failure (ok is not true).
 
