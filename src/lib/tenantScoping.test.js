@@ -124,6 +124,10 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
                               // CheckInPage.jsx (check_in stage) and
                               // BoardPage.jsx (pickup stage + fetching
                               // check_in markers as reference).
+  "pet_pets", // added 2026-10-24 alongside migration 083 -- Trimora Pet.
+              // salon_id column, standard select/insert/update/delete
+              // policies via auth_salon_id(); queried from PetsPage.jsx.
+  "pet_vaccinations", // ditto -- salon_id denormalized on the row.
 ];
 
 // Tables confirmed live (2026-07-07) to have a salon_id column, but

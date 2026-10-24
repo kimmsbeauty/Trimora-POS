@@ -6,8 +6,9 @@
 // module_key='pet' before showing anything, so a business without Pet sees a
 // calm message instead of a broken screen.
 //
-// Phase 1 scope: gate, login, shell and navigation only. Every section is an
-// honest "coming soon" placeholder -- no mock data, nothing is persisted.
+// Phase 1 scope: gate, login, shell and navigation. Phase 2 adds the real Pets
+// screen (pet_pets / pet_vaccinations). Every other section is still an honest
+// "coming soon" placeholder -- no mock data.
 //
 // NOTE on roles: LoginPage's onLogin(role) gives "staff" or "admin". The
 // adminOnly flags in pet/petNav.js only HIDE navigation. They are not access
@@ -20,6 +21,7 @@ import { useState, useEffect } from "react";
 import LoginPage from "./LoginPage";
 import PetShell from "./pet/PetShell";
 import PlaceholderPage from "./pet/PlaceholderPage";
+import PetsPage from "./pet/PetsPage";
 import { visiblePetNav } from "./pet/petNav";
 import "./pet/fonts";
 import { useSalon } from "../lib/SalonContext";
@@ -31,7 +33,7 @@ import {
 
 var PHASES = {
   checkout: "a later phase", calendar: "a later phase", customers: "a later phase",
-  pets: "a later phase", grooming: "a later phase", boarding: "a later phase",
+  grooming: "a later phase", boarding: "a later phase",
   invoices: "a later phase", supplies: "a later phase", loyalty: "a later phase",
   staff: "a later phase", reports: "a later phase", settings: "a later phase",
 };
@@ -128,7 +130,9 @@ function PetStaffRoute() {
       roleLabel={isAdmin ? "Admin" : "Staff"}
       onLogout={function () { setLoggedIn(false); setIsAdmin(false); setTab("overview"); }}
     >
-      <PlaceholderPage title={activeItem.label} phase={PHASES[activeItem.key]} />
+      {activeItem.key === "pets"
+        ? <PetsPage />
+        : <PlaceholderPage title={activeItem.label} phase={PHASES[activeItem.key]} />}
     </PetShell>
   );
 }

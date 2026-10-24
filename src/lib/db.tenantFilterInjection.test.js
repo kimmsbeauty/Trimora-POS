@@ -141,3 +141,40 @@ describe("db.js TENANT_TABLES filter/body injection", () => {
     expect(callBody.salon_id).not.toBe("real-salon-uuid-123");
   });
 });
+
+// Trimora Pet (migration 083): the Pet tables are tenant-scoped like every other
+// tenant table, so db() must stamp salon_id on writes and filter reads by it.
+describe("db.js tenant injection for Pet tables", () => {
+  beforeEach(() => {
+    setCurrentSalonId("real-salon-uuid-123");
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([{ id: 1 }]) });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    console.error.mockRestore();
+    setCurrentSalonId(null);
+  });
+
+  test.each(["pet_pets", "pet_vaccinations"])("%s: GET is filtered by salon_id", async (table) => {
+    var { db } = await import("./db");
+    await db("GET", table, null, "?select=*");
+    expect(global.fetch.mock.calls[0][0]).toContain("?select=*&salon_id=eq.real-salon-uuid-123");
+  });
+
+  test.each(["pet_pets", "pet_vaccinations"])("%s: POST body gets salon_id injected", async (table) => {
+    var { db } = await import("./db");
+    await db("POST", table, { name: "x" });
+    var body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.salon_id).toBe("real-salon-uuid-123");
+  });
+
+  test("a Pet table read with no resolved salon fails closed (no request sent)", async () => {
+    setCurrentSalonId(null);
+    var { db } = await import("./db");
+    var res = await db("GET", "pet_pets", null, "?select=*");
+    expect(res).toBe(null);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+});
