@@ -2,9 +2,11 @@
 --
 -- Trimora Pet -- traceability: an append-only audit trail for every Pet table.
 --
--- STATUS: written for owner review; tested on the staging project against stub tables
--- (see "How this was tested"). NOT applied to production. Apply by hand in the Supabase
--- SQL Editor only after the owner says "apply 087".
+-- STATUS: applied to production 2026-10-24 on the owner's instruction (no Supabase branch
+-- on the free plan). Tested first on the staging project against stub tables (see "How this
+-- was tested"). Verified live from the catalog afterwards: RLS on, one SELECT-only policy,
+-- six audit triggers, no anon access, authenticated cannot insert/update/delete, trigger
+-- function not client-callable, 0 audit rows, 0 pet businesses at the time.
 --
 -- ADDITIVE ONLY: one new table, two functions, and AFTER triggers on the six existing
 -- pet_* tables. Nothing existing is altered; no Salon/Auto object is touched.

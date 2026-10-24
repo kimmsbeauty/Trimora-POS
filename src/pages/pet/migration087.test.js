@@ -50,7 +50,7 @@ describe("migration 087 (pet audit log)", function () {
   });
   it("documents rollback, status and the honest limits", function () {
     expect(sql).toMatch(/ROLLBACK/);
-    expect(sql).toMatch(/NOT applied to production/);
+    expect(sql).toMatch(/applied to production 2026-10-24/);
     expect(sql).toMatch(/attribution, not authentication/);
     expect(sql).toMatch(/Phase 7/);
   });
