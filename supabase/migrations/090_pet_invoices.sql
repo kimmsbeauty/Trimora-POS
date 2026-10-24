@@ -1,9 +1,9 @@
--- 089_pet_invoices.sql
+-- 090_pet_invoices.sql
 --
 -- Trimora Pet -- Phase 7: invoices, invoice lines and payments (checkout).
 --
 -- STATUS: written for owner review. NOT applied anywhere. Apply only after the
--- owner says "apply 089".
+-- owner says "apply 090".
 --
 -- ADDITIVE ONLY: three new tables and three functions. Nothing existing is
 -- altered. It READS salon_settings (tax_enabled, tax_rate, next_invoice_number,

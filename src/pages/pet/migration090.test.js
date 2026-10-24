@@ -1,10 +1,10 @@
 import fs from "fs";
 import path from "path";
 
-var sql = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/089_pet_invoices.sql"), "utf8");
+var sql = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/090_pet_invoices.sql"), "utf8");
 var code = sql.split("\n").filter(function (l) { return !/^\s*--/.test(l); }).join("\n");
 
-describe("migration 089 (pet invoices)", function () {
+describe("migration 090 (pet invoices)", function () {
   it("creates three tables, each with salon_id", function () {
     ["pet_invoices", "pet_invoice_lines", "pet_payments"].forEach(function (t) {
       var block = code.slice(code.indexOf("create table public." + t));
