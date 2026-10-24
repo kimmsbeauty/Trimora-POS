@@ -2,6 +2,7 @@
 
 import { SUPABASE_URL, SUPABASE_KEY } from "./constants";
 import { getValidAccessToken } from "./deviceAuth";
+import { getPetActor } from "./petActor";
 import { getCurrentSalonId } from "./currentSalon";
 
 export const TENANT_TABLES = new Set([
@@ -187,6 +188,18 @@ if (typeof window !== "undefined") {
   }
 }
 
+// Trimora Pet traceability (migration 087): when a staff member has been picked in the Pet
+// shell, pet_* requests carry X-Pet-Actor so the audit trigger can attribute the change.
+// Opt-in: with no actor selected nothing extra is sent, so behaviour is unchanged. Never
+// sent for non-pet tables.
+function petActorHeaders(table) {
+  if (typeof table === "string" && table.indexOf("pet_") === 0) {
+    var actor = getPetActor();
+    if (actor) return { "X-Pet-Actor": actor };
+  }
+  return {};
+}
+
 async function dbDirect(method, table, data = null, filters = "") {
   // Previously fell back to Kimms' fixed salon ID whenever no tenant was
   // resolved, on the theory that only the (now-confirmed-dead)
@@ -260,6 +273,7 @@ async function dbDirect(method, table, data = null, filters = "") {
         Authorization: `Bearer ${deviceToken || SUPABASE_KEY}`,
         "Content-Type": "application/json",
         Prefer: method === "POST" ? "return=representation" : "",
+        ...petActorHeaders(table),
       },
       body: body ? JSON.stringify(body) : undefined,
       signal: controller.signal,

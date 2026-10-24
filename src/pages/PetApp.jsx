@@ -29,6 +29,8 @@ import PetsPage from "./pet/PetsPage";
 import CustomersPage from "./pet/CustomersPage";
 import GroomingPage from "./pet/GroomingPage";
 import StaffPage from "./pet/StaffPage";
+import WorkingAs from "./pet/WorkingAs";
+import { clearPetActor } from "../lib/petActor";
 import { visiblePetNav } from "./pet/petNav";
 import "./pet/fonts";
 import { useSalon } from "../lib/SalonContext";
@@ -135,7 +137,8 @@ function PetStaffRoute() {
       onSelect={setTab}
       businessName={salon && salon.name}
       roleLabel={isAdmin ? "Admin" : "Staff"}
-      onLogout={function () { setLoggedIn(false); setIsAdmin(false); setTab("overview"); }}
+      footerSlot={<WorkingAs />}
+      onLogout={function () { clearPetActor(); setLoggedIn(false); setIsAdmin(false); setTab("overview"); }}
     >
       {activeItem.key === "pets"
         ? <PetsPage />

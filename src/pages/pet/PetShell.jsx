@@ -52,7 +52,7 @@ function Brand() {
   );
 }
 
-function SideContents({ nav, active, onSelect, businessName, roleLabel, onLogout }) {
+function SideContents({ nav, active, onSelect, businessName, roleLabel, onLogout, footerSlot }) {
   return (
     <>
       <Brand />
@@ -81,6 +81,7 @@ function SideContents({ nav, active, onSelect, businessName, roleLabel, onLogout
             <PetIcon name="logout" size={16} />
           </button>
         </div>
+        {footerSlot}
         <p style={{ margin: "0 4px", fontSize: 10, fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: PRIMARY, opacity: 0.9 }}>
           Signed in on this device
         </p>
@@ -89,12 +90,12 @@ function SideContents({ nav, active, onSelect, businessName, roleLabel, onLogout
   );
 }
 
-export default function PetShell({ nav, active, onSelect, businessName, roleLabel, onLogout, children }) {
+export default function PetShell({ nav, active, onSelect, businessName, roleLabel, onLogout, footerSlot, children }) {
   var drawerState = useState(false);
   var drawerOpen = drawerState[0]; var setDrawerOpen = drawerState[1];
 
   function select(key) { setDrawerOpen(false); onSelect(key); }
-  var shared = { nav: nav, active: active, onSelect: select, businessName: businessName, roleLabel: roleLabel, onLogout: onLogout };
+  var shared = { nav: nav, active: active, onSelect: select, businessName: businessName, roleLabel: roleLabel, onLogout: onLogout, footerSlot: footerSlot };
 
   return (
     <div className="pet-shell">
