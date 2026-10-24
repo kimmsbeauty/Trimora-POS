@@ -157,13 +157,13 @@ describe("db.js tenant injection for Pet tables", () => {
     setCurrentSalonId(null);
   });
 
-  test.each(["pet_pets", "pet_vaccinations", "pet_customer_profiles", "pet_services"])("%s: GET is filtered by salon_id", async (table) => {
+  test.each(["pet_pets", "pet_vaccinations", "pet_customer_profiles", "pet_services", "pet_roles", "pet_staff_roles"])("%s: GET is filtered by salon_id", async (table) => {
     var { db } = await import("./db");
     await db("GET", table, null, "?select=*");
     expect(global.fetch.mock.calls[0][0]).toContain("?select=*&salon_id=eq.real-salon-uuid-123");
   });
 
-  test.each(["pet_pets", "pet_vaccinations", "pet_customer_profiles", "pet_services"])("%s: POST body gets salon_id injected", async (table) => {
+  test.each(["pet_pets", "pet_vaccinations", "pet_customer_profiles", "pet_services", "pet_roles", "pet_staff_roles"])("%s: POST body gets salon_id injected", async (table) => {
     var { db } = await import("./db");
     await db("POST", table, { name: "x" });
     var body = JSON.parse(global.fetch.mock.calls[0][1].body);
