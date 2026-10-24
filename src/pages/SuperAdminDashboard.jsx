@@ -30,6 +30,7 @@ import CarWashesView from "./superadmin/CarWashesView";
 import AutoRequestsView from "./superadmin/AutoRequestsView";
 import PetBusinessesView from "./superadmin/PetBusinessesView";
 import { moduleLabels } from "../lib/moduleLabels";
+import { createBusinessOwner } from "../lib/createBusinessOwner";
 import DetailView from "./superadmin/DetailView";
 
 var GOLD_LT = "#F5E6B8";
@@ -724,31 +725,22 @@ export default function SuperAdminDashboard({ onLogout }) {
     try {
       var token = (await import("../lib/superAdminAuth")).getSuperAdminToken();
 
-      // Step 1: Create Auth user via Supabase Admin API
-      var signupRes = await fetch(SUPABASE_URL + "/auth/v1/admin/users", {
-        method: "POST",
-        headers: {
-          apikey:         SUPABASE_KEY,
-          Authorization:  "Bearer " + token,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email:              manualEmail.trim(),
-          password:           manualPass,
-          email_confirm:      true,
-        }),
-      });
-
-      var signupData = await signupRes.json();
-
-      if (!signupRes.ok) {
+      // Step 1: Create the Auth user via the admin-create-business-owner
+      // Edge Function. Calling /auth/v1/admin/users from the browser fails
+      // with "User not allowed" (needs the service-role key, which must
+      // never reach the client). The function verifies the caller is a
+      // super admin first.
+      var owner = await createBusinessOwner(token, manualEmail.trim(), manualPass);
+      if (!owner.ok) {
         setManualLoading(false);
-        return alert("Failed to create user: " + (signupData.msg || signupData.error || JSON.stringify(signupData)));
+        return alert("Failed to create user: " + owner.error);
       }
 
-      var userToken = signupData.access_token;
+      // The function doesn't return a session, so sign in as the new user
+      // (next step) to get the token complete_salon_onboarding runs under.
+      var userToken = null;
 
-      // If admin API doesn't return a token, sign in as the new user
+      // Sign in as the new user
       if (!userToken) {
         var signinRes = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=password", {
           method: "POST",
