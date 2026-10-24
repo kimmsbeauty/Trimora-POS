@@ -137,6 +137,10 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
   "pet_staff_roles", // ditto -- one role per staff member; salon_id on the row;
                      // insert/update policies also check staff and role belong
                      // to the caller's salon.
+  "pet_bookings", // added 2026-10-24 alongside migration 088 -- appointments;
+                  // salon_id on the row; READ-ONLY for the client (writes go
+                  // through the pet_* database functions); CalendarPage.jsx.
+  "pet_booking_services", // ditto -- service lines snapshotted at booking time.
 ];
 
 // Tables confirmed live (2026-07-07) to have a salon_id column, but

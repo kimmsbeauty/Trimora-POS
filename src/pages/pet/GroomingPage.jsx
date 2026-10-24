@@ -121,7 +121,7 @@ export default function GroomingPage({ canEdit }) {
     setSaving(true); setErr("");
     var ok = await db("DELETE", "pet_services", null, "?id=eq." + deleting.id);
     setSaving(false);
-    if (!ok) { setErr("Couldn't delete the service. Check your connection and try again."); return; }
+    if (!ok) { setErr("Couldn't delete the service. If it has been used in bookings, deactivate it instead. Otherwise check your connection and try again."); return; }
     setServices(services.filter(function (s) { return s.id !== deleting.id; }));
     setDeleting(null);
   }
