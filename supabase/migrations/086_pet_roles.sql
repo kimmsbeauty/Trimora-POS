@@ -2,8 +2,8 @@
 --
 -- Trimora Pet -- Phase 5: admin-defined staff roles.
 --
--- STATUS: written for owner review. NOT applied anywhere. Apply only after the
--- owner says "apply 086", and test on a Supabase branch first.
+-- STATUS: applied to production 2026-10-24 on the owner's instruction (no Supabase
+-- branch; tested on a local Postgres with stubbed prerequisites first).
 --
 -- ADDITIVE ONLY: two new tables. `staff` (including its free-text `role` job
 -- title) is not altered. Roles are DATA the business admin manages; nothing is
