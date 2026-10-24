@@ -130,6 +130,8 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
   "pet_vaccinations", // ditto -- salon_id denormalized on the row.
   "pet_customer_profiles", // added 2026-10-24 alongside migration 084 -- owner
                            // contact details; salon_id + standard policies.
+  "pet_services", // added 2026-10-24 alongside migration 085 -- service
+                  // catalogue; salon_id + standard policies; GroomingPage.jsx.
 ];
 
 // Tables confirmed live (2026-07-07) to have a salon_id column, but

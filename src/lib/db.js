@@ -19,7 +19,7 @@ export const TENANT_TABLES = new Set([
   "auto_coupons",
   "auto_invoices",
   "auto_vehicle_inspections",
-  "pet_pets", "pet_vaccinations", "pet_customer_profiles",
+  "pet_pets", "pet_vaccinations", "pet_customer_profiles", "pet_services",
 ]);
 
 // See usage in dbDirect() below (M4 fail-closed guard): tables in this

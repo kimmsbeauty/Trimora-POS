@@ -8,7 +8,8 @@
 //
 // Phase 1 scope: gate, login, shell and navigation. Phase 2 adds the real Pets
 // screen (pet_pets / pet_vaccinations); Phase 3 adds the real Customers
-// screen (customers + pet_customer_profiles). Every other section is still an honest
+// screen (customers + pet_customer_profiles); Phase 4 adds the Grooming
+// service catalogue (pet_services). Every other section is still an honest
 // "coming soon" placeholder -- no mock data.
 //
 // NOTE on roles: LoginPage's onLogin(role) gives "staff" or "admin". The
@@ -24,6 +25,7 @@ import PetShell from "./pet/PetShell";
 import PlaceholderPage from "./pet/PlaceholderPage";
 import PetsPage from "./pet/PetsPage";
 import CustomersPage from "./pet/CustomersPage";
+import GroomingPage from "./pet/GroomingPage";
 import { visiblePetNav } from "./pet/petNav";
 import "./pet/fonts";
 import { useSalon } from "../lib/SalonContext";
@@ -35,7 +37,7 @@ import {
 
 var PHASES = {
   checkout: "a later phase", calendar: "a later phase",
-  grooming: "a later phase", boarding: "a later phase",
+  boarding: "a later phase",
   invoices: "a later phase", supplies: "a later phase", loyalty: "a later phase",
   staff: "a later phase", reports: "a later phase", settings: "a later phase",
 };
@@ -136,6 +138,8 @@ function PetStaffRoute() {
         ? <PetsPage />
         : activeItem.key === "customers"
         ? <CustomersPage />
+        : activeItem.key === "grooming"
+        ? <GroomingPage canEdit={isAdmin} />
         : <PlaceholderPage title={activeItem.label} phase={PHASES[activeItem.key]} />}
     </PetShell>
   );

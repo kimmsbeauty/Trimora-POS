@@ -175,6 +175,7 @@ verify, not a source of truth on its own.
 | `082_pet_business_type.sql` | 2026-10-23 | Trimora Pet: widens `salons.business_type` CHECK to allow `'pet'`. **Applied to production 2026-10-24 (03:33 UTC), verified read-only.** Rollback in the file header. (079-081 are not listed in this table.) |
 | `083_pet_pets_vaccinations.sql` | 2026-10-24 | Trimora Pet Phase 2: `pet_pets` and `pet_vaccinations` (RLS, `salon_id`, anon revoked, cross-tenant parent checks). **Applied to production 2026-10-24** (verified: RLS on, 8 policies, no anon grants). |
 | `084_pet_customer_profiles.sql` | 2026-10-24 | Trimora Pet Phase 3: `pet_customer_profiles` (email, address, emergency contact, preferred channels, notes; `customers` untouched). **Applied to production 2026-10-24** (verified: RLS on, 4 policies, no anon grants, `customers` unchanged). Rollback in the file header. |
+| `085_pet_services.sql` | 2026-10-24 | Trimora Pet Phase 4: `pet_services` service catalogue (category, price in whole KES, optional duration and species, RLS, anon revoked, unique name per category). **Prepared for review, NOT applied.** Rollback in the file header. |
 
 ## Notes
 
