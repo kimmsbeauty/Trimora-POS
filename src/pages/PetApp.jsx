@@ -29,6 +29,9 @@ import PetsPage from "./pet/PetsPage";
 import CustomersPage from "./pet/CustomersPage";
 import GroomingPage from "./pet/GroomingPage";
 import CalendarPage from "./pet/CalendarPage";
+import CheckoutPage from "./pet/CheckoutPage";
+import InvoicesPage from "./pet/InvoicesPage";
+import SettingsPage from "./pet/SettingsPage";
 import StaffPage from "./pet/StaffPage";
 import WorkingAs from "./pet/WorkingAs";
 import { clearPetActor } from "../lib/petActor";
@@ -42,10 +45,9 @@ import {
 } from "./pet/theme";
 
 var PHASES = {
-  checkout: "a later phase",
   boarding: "a later phase",
-  invoices: "a later phase", supplies: "a later phase", loyalty: "a later phase",
-  reports: "a later phase", settings: "a later phase",
+  supplies: "a later phase", loyalty: "a later phase",
+  reports: "a later phase",
 };
 
 function CenteredMessage({ title, body, action }) {
@@ -122,6 +124,8 @@ function PetStaffRoute() {
   var isAdmin = isAdminState[0]; var setIsAdmin = isAdminState[1];
   var tabState = useState("overview");
   var tab = tabState[0]; var setTab = tabState[1];
+  var openInvoiceState = useState(null);
+  var openInvoice = openInvoiceState[0]; var setOpenInvoice = openInvoiceState[1];
 
   if (!loggedIn) {
     return <LoginPage isPet={true} onLogin={function (role) { setIsAdmin(role === "admin"); setLoggedIn(true); }} />;
@@ -149,6 +153,12 @@ function PetStaffRoute() {
         ? <GroomingPage canEdit={isAdmin} />
         : activeItem.key === "calendar"
         ? <CalendarPage />
+        : activeItem.key === "checkout"
+        ? <CheckoutPage onInvoiceCreated={function (id) { setOpenInvoice(id); setTab("invoices"); }} />
+        : activeItem.key === "invoices"
+        ? <InvoicesPage openInvoiceId={openInvoice} onDetailClosed={function () { setOpenInvoice(null); }} />
+        : activeItem.key === "settings"
+        ? <SettingsPage />
         : activeItem.key === "staff"
         ? <StaffPage canEdit={isAdmin} />
         : <PlaceholderPage title={activeItem.label} phase={PHASES[activeItem.key]} />}

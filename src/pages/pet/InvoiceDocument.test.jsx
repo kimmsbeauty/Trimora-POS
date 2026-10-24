@@ -1,0 +1,52 @@
+import React from "react";
+import { render, screen, fireEvent } from "@testing-library/react";
+import InvoiceDocument from "./InvoiceDocument";
+
+var invoice = {
+  id: "i1", invoice_number: "INV-0007", status: "partial", subtotal: 3500, discount_amount: 500, total: 3000, tax_enabled: true, tax_rate: 16, tax_amount: 414,
+  amount_paid: 1000, due_date: "2026-12-01", issued_at: "2026-10-24T08:00:00Z", notes: "Thanks!",
+  pet_invoice_lines: [{ id: "l1", description: "Full groom", quantity: 1, unit_price: 1500, line_total: 1500 }, { id: "l2", description: "Night stay", quantity: 1, unit_price: 2000, line_total: 2000 }],
+  pet_payments: [{ id: "p1", method: "mpesa", amount: 1000, reference: "QWE123", paid_at: "2026-10-24T09:00:00Z" }],
+};
+var customer = { id: "c1", name: "Wanjiru Kamau", phone: "0712345678" };
+var pet = { id: "p1", name: "Simba", species: "Dog" };
+
+describe("InvoiceDocument", function () {
+  it("shows the business logo when one is set", function () {
+    render(<InvoiceDocument invoice={invoice} customer={customer} pet={pet} salon={{ name: "Paws & Co", logo_url: "https://example.com/logo.png", tax_pin: "P0123", receipt_footer_message: "Come again!" }} />);
+    var img = screen.getByAltText("Paws & Co logo");
+    expect(img.getAttribute("src")).toBe("https://example.com/logo.png");
+    expect(screen.getByText("Paws & Co")).toBeTruthy();
+    expect(screen.getByText("Come again!")).toBeTruthy();
+  });
+  it("falls back to the business name when there is no logo", function () {
+    render(<InvoiceDocument invoice={invoice} customer={customer} pet={pet} salon={{ name: "Paws & Co" }} />);
+    expect(screen.queryByRole("img")).toBeNull();
+    expect(screen.getByText("Paws & Co")).toBeTruthy();
+  });
+  it("falls back to the business name when the logo fails to load", function () {
+    render(<InvoiceDocument invoice={invoice} customer={customer} pet={pet} salon={{ name: "Paws & Co", logo_url: "https://example.com/broken.png" }} />);
+    fireEvent.error(screen.getByAltText("Paws & Co logo"));
+    expect(screen.queryByAltText("Paws & Co logo")).toBeNull();
+    expect(screen.getByText("Paws & Co")).toBeTruthy();
+  });
+  it("prints the saved numbers: lines, discount, VAT, paid and balance", function () {
+    render(<InvoiceDocument invoice={invoice} customer={customer} pet={pet} salon={{ name: "Paws & Co", tax_pin: "P0123" }} />);
+    expect(screen.getByText("INV-0007")).toBeTruthy();
+    expect(screen.getByText("Full groom")).toBeTruthy();
+    expect(screen.getByText("- KES 500")).toBeTruthy();
+    expect(screen.getByText("Includes VAT (16%)")).toBeTruthy();
+    expect(screen.getByText("KES 414")).toBeTruthy();
+    expect(screen.getByText("Balance due").nextSibling.textContent).toBe("KES 2,000");
+    expect(screen.getByText(/QWE123/)).toBeTruthy();
+    expect(screen.getByText("KRA PIN: P0123")).toBeTruthy();
+    expect(screen.getByText("PART PAID")).toBeTruthy();
+  });
+  it("marks a void invoice and shows the reason without a balance", function () {
+    var v = Object.assign({}, invoice, { status: "void", amount_paid: 0, pet_payments: [], voided_at: "2026-10-25T08:00:00Z", void_reason: "Entered in error" });
+    render(<InvoiceDocument invoice={v} customer={customer} pet={null} salon={{ name: "Paws & Co" }} />);
+    expect(screen.getByText("VOID")).toBeTruthy();
+    expect(screen.getByText(/Entered in error/)).toBeTruthy();
+    expect(screen.queryByText("Balance due")).toBeNull();
+  });
+});

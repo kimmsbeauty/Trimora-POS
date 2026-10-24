@@ -20,7 +20,7 @@ export const TENANT_TABLES = new Set([
   "auto_coupons",
   "auto_invoices",
   "auto_vehicle_inspections",
-  "pet_pets", "pet_vaccinations", "pet_customer_profiles", "pet_services", "pet_bookings", "pet_booking_services",
+  "pet_pets", "pet_vaccinations", "pet_customer_profiles", "pet_services", "pet_bookings", "pet_booking_services", "pet_invoices", "pet_invoice_lines", "pet_payments",
   "pet_roles", "pet_staff_roles",
 ]);
 
