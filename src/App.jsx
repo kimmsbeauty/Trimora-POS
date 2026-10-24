@@ -27,6 +27,8 @@ var TermsPage          = lazy(function() { return import("./pages/TermsPage"); }
 var SuperAdminGate     = lazy(function() { return import("./pages/SuperAdminGate"); });
 var SalesRepGate       = lazy(function() { return import("./pages/SalesRepGate"); });
 var OnboardingPage     = lazy(function() { return import("./pages/OnboardingPage"); });
+// Trimora Pet is lazy so salon and car-wash visitors never download its code or fonts.
+var PetApp             = lazy(function() { return import("./pages/PetApp"); });
 
 function RouteFallback() {
   return (
@@ -202,6 +204,10 @@ function StaffRoute() {
   if (salon && salon.business_type === "auto") {
     return <Navigate to={"/" + params.slug + "/auto"} replace />;
   }
+  // Same rule for Trimora Pet businesses: never show the salon login or POS.
+  if (salon && salon.business_type === "pet") {
+    return <Navigate to={"/" + params.slug + "/pet"} replace />;
+  }
 
   if (!loggedIn) {
     return <LoginPage onLogin={function(role) { setUserRole(role); setLoggedIn(true); }} />;
@@ -236,6 +242,7 @@ export default function App() {
         <Route path="/:slug/auto/rate/:token" element={<SalonGate mode="public"><AutoRatingPage /></SalonGate>} />
         <Route path="/:slug/pos" element={<DeviceGate><SalonGate mode="authenticated"><StaffRoute /></SalonGate></DeviceGate>} />
         <Route path="/:slug/auto" element={<DeviceGate><SalonGate mode="authenticated"><AutoApp /></SalonGate></DeviceGate>} />
+        <Route path="/:slug/pet" element={<DeviceGate><SalonGate mode="authenticated"><PetApp /></SalonGate></DeviceGate>} />
 
         <Route path="*"            element={<TrimoraLandingPage />} />
       </Routes>
