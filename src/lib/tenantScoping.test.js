@@ -132,6 +132,11 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
                            // contact details; salon_id + standard policies.
   "pet_services", // added 2026-10-24 alongside migration 085 -- service
                   // catalogue; salon_id + standard policies; GroomingPage.jsx.
+  "pet_roles", // added 2026-10-24 alongside migration 086 -- admin-defined
+               // staff roles; salon_id + standard policies; StaffPage.jsx.
+  "pet_staff_roles", // ditto -- one role per staff member; salon_id on the row;
+                     // insert/update policies also check staff and role belong
+                     // to the caller's salon.
 ];
 
 // Tables confirmed live (2026-07-07) to have a salon_id column, but

@@ -176,6 +176,7 @@ verify, not a source of truth on its own.
 | `083_pet_pets_vaccinations.sql` | 2026-10-24 | Trimora Pet Phase 2: `pet_pets` and `pet_vaccinations` (RLS, `salon_id`, anon revoked, cross-tenant parent checks). **Applied to production 2026-10-24** (verified: RLS on, 8 policies, no anon grants). |
 | `084_pet_customer_profiles.sql` | 2026-10-24 | Trimora Pet Phase 3: `pet_customer_profiles` (email, address, emergency contact, preferred channels, notes; `customers` untouched). **Applied to production 2026-10-24** (verified: RLS on, 4 policies, no anon grants, `customers` unchanged). Rollback in the file header. |
 | `085_pet_services.sql` | 2026-10-24 | Trimora Pet Phase 4: `pet_services` service catalogue (category, price in whole KES, optional duration and species, RLS, anon revoked, unique name per category). **Applied to production 2026-10-24** (verified: RLS on, 4 policies, no anon grants, authenticated limited to select/insert/update/delete). Rollback in the file header. |
+| `086_pet_roles.sql` | 2026-10-24 | Trimora Pet Phase 5: `pet_roles` (admin-defined roles with boolean permission flags) and `pet_staff_roles` (one role per staff member; insert/update policies check staff and role belong to the caller's salon). **NOT applied -- awaiting owner "apply 086"; test on a Supabase branch first.** Roles are recorded, not enforced (shared device PIN). Rollback in the file header. |
 
 ## Notes
 

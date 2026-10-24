@@ -9,15 +9,17 @@
 // Phase 1 scope: gate, login, shell and navigation. Phase 2 adds the real Pets
 // screen (pet_pets / pet_vaccinations); Phase 3 adds the real Customers
 // screen (customers + pet_customer_profiles); Phase 4 adds the Grooming
-// service catalogue (pet_services). Every other section is still an honest
+// service catalogue (pet_services); Phase 5 adds Staff & Permissions
+// (admin-defined roles, pet_roles / pet_staff_roles). Every other section is still an honest
 // "coming soon" placeholder -- no mock data.
 //
 // NOTE on roles: LoginPage's onLogin(role) gives "staff" or "admin". The
 // adminOnly flags in pet/petNav.js only HIDE navigation. They are not access
 // control: the database cannot yet tell staff from admin (shared device
-// session). No sensitive Pet data exists in this phase; before medical notes
-// or unrestricted financial actions ship, Pet roles must be enforced in the
-// database (see the feasibility audit, section 6).
+// session). Phase 5 records roles but does not enforce them. No sensitive Pet
+// data exists yet; before medical notes or unrestricted financial actions ship,
+// per-person enforcement must exist in the database (see the feasibility
+// audit, section 6).
 
 import { useState, useEffect } from "react";
 import LoginPage from "./LoginPage";
@@ -26,6 +28,7 @@ import PlaceholderPage from "./pet/PlaceholderPage";
 import PetsPage from "./pet/PetsPage";
 import CustomersPage from "./pet/CustomersPage";
 import GroomingPage from "./pet/GroomingPage";
+import StaffPage from "./pet/StaffPage";
 import { visiblePetNav } from "./pet/petNav";
 import "./pet/fonts";
 import { useSalon } from "../lib/SalonContext";
@@ -39,7 +42,7 @@ var PHASES = {
   checkout: "a later phase", calendar: "a later phase",
   boarding: "a later phase",
   invoices: "a later phase", supplies: "a later phase", loyalty: "a later phase",
-  staff: "a later phase", reports: "a later phase", settings: "a later phase",
+  reports: "a later phase", settings: "a later phase",
 };
 
 function CenteredMessage({ title, body, action }) {
@@ -140,6 +143,8 @@ function PetStaffRoute() {
         ? <CustomersPage />
         : activeItem.key === "grooming"
         ? <GroomingPage canEdit={isAdmin} />
+        : activeItem.key === "staff"
+        ? <StaffPage canEdit={isAdmin} />
         : <PlaceholderPage title={activeItem.label} phase={PHASES[activeItem.key]} />}
     </PetShell>
   );
