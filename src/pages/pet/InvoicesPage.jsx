@@ -1,7 +1,7 @@
 // src/pages/pet/InvoicesPage.jsx
 //
 // Invoices & Payments (Phase 7). Lists real invoices (pet_invoices, migration
-// 089), shows the branded printable invoice, records payments and voids unpaid
+// 090), shows the branded printable invoice, records payments and voids unpaid
 // invoices. The client only READS the tables; payments and voids go through the
 // pet_* database functions. Overdue is derived from the due date, not stored.
 //
