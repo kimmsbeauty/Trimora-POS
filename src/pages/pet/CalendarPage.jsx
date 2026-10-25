@@ -7,7 +7,7 @@
 //
 // Not built yet: working hours / staff availability rules, editing the services
 // of an existing booking (cancel and rebook), public online booking.
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { db, dbRpcAuth } from "../../lib/db";
 import { fmt } from "../../lib/utils";
 import { MUTED_FG, MUTED, BORDER, FOREGROUND, PRIMARY, CARD } from "./theme";
@@ -33,8 +33,10 @@ function titleFor(view, anchor) {
   return anchor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
-export default function CalendarPage() {
-  var viewState = useState("week"); var view = viewState[0]; var setView = viewState[1];
+// initialView / startNew / openBookingId (optional, from the Overview): open on that view, open the new-booking form, or open one
+// booking's details. Each happens once, after the lookups and bookings have loaded.
+export default function CalendarPage({ initialView, startNew, openBookingId }) {
+  var viewState = useState(initialView === "day" || initialView === "month" ? initialView : "week"); var view = viewState[0]; var setView = viewState[1];
   var anchorState = useState(startOfDay(new Date())); var anchor = anchorState[0]; var setAnchor = anchorState[1];
   var lookState = useState(null); var look = lookState[0]; var setLook = lookState[1]; // {customers, pets, staff, services}
   var lookStatusState = useState("loading"); var lookStatus = lookStatusState[0]; var setLookStatus = lookStatusState[1];
@@ -65,6 +67,20 @@ export default function CalendarPage() {
     });
     return function () { cancelled = true; };
   }, [tick]);
+
+  // Overview's "New Booking" shortcut: open the new-booking form once the lookups are ready.
+  var startedRef = useRef(false);
+  useEffect(function () {
+    if (startNew && lookStatus === "ready" && !startedRef.current) { startedRef.current = true; openAdd(); }
+  }, [startNew, lookStatus]);
+
+  var openedRef = useRef(false);
+  useEffect(function () {
+    if (!openBookingId || openedRef.current || lookStatus !== "ready" || bookStatus !== "ready") return;
+    openedRef.current = true;
+    // Only opens it if it is in the range being shown; otherwise the calendar simply stays as it is.
+    if (bookings.some(function (b) { return b.id === openBookingId; })) setDetailId(openBookingId);
+  }, [openBookingId, lookStatus, bookStatus, bookings]);
 
   var anchorKey = dateKey(anchor);
   useEffect(function () {
