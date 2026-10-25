@@ -83,11 +83,13 @@ describe("PetApp shell", function () {
     expect(screen.getAllByText("Happy Paws").length).toBeGreaterThan(0);
   });
 
-  it("still shows an honest placeholder, not fake data, for sections that are not built yet", async function () {
+  it("opens the real Loyalty screen, and no placeholder is left in the navigation", async function () {
     render(<PetApp />);
     fireEvent.click(await screen.findByText("login-admin"));
     fireEvent.click((await screen.findAllByText("Loyalty Programme"))[0]);
-    expect(await screen.findByText("Coming soon")).toBeInTheDocument();
+    // no loyalty rows exist in the test data, so the screen reports that the programme is off
+    expect(await screen.findByText("The programme is off.")).toBeInTheDocument();
+    expect(screen.queryByText("Coming soon")).not.toBeInTheDocument();
   });
 
   it("opens the new-booking form from the Overview shortcut", async function () {
