@@ -5,8 +5,8 @@
 // invoices. The client only READS the tables; payments and voids go through the
 // pet_* database functions. Overdue is derived from the due date, not stored.
 //
-// Not built yet: refunds (so a paid invoice cannot be voided), M-Pesa STK push
-// and automatic callback matching (M-Pesa payments are recorded by receipt code).
+// M-Pesa: "Send M-Pesa request" starts an STK push (migration 099); recording by M-Pesa
+// code stays available as a fallback. Not built yet: refunds (so a paid invoice cannot be voided).
 import React, { useEffect, useMemo, useState } from "react";
 import { db, dbRpcAuth } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
@@ -16,6 +16,7 @@ import {
   METHODS, METHOD_LABELS, STATUS_LABELS, STATUS_TONES, invoiceErrorMessage, outstanding, displayStatus, filterInvoices, summarize,
 } from "./invoiceData";
 import InvoiceDocument from "./InvoiceDocument";
+import MpesaStkPush from "./MpesaStkPush";
 import { PageHeader, Card, Button, Field, Badge, Modal, ErrorLine, EmptyState, inputStyle } from "./ui";
 
 var PAGE = 50;
@@ -168,6 +169,14 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
             {(detail.status === "issued" || detail.status === "partial") ? (
               <div style={{ marginTop: 14, padding: 12, border: "1px solid " + BORDER, borderRadius: 12, background: MUTED }}>
                 <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, color: FOREGROUND }}>Record a payment · {fmt(outstanding(detail))} owed</div>
+                {pay.method === "mpesa" ? (
+                  <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid " + BORDER }}>
+                    <MpesaStkPush key={detail.id + ":" + outstanding(detail)} salonId={salon && salon.id} invoice={detail} owed={outstanding(detail)}
+                      defaultPhone={(maps.customers[detail.customer_id] || {}).phone || ""} reference={detail.invoice_number}
+                      onRecorded={function () { setTick(tick + 1); }} />
+                    <div style={{ fontSize: 12, color: MUTED_FG, marginTop: 8 }}>Or record a payment the customer already made, using its M-Pesa code:</div>
+                  </div>
+                ) : null}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1.4fr", gap: 8 }}>
                   <Field label="Method" htmlFor="pay-method">
                     <select id="pay-method" style={inputStyle} value={pay.method} onChange={function (e) { setPay(Object.assign({}, pay, { method: e.target.value })); }}>
