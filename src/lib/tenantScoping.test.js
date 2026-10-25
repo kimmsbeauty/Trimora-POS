@@ -145,6 +145,7 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
                   // for the client (writes via pet_* functions); InvoicesPage.jsx.
   "pet_invoice_lines", // ditto -- lines copied from the catalogue at issue time.
   "pet_payments", // ditto -- append-only payment records.
+  "pet_reminder_settings", // added with migration 098 -- per-business "due soon" windows by care-record type; ReminderSettings.jsx.
   "pet_suppliers", // added 2026-10-25 alongside migration 094 -- suppliers; SuppliesPage.jsx.
   "pet_items", // ditto -- products and consumables; quantity changes only via pet_* functions.
   "pet_stock_movements", // ditto -- append-only stock ledger, read-only for the client.

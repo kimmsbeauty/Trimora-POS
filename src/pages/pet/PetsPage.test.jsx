@@ -149,7 +149,7 @@ describe("PetsPage", function () {
     fireEvent.click(screen.getByLabelText("View profile of Simba"));
     var dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText("Rabies")).toBeTruthy();
-    expect(within(dialog).getByText("Overdue")).toBeTruthy();
+    expect(within(dialog).getByText("Expired")).toBeTruthy();
   });
 
   it("does not offer any allergy or medical field", async function () {
@@ -157,5 +157,33 @@ describe("PetsPage", function () {
     await screen.findByText("Simba");
     fireEvent.click(screen.getByText("+ Add pet"));
     expect(screen.queryByLabelText(/allerg|medical/i)).toBeNull();
+  });
+});
+
+describe("PetsPage archiving", function () {
+  beforeEach(function () { mockDb.mockReset(); });
+
+  it("hides archived pets by default, shows them under Archived, and restores without deleting", async function () {
+    mockDb.mockImplementation(function (method, table, data) {
+      if (method === "GET" && table === "pet_pets") return Promise.resolve([
+        { id: "p1", customer_id: "c1", name: "Simba", species: "Dog", sex: "Male", archived_at: null },
+        { id: "p2", customer_id: "c1", name: "Old Rex", species: "Dog", sex: "Male", archived_at: "2026-10-01T00:00:00Z", archived_reason: "passed-away" },
+      ]);
+      if (method === "GET" && table === "customers") return Promise.resolve([{ id: "c1", name: "Amina", phone: "0711" }]);
+      if (method === "GET") return Promise.resolve([]);
+      if (method === "PATCH") return Promise.resolve([Object.assign({ id: "p2" }, data)]);
+      return Promise.resolve(null);
+    });
+    render(<PetsPage />);
+    expect(await screen.findByText("Simba")).toBeTruthy();
+    expect(screen.queryByText("Old Rex")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Show pets"), { target: { value: "archived" } });
+    expect(await screen.findByText("Old Rex")).toBeTruthy();
+    expect(screen.getByText(/Passed away/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Restore Old Rex" }));
+    await waitFor(function () { expect(screen.queryByRole("button", { name: "Restore Old Rex" })).toBeNull(); });
+    var patch = mockDb.mock.calls.filter(function (c) { return c[0] === "PATCH"; })[0];
+    expect(patch[2]).toEqual({ archived_at: null, archived_reason: null });
+    expect(mockDb.mock.calls.filter(function (c) { return c[0] === "DELETE"; }).length).toBe(0);
   });
 });
