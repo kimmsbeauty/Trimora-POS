@@ -1,9 +1,9 @@
--- 091_pet_supplies.sql
+-- 094_pet_supplies.sql
 --
 -- Trimora Pet -- Phase 8: supplies and inventory (retail products and consumables).
 --
 -- STATUS: written for owner review. NOT applied anywhere. Apply only after the
--- owner says "apply 091".
+-- owner says "apply 094".
 --
 -- ADDITIVE ONLY: five new tables and four functions. It does NOT touch the shared
 -- `stock` table that Salon and Auto use (that table has no SKU, cost, unit or
@@ -27,13 +27,13 @@
 -- FUNCTIONS
 --   pet_apply_stock (internal)  one controlled place that changes a quantity.
 --                               Not callable by the app; used by the others and by
---                               migration 092 (invoice sales).
+--                               migration 095 (invoice sales).
 --   pet_receive_stock           record a purchase / stock receipt (supplier,
 --                               reference, lines with quantity and optional cost).
 --   pet_adjust_stock            opening stock, count corrections, damaged, expired.
 --   pet_use_supplies            record consumables used, optionally for a booking.
 --
--- NOT in this migration: selling products on invoices (migration 092), batch or
+-- NOT in this migration: selling products on invoices (migration 095), batch or
 -- expiry tracking, purchase orders, supplier payments, returns to supplier.
 --
 -- ROLLBACK (destroys all supplies data):

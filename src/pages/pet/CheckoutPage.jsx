@@ -8,7 +8,7 @@
 // invoice instead of a second one.
 //
 // Lines can be catalogue services (including boarding rates) or retail products
-// from Supplies (migration 092 takes the stock out in the same transaction).
+// from Supplies (migration 095 takes the stock out in the same transaction).
 // Not built yet: M-Pesa STK push, refunds, loyalty points.
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { db, dbRpcAuth } from "../../lib/db";

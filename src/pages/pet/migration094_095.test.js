@@ -5,10 +5,10 @@ function code(file) {
   var sql = fs.readFileSync(path.join(process.cwd(), "supabase/migrations", file), "utf8");
   return sql.split("\n").filter(function (l) { return !/^\s*--/.test(l); }).join("\n");
 }
-var s91 = code("091_pet_supplies.sql");
-var s92 = code("092_pet_invoice_products.sql");
+var s91 = code("094_pet_supplies.sql");
+var s92 = code("095_pet_invoice_products.sql");
 
-describe("migrations 091 and 092 (static checks; behaviour is tested in the .db tests)", function () {
+describe("migrations 094 and 095 (static checks; behaviour is tested in the .db tests)", function () {
   it("never lets the app write a quantity: it is missing from every column grant", function () {
     var grants = s91.match(/grant (insert|update) \([^)]*\) on public\.pet_items to authenticated/g) || [];
     expect(grants.length).toBe(2);

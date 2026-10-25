@@ -4,7 +4,7 @@
 // consumables (used up by grooming and boarding), kept apart. Items and
 // suppliers are added and edited here; the QUANTITY is never edited directly.
 // Every change goes through a database function that writes the stock ledger
-// (receive stock, adjust, use) or happens inside a sale (migration 092), and the
+// (receive stock, adjust, use) or happens inside a sale (migration 095), and the
 // database refuses to go below zero. Not built: batch/expiry tracking, purchase
 // orders, supplier payments, linking usage to a booking from this screen.
 import React, { useEffect, useMemo, useRef, useState } from "react";

@@ -1,9 +1,9 @@
--- 092_pet_invoice_products.sql
+-- 095_pet_invoice_products.sql
 --
 -- Trimora Pet -- Phase 8 (part 2): sell retail products on invoices.
 --
 -- STATUS: written for owner review. NOT applied anywhere. Apply only after the
--- owner says "apply 092", and only AFTER 091 (it needs pet_items and
+-- owner says "apply 095", and only AFTER 094 (it needs pet_items and
 -- pet_apply_stock).
 --
 -- WHAT CHANGES

@@ -1,7 +1,7 @@
 // src/pages/pet/supplyData.js
 //
 // Pure helpers for Supplies & Inventory (no network, no React). The DATABASE
-// (migration 091) is the authority on stock: it refuses to go below zero, keeps
+// (migration 094) is the authority on stock: it refuses to go below zero, keeps
 // the ledger, and makes receipts idempotent. These helpers give friendlier,
 // earlier feedback and do the filtering.
 

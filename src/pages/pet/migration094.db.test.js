@@ -1,6 +1,6 @@
 // @vitest-environment node
 //
-// Behavioural test of migration 091 (supplies and inventory) against a REAL
+// Behavioural test of migration 094 (supplies and inventory) against a REAL
 // Postgres engine (PGlite, in process), reusing the approach of
 // migration088.db.test.js. It applies the repo's real migrations and tries to
 // break the stock functions: going below zero, doubling a receipt, editing the
@@ -90,7 +90,7 @@ async function ledgerSum(id) { return (await db.query("select coalesce(sum(chang
 
 beforeAll(async function () {
   await setupDb(["083_pet_pets_vaccinations.sql", "084_pet_customer_profiles.sql", "085_pet_services.sql", "086_pet_roles.sql",
-    "087_pet_audit_log.sql", "088_pet_bookings.sql", "091_pet_supplies.sql"]);
+    "087_pet_audit_log.sql", "088_pet_bookings.sql", "094_pet_supplies.sql"]);
 }, 60000);
 
 beforeEach(async function () {
@@ -100,7 +100,7 @@ beforeEach(async function () {
   await as(A);
 });
 
-describe("migration 091 against a real Postgres engine", function () {
+describe("migration 094 against a real Postgres engine", function () {
   it("sets opening stock once and records it in the ledger with the quantity after", async function () {
     expect(await adjust(FOOD, 20, "opening", null)).toBe(20);
     var m = (await db.query("select change_qty, quantity_after, reason from public.pet_stock_movements where item_id=$1", [FOOD])).rows;

@@ -1,8 +1,8 @@
 // @vitest-environment node
 //
-// Behavioural test of migration 092 (retail products on invoices) against a REAL
+// Behavioural test of migration 095 (retail products on invoices) against a REAL
 // Postgres engine (PGlite, in process). It applies the repo's real migrations
-// 083-088 and 090-092 and checks that selling products takes stock out safely,
+// 083-088, 090 and 094-095 and checks that selling products takes stock out safely,
 // refuses to oversell, undoes everything when a sale fails, and puts stock back
 // when an unpaid invoice is voided, while service-only invoices still behave as
 // before.
@@ -88,7 +88,7 @@ async function nextNo() { return (await db.query("select next_invoice_number n f
 
 beforeAll(async function () {
   await setupDb(["083_pet_pets_vaccinations.sql", "084_pet_customer_profiles.sql", "085_pet_services.sql", "086_pet_roles.sql",
-    "087_pet_audit_log.sql", "088_pet_bookings.sql", "090_pet_invoices.sql", "091_pet_supplies.sql", "092_pet_invoice_products.sql"]);
+    "087_pet_audit_log.sql", "088_pet_bookings.sql", "090_pet_invoices.sql", "094_pet_supplies.sql", "095_pet_invoice_products.sql"]);
 }, 60000);
 
 beforeEach(async function () {
@@ -99,7 +99,7 @@ beforeEach(async function () {
   await as(A);
 });
 
-describe("migration 092 against a real Postgres engine", function () {
+describe("migration 095 against a real Postgres engine", function () {
   it("sells a product with a service, takes the stock out and records the sale in the ledger", async function () {
     await stockUp(FOOD, 10);
     var id = await invoice({ lines: [{ service_id: SVC_GROOM, quantity: 1 }, { item_id: FOOD, quantity: 3 }] });
