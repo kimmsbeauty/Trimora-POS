@@ -34,6 +34,7 @@ import InvoicesPage from "./pet/InvoicesPage";
 import SettingsPage from "./pet/SettingsPage";
 import StaffPage from "./pet/StaffPage";
 import BoardingPage from "./pet/BoardingPage";
+import ReportsPage from "./pet/ReportsPage";
 import WorkingAs from "./pet/WorkingAs";
 import { clearPetActor } from "../lib/petActor";
 import { visiblePetNav } from "./pet/petNav";
@@ -47,7 +48,6 @@ import {
 
 var PHASES = {
   supplies: "a later phase", loyalty: "a later phase",
-  reports: "a later phase",
 };
 
 function CenteredMessage({ title, body, action }) {
@@ -159,6 +159,8 @@ function PetStaffRoute() {
         ? <InvoicesPage openInvoiceId={openInvoice} onDetailClosed={function () { setOpenInvoice(null); }} />
         : activeItem.key === "settings"
         ? <SettingsPage />
+        : activeItem.key === "reports"
+        ? <ReportsPage />
         : activeItem.key === "boarding"
         ? <BoardingPage canEdit={isAdmin} />
         : activeItem.key === "staff"
