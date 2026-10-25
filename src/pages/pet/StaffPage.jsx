@@ -1,6 +1,6 @@
 // src/pages/pet/StaffPage.jsx
 //
-// Staff & Permissions, Phase 5: the business admin defines roles (pet_roles) and
+// Staff & Permissions, Phase 5 (changes go through admin-PIN RPCs, migration 102): the business admin defines roles (pet_roles) and
 // assigns one role to each staff member (pet_staff_roles), migration 086.
 // Roles are data the admin manages; Owner/Admin, Manager, Groomer and
 // Receptionist are only suggested presets.
@@ -8,8 +8,8 @@
 // HONEST LIMIT, shown on screen: login is the shared device PIN, so the database
 // cannot tell which staff member is acting. Roles are recorded here but not yet
 // enforced. This screen is admin-only navigation (a UI convenience, not security).
-import React, { useEffect, useState } from "react";
-import { db } from "../../lib/db";
+import React, { useEffect, useRef, useState } from "react";
+import { db, dbRpcAuth } from "../../lib/db";
 import { MUTED_FG, MUTED, BORDER, FOREGROUND } from "./theme";
 import {
   PERMISSIONS, PRESETS, validateRole, roleRow, isDuplicateRole, missingPresets,
@@ -33,6 +33,12 @@ export default function StaffPage({ canEdit }) {
   var deletingState = useState(null); var deleting = deletingState[0]; var setDeleting = deletingState[1];
   var savingState = useState(false); var saving = savingState[0]; var setSaving = savingState[1];
   var errState = useState(""); var err = errState[0]; var setErr = errState[1];
+  // Admin-PIN step-up (migration 102): every change to roles or assignments is proved with the
+  // current ADMIN PIN, checked by the server. The PIN is held only for the one call.
+  var pinAskState = useState(null); var pinAsk = pinAskState[0]; var setPinAsk = pinAskState[1];
+  var pinValState = useState(""); var pinVal = pinValState[0]; var setPinVal = pinValState[1];
+  var pinErrState = useState(""); var pinErr = pinErrState[0]; var setPinErr = pinErrState[1];
+  var pinResolver = useRef(null);
 
   useEffect(function () {
     var cancelled = false;
@@ -79,12 +85,42 @@ export default function StaffPage({ canEdit }) {
 
   function openAdd() { setForm({ mode: "add", id: null, draft: emptyDraft() }); setErr(""); }
   function openEdit(r) { setForm({ mode: "edit", id: r.id, draft: draftFrom(r) }); setErr(""); }
-  function closeForm() { if (!saving) { setForm(null); setErr(""); } }
+  function closeForm() { if (!saving && !pinAsk) { setForm(null); setErr(""); } }
   function setField(k, v) { var o = {}; o[k] = v; setForm(Object.assign({}, form, { draft: Object.assign({}, form.draft, o) })); }
   function togglePerm(key) {
     var perms = Object.assign({}, form.draft.permissions);
     perms[key] = !perms[key];
     setField("permissions", perms);
+  }
+
+  function askPin(title) {
+    return new Promise(function (resolve) {
+      pinResolver.current = resolve;
+      setPinVal(""); setPinErr(""); setPinAsk({ title: title });
+    });
+  }
+  function answerPin(value) {
+    var r = pinResolver.current; pinResolver.current = null;
+    setPinAsk(null); setPinVal(""); setPinErr("");
+    if (r) r(value);
+  }
+  function submitPin() {
+    if (!/^[0-9]{4,6}$/.test(pinVal)) { setPinErr("Enter the admin PIN (4 to 6 digits)."); return; }
+    answerPin(pinVal);
+  }
+
+  var PIN_REFUSED = "That admin PIN wasn't accepted. After 5 wrong tries it is locked for 15 minutes.";
+
+  // Runs one admin-PIN RPC. Returns {value} on success, {error} otherwise. The server returns
+  // null/false for a wrong PIN (it must not raise, or the failed attempt would not be counted).
+  async function adminRpc(title, fn, args) {
+    var pin = await askPin(title);
+    if (pin === null) return { cancelled: true };
+    var res = await dbRpcAuth(fn, Object.assign({ p_admin_pin: pin }, args));
+    pin = null;
+    if (res.error) return { error: res.error };
+    if (res.data === null || res.data === false || res.data === undefined) return { error: PIN_REFUSED };
+    return { value: res.data };
   }
 
   async function saveRole() {
@@ -93,36 +129,44 @@ export default function StaffPage({ canEdit }) {
     if (msg) { setErr(msg); return; }
     var row = roleRow(form.draft);
     if (isDuplicateRole(roles, row.name, form.id)) { setErr("There is already a role called " + row.name + "."); return; }
-    setSaving(true); setErr("");
-    if (form.mode === "add") {
-      var created = await db("POST", "pet_roles", row);
-      setSaving(false);
-      if (!Array.isArray(created) || !created[0]) { setErr("Couldn't save the role. Check your connection and try again."); return; }
-      patchData({ roles: sortRoles(roles.concat([created[0]])) });
-    } else {
-      var ok = await db("PATCH", "pet_roles", row, "?id=eq." + form.id);
-      setSaving(false);
-      if (!ok) { setErr("Couldn't save changes. Check your connection and try again."); return; }
+    setErr("");
+    setSaving(true);
+    var editing = form.mode !== "add";
+    var out = await adminRpc(editing ? "Save changes to " + row.name : "Add role " + row.name, "pet_save_role", {
+      p_role_id: editing ? form.id : null, p_name: row.name, p_description: row.description, p_permissions: row.permissions,
+    });
+    setSaving(false);
+    if (out.cancelled) return;
+    if (out.error) { setErr(out.error); return; }
+    if (editing) {
       patchData({ roles: sortRoles(roles.map(function (r) { return r.id === form.id ? Object.assign({}, r, row) : r; })) });
+    } else {
+      patchData({ roles: sortRoles(roles.concat([Object.assign({ id: out.value }, row)])) });
     }
     setForm(null);
   }
 
   async function addPreset(p) {
     if (saving) return;
-    setSaving(true); setErr("");
-    var created = await db("POST", "pet_roles", { name: p.name, description: p.description, permissions: p.permissions });
+    setErr("");
+    setSaving(true);
+    var out = await adminRpc("Add role " + p.name, "pet_save_role", {
+      p_role_id: null, p_name: p.name, p_description: p.description, p_permissions: p.permissions,
+    });
     setSaving(false);
-    if (!Array.isArray(created) || !created[0]) { setErr("Couldn't add " + p.name + ". Check your connection and try again."); return; }
-    patchData({ roles: sortRoles(roles.concat([created[0]])) });
+    if (out.cancelled) return;
+    if (out.error) { setErr(out.error); return; }
+    patchData({ roles: sortRoles(roles.concat([{ id: out.value, name: p.name, description: p.description, permissions: p.permissions }])) });
   }
 
   async function confirmDelete() {
     if (saving) return;
-    setSaving(true); setErr("");
-    var ok = await db("DELETE", "pet_roles", null, "?id=eq." + deleting.id);
+    setErr("");
+    setSaving(true);
+    var out = await adminRpc("Delete role " + deleting.name, "pet_delete_role", { p_role_id: deleting.id });
     setSaving(false);
-    if (!ok) { setErr("Couldn't delete the role. Check your connection and try again."); return; }
+    if (out.cancelled) return;
+    if (out.error) { setErr(out.error); return; }
     patchData({ roles: roles.filter(function (r) { return r.id !== deleting.id; }) });
     setDeleting(null);
   }
@@ -131,24 +175,17 @@ export default function StaffPage({ canEdit }) {
     if (saving) return;
     var current = byStaff[member.id];
     if ((current ? current.role_id : "") === roleId) return;
-    setSaving(true); setErr("");
-    if (roleId === "") {
-      if (!current) { setSaving(false); return; }
-      var removed = await db("DELETE", "pet_staff_roles", null, "?id=eq." + current.id);
-      setSaving(false);
-      if (!removed) { setErr("Couldn't clear the role for " + member.name + ". Try again."); return; }
-      patchData({ assignments: assignments.filter(function (a) { return a.id !== current.id; }) });
-    } else if (current) {
-      var updated = await db("PATCH", "pet_staff_roles", { role_id: roleId }, "?id=eq." + current.id);
-      setSaving(false);
-      if (!updated) { setErr("Couldn't change the role for " + member.name + ". Try again."); return; }
-      patchData({ assignments: assignments.map(function (a) { return a.id === current.id ? Object.assign({}, a, { role_id: roleId }) : a; }) });
-    } else {
-      var made = await db("POST", "pet_staff_roles", { staff_id: member.id, role_id: roleId });
-      setSaving(false);
-      if (!Array.isArray(made) || !made[0]) { setErr("Couldn't assign the role to " + member.name + ". Try again."); return; }
-      patchData({ assignments: assignments.concat([made[0]]) });
-    }
+    if (roleId === "" && !current) return;
+    setErr("");
+    setSaving(true);
+    var out = await adminRpc(roleId === "" ? "Clear role for " + member.name : "Change role for " + member.name, "pet_set_staff_role", {
+      p_staff_id: member.id, p_role_id: roleId === "" ? null : roleId,
+    });
+    setSaving(false);
+    if (out.cancelled) return;
+    if (out.error) { setErr("Couldn't change the role for " + member.name + ". " + out.error); return; }
+    var rest = assignments.filter(function (a) { return a.staff_id !== member.id; });
+    patchData({ assignments: roleId === "" ? rest : rest.concat([{ id: current ? current.id : "new-" + member.id, staff_id: member.id, role_id: roleId }]) });
   }
 
   var deletingCount = deleting ? countAssigned(assignments, deleting.id) : 0;
@@ -163,7 +200,8 @@ export default function StaffPage({ canEdit }) {
 
       <Card style={{ padding: "10px 14px", marginBottom: 16, background: MUTED, fontSize: 12, color: MUTED_FG, lineHeight: 1.5 }}>
         Roles are recorded here but not yet enforced. Everyone signs in with the shared PIN, so the system can't yet restrict
-        what an individual staff member sees. Don't rely on roles to protect sensitive information.
+        what an individual staff member sees. Don't rely on roles to protect sensitive information. Changing roles or who has
+        them needs the admin PIN.
       </Card>
       {!form && !deleting ? <ErrorLine>{err}</ErrorLine> : null}
 
@@ -278,6 +316,19 @@ export default function StaffPage({ canEdit }) {
             : "This removes the role. No staff member currently has it."}
         </p>
         <ErrorLine>{err}</ErrorLine>
+      </Modal>
+      <Modal open={!!pinAsk} onClose={function () { answerPin(null); }} title="Confirm with admin PIN"
+        description={pinAsk ? pinAsk.title + ". Enter the admin PIN to continue." : ""}
+        footer={<>
+          <Button variant="ghost" onClick={function () { answerPin(null); }}>Cancel</Button>
+          <Button onClick={submitPin}>Confirm</Button>
+        </>}>
+        <Field label="Admin PIN" htmlFor="admin-pin">
+          <input id="admin-pin" type="password" inputMode="numeric" autoComplete="off" maxLength={6} style={inputStyle}
+            value={pinVal} onChange={function (e) { setPinVal(e.target.value.replace(/[^0-9]/g, "")); setPinErr(""); }}
+            onKeyDown={function (e) { if (e.key === "Enter") submitPin(); }} autoFocus />
+        </Field>
+        <ErrorLine>{pinErr}</ErrorLine>
       </Modal>
     </div>
   );

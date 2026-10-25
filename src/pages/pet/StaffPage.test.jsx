@@ -2,7 +2,11 @@ import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 var mockDb = vi.fn();
-vi.mock("../../lib/db", () => ({ db: function () { return mockDb.apply(null, arguments); } }));
+var mockRpc = vi.fn();
+vi.mock("../../lib/db", () => ({
+  db: function () { return mockDb.apply(null, arguments); },
+  dbRpcAuth: function () { return mockRpc.apply(null, arguments); },
+}));
 
 import StaffPage from "./StaffPage";
 
@@ -23,17 +27,26 @@ function setup(opts) {
     if (method === "GET" && table === "pet_roles") return Promise.resolve(opts.getFail ? null : (opts.roles || ROLES));
     if (method === "GET" && table === "staff") return Promise.resolve(STAFF);
     if (method === "GET" && table === "pet_staff_roles") return Promise.resolve(opts.assign || ASSIGN);
-    if (method === "POST" && table === "pet_roles") return Promise.resolve(opts.postFail ? null : [Object.assign({ id: "r9" }, data)]);
-    if (method === "POST" && table === "pet_staff_roles") return Promise.resolve(opts.postFail ? null : [Object.assign({ id: "a9" }, data)]);
-    if (method === "PATCH") return Promise.resolve(opts.patchFail ? null : true);
-    if (method === "DELETE") return Promise.resolve(true);
     return Promise.resolve(null);
+  });
+  // RPC answers: a wrong PIN comes back as null (save) or false (delete / assign), exactly as migration 102 does.
+  mockRpc.mockImplementation(function (fn, args) {
+    if (opts.rpcError) return Promise.resolve({ error: opts.rpcError });
+    var good = args.p_admin_pin === (opts.goodPin || "9999");
+    if (fn === "pet_save_role") return Promise.resolve({ data: good ? "r9" : null });
+    return Promise.resolve({ data: good });
   });
   return render(<StaffPage canEdit={opts.canEdit !== false} />);
 }
 
+function typePin(pin) {
+  fireEvent.change(screen.getByLabelText("Admin PIN"), { target: { value: pin } });
+  fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+}
+function writes() { return mockDb.mock.calls.filter(function (c) { return c[0] !== "GET"; }); }
+
 describe("StaffPage (roles and assignment)", function () {
-  beforeEach(function () { mockDb.mockReset(); });
+  beforeEach(function () { mockDb.mockReset(); mockRpc.mockReset(); });
 
   it("lists roles with counts and active staff only, and states that roles are not enforced", async function () {
     setup();
@@ -58,43 +71,115 @@ describe("StaffPage (roles and assignment)", function () {
     expect(screen.queryByLabelText("Role for Amina")).toBeNull();
   });
 
-  it("offers only the suggested roles that are missing and adds one on click", async function () {
+  it("offers only the suggested roles that are missing and adds one with the admin PIN", async function () {
     setup();
     await screen.findByLabelText("Edit Groomer");
     expect(screen.queryByLabelText("Add suggested role Groomer")).toBeNull();
     fireEvent.click(screen.getByLabelText("Add suggested role Receptionist"));
+    typePin("9999");
     await screen.findByLabelText("Edit Receptionist");
-    var call = mockDb.mock.calls.filter(function (c) { return c[0] === "POST" && c[1] === "pet_roles"; })[0];
-    expect(call[2].name).toBe("Receptionist");
-    expect(call[2].permissions.take_payments).toBe(true);
+    var call = mockRpc.mock.calls[0];
+    expect(call[0]).toBe("pet_save_role");
+    expect(call[1].p_admin_pin).toBe("9999");
+    expect(call[1].p_role_id).toBeNull();
+    expect(call[1].p_name).toBe("Receptionist");
+    expect(call[1].p_permissions.take_payments).toBe(true);
+    expect(writes().length).toBe(0); // never a direct table write
   });
 
-  it("rejects a duplicate role name without calling the database", async function () {
+  it("asks for the admin PIN before any role call, and a cancelled prompt calls nothing", async function () {
+    setup();
+    await screen.findByLabelText("Edit Groomer");
+    fireEvent.click(screen.getByLabelText("Add suggested role Receptionist"));
+    expect(await screen.findByLabelText("Admin PIN")).toBeTruthy();
+    expect(mockRpc).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(function () { expect(screen.queryByLabelText("Admin PIN")).toBeNull(); });
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Edit Receptionist")).toBeNull();
+  });
+
+  it("rejects a PIN that is not 4 to 6 digits without calling the server", async function () {
+    setup();
+    await screen.findByLabelText("Edit Groomer");
+    fireEvent.click(screen.getByLabelText("Add suggested role Receptionist"));
+    typePin("12");
+    expect(await screen.findByText(/4 to 6 digits/)).toBeTruthy();
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it("a wrong admin PIN adds nothing and says so", async function () {
+    setup();
+    await screen.findByLabelText("Edit Groomer");
+    fireEvent.click(screen.getByLabelText("Add suggested role Receptionist"));
+    typePin("0000");
+    expect(await screen.findByText(/admin PIN wasn't accepted/)).toBeTruthy();
+    expect(screen.queryByLabelText("Edit Receptionist")).toBeNull();
+  });
+
+  it("rejects a duplicate role name without calling the server or asking for a PIN", async function () {
     setup();
     await screen.findByLabelText("Edit Groomer");
     fireEvent.click(screen.getByText("+ Add role"));
     fireEvent.change(screen.getByLabelText("Role name"), { target: { value: " groomer " } });
     fireEvent.click(screen.getByRole("button", { name: "Add role" }));
     expect(await screen.findByText(/already a role called/)).toBeTruthy();
-    expect(mockDb.mock.calls.filter(function (c) { return c[0] === "POST"; }).length).toBe(0);
+    expect(screen.queryByLabelText("Admin PIN")).toBeNull();
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 
-  it("assigns, changes and clears a staff member's role", async function () {
+  it("creates a custom role and edits an existing one through pet_save_role", async function () {
+    setup();
+    await screen.findByLabelText("Edit Groomer");
+    fireEvent.click(screen.getByText("+ Add role"));
+    fireEvent.change(screen.getByLabelText("Role name"), { target: { value: "Senior groomer" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add role" }));
+    typePin("9999");
+    await screen.findByLabelText("Edit Senior groomer");
+    expect(mockRpc.mock.calls[0][1].p_role_id).toBeNull();
+    fireEvent.click(screen.getByLabelText("Edit Groomer"));
+    fireEvent.change(screen.getByLabelText("Role name"), { target: { value: "Groomer II" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    typePin("9999");
+    await screen.findByLabelText("Edit Groomer II");
+    expect(mockRpc.mock.calls[1][1].p_role_id).toBe("r1");
+    expect(writes().length).toBe(0);
+  });
+
+  it("assigns, changes and clears a staff member's role through pet_set_staff_role", async function () {
     setup();
     await screen.findByText("Amina");
     fireEvent.change(screen.getByLabelText("Role for Brian"), { target: { value: "r2" } });
-    await waitFor(function () { expect(mockDb.mock.calls.some(function (c) { return c[0] === "POST" && c[1] === "pet_staff_roles" && c[2].staff_id === "s2" && c[2].role_id === "r2"; })).toBe(true); });
+    typePin("9999");
+    await waitFor(function () { expect(screen.getByLabelText("Role for Brian").value).toBe("r2"); });
+    expect(mockRpc.mock.calls[0][0]).toBe("pet_set_staff_role");
+    expect(mockRpc.mock.calls[0][1].p_staff_id).toBe("s2");
+    expect(mockRpc.mock.calls[0][1].p_role_id).toBe("r2");
     fireEvent.change(screen.getByLabelText("Role for Amina"), { target: { value: "r2" } });
-    await waitFor(function () { expect(mockDb.mock.calls.some(function (c) { return c[0] === "PATCH" && c[1] === "pet_staff_roles" && c[3] === "?id=eq.a1"; })).toBe(true); });
+    typePin("9999");
+    await waitFor(function () { expect(screen.getByLabelText("Role for Amina").value).toBe("r2"); });
     fireEvent.change(screen.getByLabelText("Role for Amina"), { target: { value: "" } });
-    await waitFor(function () { expect(mockDb.mock.calls.some(function (c) { return c[0] === "DELETE" && c[1] === "pet_staff_roles" && c[3] === "?id=eq.a1"; })).toBe(true); });
+    typePin("9999");
+    await waitFor(function () { expect(screen.getByLabelText("Role for Amina").value).toBe(""); });
+    expect(mockRpc.mock.calls[2][1].p_role_id).toBeNull();
+    expect(writes().length).toBe(0);
   });
 
-  it("does not show a role as assigned when the save fails", async function () {
-    setup({ postFail: true });
+  it("does not show a role as assigned when the PIN is wrong", async function () {
+    setup();
     await screen.findByText("Amina");
     fireEvent.change(screen.getByLabelText("Role for Brian"), { target: { value: "r2" } });
-    expect(await screen.findByText(/Couldn't assign the role to Brian/)).toBeTruthy();
+    typePin("0000");
+    expect(await screen.findByText(/Couldn't change the role for Brian/)).toBeTruthy();
+    expect(screen.getByLabelText("Role for Brian").value).toBe("");
+  });
+
+  it("shows a server error such as a network failure without changing the list", async function () {
+    setup({ rpcError: "Network error" });
+    await screen.findByText("Amina");
+    fireEvent.change(screen.getByLabelText("Role for Brian"), { target: { value: "r2" } });
+    typePin("9999");
+    expect(await screen.findByText(/Network error/)).toBeTruthy();
     expect(screen.getByLabelText("Role for Brian").value).toBe("");
   });
 
@@ -104,14 +189,27 @@ describe("StaffPage (roles and assignment)", function () {
     fireEvent.click(screen.getByLabelText("Delete Groomer"));
     expect(await screen.findByText("Can't delete Groomer yet")).toBeTruthy();
     expect(screen.queryByText("Delete role")).toBeNull();
-    expect(mockDb.mock.calls.filter(function (c) { return c[0] === "DELETE"; }).length).toBe(0);
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 
-  it("deletes an unassigned role", async function () {
+  it("deletes an unassigned role with the admin PIN", async function () {
     setup();
     await screen.findByLabelText("Edit Manager");
     fireEvent.click(screen.getByLabelText("Delete Manager"));
     fireEvent.click(await screen.findByText("Delete role"));
-    await waitFor(function () { expect(mockDb.mock.calls.some(function (c) { return c[0] === "DELETE" && c[1] === "pet_roles" && c[3] === "?id=eq.r2"; })).toBe(true); });
+    typePin("9999");
+    await waitFor(function () { expect(screen.queryByLabelText("Edit Manager")).toBeNull(); });
+    expect(mockRpc.mock.calls[0][0]).toBe("pet_delete_role");
+    expect(mockRpc.mock.calls[0][1].p_role_id).toBe("r2");
+  });
+
+  it("keeps a role when the delete PIN is wrong", async function () {
+    setup();
+    await screen.findByLabelText("Edit Manager");
+    fireEvent.click(screen.getByLabelText("Delete Manager"));
+    fireEvent.click(await screen.findByText("Delete role"));
+    typePin("0000");
+    expect(await screen.findByText(/admin PIN wasn't accepted/)).toBeTruthy();
+    expect(screen.getByLabelText("Edit Manager")).toBeTruthy();
   });
 });

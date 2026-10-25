@@ -5,8 +5,12 @@
 -- No table, policy, grant or existing function is altered. Part 2 (migration 103, held) later
 -- removes the open client write policies on pet_roles / pet_staff_roles.
 --
--- STATUS: NOT APPLIED. Applies to production only after the owner says "apply 102" and has
--- seen this exact SQL. (Numbered 102 because 101 is the held loyalty migration.)
+-- STATUS: APPLIED to production 2026-10-25 on the owner's instruction ("apply 102"). Verified live
+-- from the catalog afterwards: the three functions exist, SECURITY DEFINER with search_path pinned,
+-- EXECUTE for authenticated only (anon and PUBLIC none). Tested before applying on a local Postgres
+-- copy of the production schema (supabase/tests/102_pet_role_admin_step_up.sql, 33 assertions);
+-- NOT exercised end to end against production (no staging project). (Numbered 102 because 101 is
+-- the held loyalty migration.)
 --
 -- THE PROBLEM (verified against the live project, 2026-10-25)
 --   * pet_roles and pet_staff_roles have INSERT/UPDATE/DELETE policies keyed only on
