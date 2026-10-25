@@ -1,7 +1,7 @@
 // src/pages/pet/LoyaltyPage.jsx
 //
 // Loyalty Programme (Phase 9): members and their points, rewards, vouchers and the
-// earning rules, over migration 099. The client only READS the loyalty tables (and
+// earning rules, over migration 101. The client only READS the loyalty tables (and
 // adds/edits rewards); every other change goes through the pet_* database functions.
 // Points are awarded by the database when an invoice is paid or a booking is
 // completed, never by this screen.

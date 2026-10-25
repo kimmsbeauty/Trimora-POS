@@ -1,0 +1,41 @@
+// src/pages/pet/receiptData.js
+//
+// Receipt figures for ONE payment against an invoice. A receipt shows what was paid
+// in that payment, what had been paid up to and including it, and what is still owed
+// after it. Payments are append-only (clients cannot change them), so these figures
+// are stable. The receipt reference is DERIVED from the invoice number and the
+// payment's position (RCT-0007-1, RCT-0007-2, ...); it is not a separately numbered
+// series in the database.
+
+export function sortedPayments(invoice) {
+  return ((invoice && invoice.pet_payments) || []).slice().sort(function (a, b) {
+    var d = new Date(a.paid_at).getTime() - new Date(b.paid_at).getTime();
+    if (d !== 0) return d;
+    var c = new Date(a.created_at || a.paid_at).getTime() - new Date(b.created_at || b.paid_at).getTime();
+    if (c !== 0) return c;
+    return String(a.id) < String(b.id) ? -1 : 1;
+  });
+}
+
+export function receiptFor(invoice, paymentId) {
+  var list = sortedPayments(invoice);
+  var idx = -1;
+  for (var i = 0; i < list.length; i++) { if (list[i].id === paymentId) { idx = i; break; } }
+  if (idx === -1) return null;
+  var paidToDate = 0;
+  for (var j = 0; j <= idx; j++) paidToDate += list[j].amount;
+  var num = String((invoice && invoice.invoice_number) || "");
+  var base = /^INV-/i.test(num) ? num.replace(/^INV-/i, "") : num;
+  return {
+    payment: list[idx],
+    number: "RCT-" + base + "-" + (idx + 1),
+    paidToDate: paidToDate,
+    balanceAfter: Math.max(0, (invoice.total || 0) - paidToDate),
+    isLatest: idx === list.length - 1,
+  };
+}
+
+export function latestPaymentId(invoice) {
+  var list = sortedPayments(invoice);
+  return list.length ? list[list.length - 1].id : null;
+}

@@ -1,9 +1,9 @@
--- 099_pet_loyalty.sql
+-- 101_pet_loyalty.sql
 --
 -- Trimora Pet -- Phase 9: loyalty programme (points, tiers, rewards).
 --
 -- STATUS: written for owner review. NOT applied anywhere. Apply only after the
--- owner says "apply 099".
+-- owner says "apply 101".
 --
 -- ADDITIVE ONLY: five new tables, three triggers and eight functions. Nothing existing is
 -- altered. The live invoice and booking functions are NOT replaced: points are

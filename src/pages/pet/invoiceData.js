@@ -31,6 +31,9 @@ var ERROR_TEXT = {
   INVALID_PAYMENT: "Check the payment: choose a method and enter a positive whole amount.",
   OVERPAYMENT: "The payment is more than the amount still owed.",
   DUPLICATE_PAYMENT_REFERENCE: "A payment with that reference has already been recorded.",
+  MPESA_NOT_CONFIRMED: "Safaricom hasn't confirmed this payment yet.",
+  MPESA_PAYMENT_NOT_FOUND: "That M-Pesa payment could not be found.",
+  MPESA_PAYMENT_MISMATCH: "That M-Pesa payment was requested for a different invoice.",
   INVOICE_NOT_FOUND: "That invoice could not be found. Refresh and try again.",
   INVOICE_NOT_PAYABLE: "This invoice can't take more payments.",
   INVOICE_NOT_VOIDABLE: "This invoice is already void.",
@@ -116,7 +119,8 @@ export function displayStatus(inv, now) { return isOverdue(inv, now) ? "overdue"
 export function filterInvoices(invoices, f, names, now) {
   var needle = String((f && f.q) || "").trim().toLowerCase();
   return (invoices || []).filter(function (inv) {
-    if (f && f.status && f.status !== "all" && displayStatus(inv, now) !== f.status) return false;
+    if (f && f.status === "outstanding") { if (outstanding(inv) <= 0) return false; }
+    else if (f && f.status && f.status !== "all" && displayStatus(inv, now) !== f.status) return false;
     if (!needle) return true;
     var n = names(inv);
     return String(inv.invoice_number).toLowerCase().indexOf(needle) !== -1 ||

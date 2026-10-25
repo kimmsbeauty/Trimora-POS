@@ -151,7 +151,7 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
   "pet_stock_movements", // ditto -- append-only stock ledger, read-only for the client.
   "pet_purchases", // ditto -- stock receipts, read-only for the client.
   "pet_purchase_lines", // ditto -- receipt lines, read-only for the client.
-  "pet_loyalty_settings", // added alongside migration 099 -- loyalty rules; salon_id on the
+  "pet_loyalty_settings", // added alongside migration 101 -- loyalty rules; salon_id on the
                           // row; READ-ONLY for the client (saved through a database function).
   "pet_loyalty_rewards", // ditto -- the app may add and edit rewards (never delete).
   "pet_loyalty_accounts", // ditto -- points balances; changed only by database functions.

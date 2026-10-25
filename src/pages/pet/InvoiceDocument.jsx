@@ -1,10 +1,10 @@
 // src/pages/pet/InvoiceDocument.jsx
 //
-// The printable invoice. It always carries the BUSINESS'S OWN branding: the logo
-// from salon_settings.logo_url (set in Settings), falling back to the business
-// name in text if there is no logo or the image fails to load. Totals, payments
+// The printable invoice. It always carries the BUSINESS'S OWN branding (PetLetterhead:
+// the logo from salon_settings.logo_url, or the business name if there is no logo). Totals, payments
 // and the VAT line come from the saved invoice, never recomputed here.
-import React, { useState } from "react";
+import React from "react";
+import PetLetterhead from "./PetLetterhead";
 import { fmt } from "../../lib/utils";
 import { FOREGROUND, MUTED_FG, MUTED, BORDER, CARD, PRIMARY, DESTRUCTIVE, SUCCESS } from "./theme";
 import { METHOD_LABELS, STATUS_LABELS, displayStatus, outstanding } from "./invoiceData";
@@ -19,9 +19,6 @@ function dateLabel(iso) {
 }
 
 export default function InvoiceDocument({ invoice, customer, pet, salon }) {
-  var logoFailState = useState(false); var logoFailed = logoFailState[0]; var setLogoFailed = logoFailState[1];
-  var businessName = (salon && salon.name) || "";
-  var logoUrl = salon && salon.logo_url;
   var accent = (salon && salon.primary_color) || PRIMARY;
   var status = displayStatus(invoice);
   var lines = invoice.pet_invoice_lines || [];
@@ -34,18 +31,7 @@ export default function InvoiceDocument({ invoice, customer, pet, salon }) {
       <style>{PRINT_CSS}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", paddingBottom: 14, borderBottom: "3px solid " + accent }}>
-        <div style={{ minWidth: 0 }}>
-          {logoUrl && !logoFailed ? (
-            <img src={logoUrl} alt={businessName + " logo"} onError={function () { setLogoFailed(true); }}
-              style={{ maxHeight: 64, maxWidth: 220, objectFit: "contain", display: "block", marginBottom: 6 }} />
-          ) : (
-            <div style={{ fontSize: 22, fontWeight: 800, color: FOREGROUND }}>{businessName}</div>
-          )}
-          {logoUrl && !logoFailed ? <div style={{ fontSize: 13, fontWeight: 700 }}>{businessName}</div> : null}
-          {salon && salon.tagline ? <div style={{ fontSize: 12, color: MUTED_FG }}>{salon.tagline}</div> : null}
-          {salon && salon.contact_phone ? <div style={{ fontSize: 12, color: MUTED_FG }}>Tel: {salon.contact_phone}</div> : null}
-          {invoice.tax_enabled && salon && salon.tax_pin ? <div style={{ fontSize: 12, color: MUTED_FG }}>KRA PIN: {salon.tax_pin}</div> : null}
-        </div>
+        <PetLetterhead salon={salon} showTaxPin={!!invoice.tax_enabled} />
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: "0.08em" }}>INVOICE</div>
           <div style={{ fontSize: 14, fontWeight: 700 }}>{invoice.invoice_number}</div>

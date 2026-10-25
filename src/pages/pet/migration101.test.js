@@ -1,11 +1,11 @@
 import fs from "fs";
 import path from "path";
 
-var sql = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/099_pet_loyalty.sql"), "utf8");
+var sql = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/101_pet_loyalty.sql"), "utf8");
 var code = sql.split("\n").filter(function (l) { return !/^\s*--/.test(l); }).join("\n");
 var TABLES = ["pet_loyalty_settings", "pet_loyalty_rewards", "pet_loyalty_accounts", "pet_loyalty_ledger", "pet_loyalty_redemptions"];
 
-describe("migration 099 (pet loyalty), static checks", function () {
+describe("migration 101 (pet loyalty), static checks", function () {
   it("every table is scoped to a business with cascade and has row level security", function () {
     TABLES.forEach(function (t) {
       var block = code.slice(code.indexOf("create table public." + t));
