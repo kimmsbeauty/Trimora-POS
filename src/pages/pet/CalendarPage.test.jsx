@@ -22,7 +22,7 @@ var SERVICES = [
 ];
 function booking(extra) {
   return Object.assign({ id: "b1", customer_id: "c1", pet_id: "p1", staff_id: "st1", starts_at: today(10, 0), ends_at: today(11, 0),
-    status: "confirmed", walk_in: false, notes: "Nervous around clippers",
+    status: "booked", walk_in: false, notes: "Nervous around clippers",
     pet_booking_services: [{ id: "l1", service_id: "s1", service_name: "Full groom", price: 1500, duration_minutes: 60 }] }, extra || {});
 }
 
@@ -50,7 +50,7 @@ describe("CalendarPage", function () {
   it("shows this week's bookings from the database", async function () {
     setup();
     var chip = await screen.findByLabelText("Open booking for Simba at 10:00");
-    expect(chip.textContent).toMatch(/Confirmed/);
+    expect(chip.textContent).toMatch(/Booked/);
     expect(chip.textContent).toMatch(/10:00 – 11:00/);
   });
 
@@ -147,6 +147,46 @@ describe("CalendarPage", function () {
     expect(mockRpc).not.toHaveBeenCalled();
     fireEvent.click(screen.getAllByRole("button", { name: "Cancel booking" }).pop());
     await waitFor(function () { expect(mockRpc).toHaveBeenCalledWith("pet_set_booking_status", { p_id: "b1", p_status: "cancelled" }); });
+  });
+
+  it("walks a booking through the prototype workflow with the right buttons at each stage", async function () {
+    var stages = [
+      { status: "booked", badge: /Booked/, buttons: ["Check in", "Cancel booking", "Mark no-show", "Reschedule"], next: "checked-in" },
+      { status: "checked-in", badge: /Checked In/, buttons: ["Start", "Cancel booking", "Reschedule"], next: "in-progress" },
+      { status: "in-progress", badge: /In Progress/, buttons: ["Mark ready"], next: "ready" },
+      { status: "ready", badge: /Ready for Collection/, buttons: ["Complete"], next: "completed" },
+    ];
+    for (var i = 0; i < stages.length; i++) {
+      var st = stages[i];
+      mockDb.mockReset(); mockRpc.mockReset();
+      var view = setup({ bookings: [booking({ status: st.status })] });
+      var chip = await screen.findByLabelText("Open booking for Simba at 10:00");
+      expect(chip.textContent).toMatch(st.badge);
+      fireEvent.click(chip);
+      for (var k = 0; k < st.buttons.length; k++) expect(await screen.findByRole("button", { name: st.buttons[k] })).toBeTruthy();
+      // buttons that do NOT belong to this stage are absent
+      if (st.status !== "booked") expect(screen.queryByRole("button", { name: "Mark no-show" })).toBeNull();
+      if (st.status === "in-progress" || st.status === "ready") expect(screen.queryByRole("button", { name: "Reschedule" })).toBeNull();
+      if (st.status === "in-progress" || st.status === "ready") expect(screen.queryByRole("button", { name: "Cancel booking" })).toBeNull();
+      var actionName = st.next === "checked-in" ? "Check in" : st.next === "in-progress" ? "Start" : st.next === "ready" ? "Mark ready" : "Complete";
+      fireEvent.click(screen.getByRole("button", { name: actionName }));
+      await waitFor(function () { expect(mockRpc).toHaveBeenCalledWith("pet_set_booking_status", { p_id: "b1", p_status: st.next }); });
+      view.unmount();
+    }
+  });
+
+  it("offers no-show only on a booked booking and sends it through the status function", async function () {
+    setup();
+    fireEvent.click(await screen.findByLabelText("Open booking for Simba at 10:00"));
+    fireEvent.click(await screen.findByRole("button", { name: "Mark no-show" }));
+    await waitFor(function () { expect(mockRpc).toHaveBeenCalledWith("pet_set_booking_status", { p_id: "b1", p_status: "no-show" }); });
+  });
+
+  it("no longer mentions the old statuses anywhere in the status filter", async function () {
+    setup();
+    await screen.findByLabelText("Open booking for Simba at 10:00");
+    var options = Array.prototype.map.call(screen.getByLabelText("Filter by status").options, function (o) { return o.textContent; });
+    expect(options).toEqual(["All statuses", "Booked", "Checked In", "In Progress", "Ready for Collection", "Completed", "Cancelled", "No-show"]);
   });
 
   it("shows no actions for a final booking", async function () {
