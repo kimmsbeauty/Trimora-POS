@@ -2,13 +2,16 @@
 --
 -- Salon PIN hardening, part 2 of 2: remove the old unconditional PIN-change path.
 --
--- STATUS: HELD. Do NOT apply until BOTH are true:
---   1. 091 is applied and the PR that switches the clients to change_salon_pins /
---      reset_salon_admin_pin_via_recovery is deployed to production, and
---   2. the owner has completed a REAL forgot-PIN recovery (email link) end to end and confirmed it
---      worked through the new function. The reset pages carry a fallback to the old function
---      until then; applying 093 removes that safety net, so a recovery that only ever worked via
---      the fallback would break.
+-- STATUS: APPLIED to production 2026-10-25 on the owner's explicit instruction.
+-- Release conditions as written were: (1) 091 applied and the client PR deployed -- MET; and
+-- (2) the owner completes a REAL forgot-PIN recovery through the new path -- NOT VERIFIED at the
+-- time of applying (production logs showed no calls to the new functions since the deploy). The
+-- owner accepted that; this migration is fully reversible (see ROLLBACK) and super-admin PIN
+-- reset (super_admin_reset_salon_pin) remains as a human fallback.
+-- Verified live after applying: update_salon_pin refused for authenticated and anon (an impersonated
+-- device account got "permission denied for function update_salon_pin"); salon_pins has RLS on,
+-- no policies, no table privileges; change_salon_pins, reset_salon_admin_pin_via_recovery,
+-- verify_staff_pin and super_admin_reset_salon_pin all still executable; sign-in RPCs returning 200.
 --
 -- WHAT IT DOES
 --   * Revokes EXECUTE on update_salon_pin(text, text) from anon and authenticated. After this,

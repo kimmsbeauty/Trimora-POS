@@ -58,9 +58,10 @@ describe("migration 091 (PIN step-up)", function () {
 });
 
 describe("migration 093 (PIN lockdown, HELD)", function () {
-  it("is clearly marked held, with the two release conditions", function () {
-    expect(m91.raw).toMatch(/STATUS: HELD/);
+  it("records that it was applied, and honestly that the real-recovery test was not verified", function () {
+    expect(m91.raw).toMatch(/STATUS: APPLIED to production 2026-10-25/);
     expect(m91.raw).toMatch(/REAL forgot-PIN recovery/);
+    expect(m91.raw).toMatch(/NOT VERIFIED/);
   });
   it("refuses to run unless 091 is applied", function () {
     expect(m91.code).toMatch(/to_regprocedure\('public\.change_salon_pins\(text, text, text\)'\) is null/);
