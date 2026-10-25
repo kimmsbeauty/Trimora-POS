@@ -16,6 +16,8 @@ import {
   METHODS, METHOD_LABELS, STATUS_LABELS, STATUS_TONES, invoiceErrorMessage, outstanding, displayStatus, filterInvoices, summarize,
 } from "./invoiceData";
 import InvoiceDocument from "./InvoiceDocument";
+import ReceiptDocument from "./ReceiptDocument";
+import { sortedPayments, latestPaymentId, receiptFor } from "./receiptData";
 import { PageHeader, Card, Button, Field, Badge, Modal, ErrorLine, EmptyState, inputStyle } from "./ui";
 
 var PAGE = 50;
@@ -32,6 +34,8 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed }) {
   var voidState = useState(null); var voiding = voidState[0]; var setVoiding = voidState[1]; // {id, reason}
   var savingState = useState(false); var saving = savingState[0]; var setSaving = savingState[1];
   var errState = useState(""); var err = errState[0]; var setErr = errState[1];
+  var receiptState = useState(null); var receiptId = receiptState[0]; var setReceiptId = receiptState[1];
+  var paidState = useState(false); var justPaid = paidState[0]; var setJustPaid = paidState[1];
 
   useEffect(function () { if (openInvoiceId) setDetailId(openInvoiceId); }, [openInvoiceId]);
 
@@ -81,7 +85,7 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed }) {
   var totals = summarize(all);
   var detail = detailId ? all.filter(function (i) { return i.id === detailId; })[0] : null;
   function setF(k, v) { var o = {}; o[k] = v; setFilters(Object.assign({}, filters, o)); setShown(PAGE); }
-  function closeDetail() { if (!saving) { setDetailId(null); setErr(""); setPay({ method: "cash", amount: "", reference: "" }); if (onDetailClosed) onDetailClosed(); } }
+  function closeDetail() { if (!saving) { setDetailId(null); setReceiptId(null); setJustPaid(false); setErr(""); setPay({ method: "cash", amount: "", reference: "" }); if (onDetailClosed) onDetailClosed(); } }
 
   async function recordPayment() {
     if (saving || !detail) return;
@@ -93,6 +97,7 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed }) {
     setSaving(false);
     if (res.error) { setErr(invoiceErrorMessage(res.error)); return; }
     setPay({ method: "cash", amount: "", reference: "" });
+    setJustPaid(true);
     setTick(tick + 1);
   }
 
@@ -155,7 +160,7 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed }) {
         </div>
       )}
 
-      <Modal open={!!detail} onClose={closeDetail} title={detail ? "Invoice " + detail.invoice_number : ""} width={720}
+      <Modal open={!!detail && !receiptId} onClose={closeDetail} title={detail ? "Invoice " + detail.invoice_number : ""} width={720}
         footer={detail ? <>
           <Button variant="ghost" onClick={closeDetail}>Close</Button>
           {detail.status === "issued" ? <Button variant="ghost-danger" onClick={function () { setErr(""); setVoiding({ id: detail.id, reason: "" }); }}>Void invoice</Button> : null}
@@ -182,8 +187,38 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed }) {
                 </div>
               </div>
             ) : null}
+            {justPaid && detail.pet_payments && detail.pet_payments.length ? (
+              <div role="status" style={{ marginTop: 14, padding: 12, border: "1px solid " + BORDER, borderRadius: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13, flex: "1 1 200px" }}>Payment recorded.</span>
+                <Button size="sm" onClick={function () { setReceiptId(latestPaymentId(detail)); }}>Print receipt</Button>
+              </div>
+            ) : null}
+            {detail.pet_payments && detail.pet_payments.length ? (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: MUTED_FG, marginBottom: 6 }}>Receipts</div>
+                {sortedPayments(detail).map(function (p) {
+                  var r = receiptFor(detail, p.id);
+                  return (
+                    <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 13 }}>
+                      <span>{r.number} · {fmt(p.amount)}</span>
+                      <Button size="sm" variant="outline" onClick={function () { setReceiptId(p.id); }} ariaLabel={"View receipt " + r.number}>Receipt</Button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
             {!voiding ? <ErrorLine>{err}</ErrorLine> : null}
           </div>
+        ) : null}
+      </Modal>
+
+      <Modal open={!!detail && !!receiptId} onClose={function () { setReceiptId(null); }} title={detail && receiptId && receiptFor(detail, receiptId) ? "Receipt " + receiptFor(detail, receiptId).number : "Receipt"} width={560}
+        footer={<>
+          <Button variant="ghost" onClick={function () { setReceiptId(null); }}>Back to invoice</Button>
+          <Button onClick={function () { window.print(); }}>Print</Button>
+        </>}>
+        {detail && receiptId ? (
+          <ReceiptDocument invoice={detail} paymentId={receiptId} customer={maps.customers[detail.customer_id]} pet={detail.pet_id ? maps.pets[detail.pet_id] : null} salon={salon} />
         ) : null}
       </Modal>
 

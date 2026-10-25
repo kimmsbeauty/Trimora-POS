@@ -2,8 +2,8 @@
 --
 -- Trimora Pet -- archive pets instead of deleting them.
 --
--- STATUS: written for owner review. NOT applied anywhere. Apply by hand in the
--- Supabase SQL Editor only after the owner says "apply 097".
+-- STATUS: APPLIED to production 2026-10-25 (plus the two REVOKE lines at the end,
+-- which were applied as a follow-up the same day).
 --
 -- WHY: a pet that has passed away, moved away or is no longer active must stay
 -- in the books. Pets with bookings, boarding stays or invoices can't be deleted
@@ -100,3 +100,9 @@ create trigger pet_bookings_archived_guard
 create trigger pet_stays_archived_guard
   before insert on public.pet_boarding_stays
   for each row execute function public.pet_block_archived_pet();
+
+-- The project's default privileges grant EXECUTE on new functions to anon and
+-- authenticated. These are trigger-only functions; remove that access (triggers
+-- still fire). Applied as migration "pet_archiving_revoke_trigger_fn_execute".
+revoke execute on function public.pet_archive_guard() from public, anon, authenticated;
+revoke execute on function public.pet_block_archived_pet() from public, anon, authenticated;
