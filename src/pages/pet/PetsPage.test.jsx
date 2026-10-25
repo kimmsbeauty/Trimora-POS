@@ -20,6 +20,10 @@ function setup(opts) {
     if (method === "GET" && table === "customers") return Promise.resolve(OWNERS);
     if (method === "GET" && table === "pet_vaccinations") return Promise.resolve(VACCS);
     if (method === "POST" && table === "pet_pets") return Promise.resolve(opts.postFail ? null : [Object.assign({ id: "p9" }, data)]);
+    if (method === "GET" && (table === "pet_bookings" || table === "pet_boarding_stays" || table === "pet_invoices")) {
+      if (opts.historyFail) return Promise.resolve(null);
+      return Promise.resolve((opts.history && opts.history[table]) || []);
+    }
     if (method === "DELETE") return Promise.resolve(true);
     if (method === "PATCH") return Promise.resolve(true);
     return Promise.resolve(null);
@@ -116,6 +120,27 @@ describe("PetsPage", function () {
     await waitFor(function () { expect(screen.queryByText("Simba")).toBeNull(); });
     var del = mockDb.mock.calls.filter(function (c) { return c[0] === "DELETE"; })[0];
     expect(del[1]).toBe("pet_pets"); expect(del[3]).toBe("?id=eq.p1");
+  });
+
+  it("explains why a pet with history can't be deleted and never sends the delete", async function () {
+    setup({ history: { pet_bookings: [{ id: "b1" }, { id: "b2" }], pet_invoices: [{ id: "i1" }] } });
+    await screen.findByText("Simba");
+    fireEvent.click(screen.getByLabelText("Delete Simba"));
+    fireEvent.click(screen.getByText("Delete pet"));
+    expect(await screen.findByText(/Simba has 2 bookings and 1 invoice/)).toBeTruthy();
+    expect(screen.getByText(/kept for your history and finances/)).toBeTruthy();
+    expect(screen.queryByText("Delete pet")).toBeNull();
+    expect(mockDb.mock.calls.filter(function (c) { return c[0] === "DELETE"; }).length).toBe(0);
+    expect(screen.getByText("Simba")).toBeTruthy();
+  });
+
+  it("does not delete when the history check itself fails", async function () {
+    setup({ historyFail: true });
+    await screen.findByText("Simba");
+    fireEvent.click(screen.getByLabelText("Delete Simba"));
+    fireEvent.click(screen.getByText("Delete pet"));
+    expect(await screen.findByText(/Couldn't check this pet's booking and invoice history, so nothing was deleted/)).toBeTruthy();
+    expect(mockDb.mock.calls.filter(function (c) { return c[0] === "DELETE"; }).length).toBe(0);
   });
 
   it("shows vaccination records with status on the profile", async function () {

@@ -28,12 +28,13 @@ function booking(extra) {
 
 function setup(opts) {
   opts = opts || {};
-  mockDb.mockImplementation(function (method, table) {
+  mockDb.mockImplementation(function (method, table, data, filters) {
     if (opts.lookupFail && table === "customers") return Promise.resolve(null);
     if (table === "customers") return Promise.resolve(CUSTOMERS);
     if (table === "pet_pets") return Promise.resolve(PETS);
     if (table === "staff") return Promise.resolve(STAFF);
-    if (table === "pet_services") return Promise.resolve(SERVICES);
+    if (table === "pet_services") return Promise.resolve(opts.services || SERVICES);
+    if (table === "pet_bookings" && opts.fresh && /status=not\.in/.test(filters || "")) return Promise.resolve(opts.fresh === "fail" ? null : opts.fresh);
     if (table === "pet_bookings") return Promise.resolve(opts.bookingsFail ? null : (opts.bookings || [booking()]));
     return Promise.resolve(null);
   });
@@ -216,5 +217,110 @@ describe("CalendarPage", function () {
     fireEvent.click(await screen.findByLabelText("Open booking for Simba at 10:00"));
     expect(await screen.findByText("This booking is final.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Reschedule" })).toBeNull();
+  });
+
+  function openForm() {
+    fireEvent.click(screen.getByText("+ New booking"));
+    fireEvent.change(screen.getByLabelText("Customer"), { target: { value: "c1" } });
+    fireEvent.change(screen.getByLabelText("Pet"), { target: { value: "p1" } });
+  }
+
+  it("does not offer a service that is restricted to another species, and blocks it if it was already ticked", async function () {
+    var services = SERVICES.concat([
+      { id: "s3", name: "Cat groom", category: "Grooming", price: 2200, duration_minutes: 60, species: ["Cat"], active: true },
+      { id: "s4", name: "Dog bath", category: "Grooming", price: 1200, duration_minutes: 45, species: ["Dog"], active: true },
+    ]);
+    setup({ services: services });
+    await screen.findByLabelText("Open booking for Simba at 10:00");
+    fireEvent.click(screen.getByText("+ New booking"));
+    fireEvent.change(screen.getByLabelText("Customer"), { target: { value: "c1" } });
+    fireEvent.click(screen.getByLabelText(/Cat groom/)); // ticked before a pet is chosen
+    fireEvent.change(screen.getByLabelText("Pet"), { target: { value: "p1" } });
+    expect(screen.getByLabelText(/Dog bath/).disabled).toBe(false);
+    expect(screen.getByLabelText(/Cat groom/).checked).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Create booking" }));
+    expect(await screen.findByText(/Cat groom isn't offered for Simba \(Dog\)/)).toBeTruthy();
+    expect(mockRpc).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByLabelText(/Cat groom/)); // untick: now it is disabled and labelled
+    expect(screen.getByLabelText(/Cat groom/).disabled).toBe(true);
+    expect(screen.getByText(/Cat groom \(not offered for Dogs\)/)).toBeTruthy();
+  });
+
+  it("warns when the end time differs from the services' total, and saves only after the override is ticked", async function () {
+    setup();
+    await screen.findByLabelText("Open booking for Simba at 10:00");
+    openForm();
+    fireEvent.click(screen.getByLabelText(/Full groom/));
+    expect(screen.queryByRole("alert")).toBeNull(); // matches: no warning
+    fireEvent.change(screen.getByLabelText("End"), { target: { value: "09:45" } });
+    expect(await screen.findByText("The services add up to 1 h, but this booking runs 45 min (15 min shorter).")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Create booking" }));
+    expect(await screen.findByText(/tick the box if you want to save anyway/)).toBeTruthy();
+    expect(mockRpc).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByLabelText("I want this end time anyway"));
+    fireEvent.click(screen.getByRole("button", { name: "Create booking" }));
+    await waitFor(function () { expect(mockRpc).toHaveBeenCalled(); });
+    expect(mockRpc.mock.calls[0][0]).toBe("pet_create_booking");
+  });
+
+  it("clears the override when the times change again", async function () {
+    setup();
+    await screen.findByLabelText("Open booking for Simba at 10:00");
+    openForm();
+    fireEvent.click(screen.getByLabelText(/Full groom/));
+    fireEvent.change(screen.getByLabelText("End"), { target: { value: "10:30" } });
+    fireEvent.click(await screen.findByLabelText("I want this end time anyway"));
+    expect(screen.getByLabelText("I want this end time anyway").checked).toBe(true);
+    fireEvent.change(screen.getByLabelText("End"), { target: { value: "10:45" } });
+    expect(screen.getByLabelText("I want this end time anyway").checked).toBe(false);
+  });
+
+  it("flags a date far in the future for review but does not refuse it", async function () {
+    setup();
+    await screen.findByLabelText("Open booking for Simba at 10:00");
+    openForm();
+    fireEvent.click(screen.getByLabelText(/Full groom/));
+    var n = new Date(); var far = new Date(n.getFullYear(), n.getMonth() + 9, 15);
+    var farStr = far.getFullYear() + "-" + String(far.getMonth() + 1).padStart(2, "0") + "-15";
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: farStr } });
+    expect(await screen.findByText(/more than 6 months away/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Create booking" }));
+    expect(await screen.findByText(/tick the box if you want to save anyway/)).toBeTruthy();
+    expect(mockRpc).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByLabelText("The date is correct"));
+    fireEvent.click(screen.getByRole("button", { name: "Create booking" }));
+    await waitFor(function () { expect(mockRpc).toHaveBeenCalled(); });
+    expect(mockRpc.mock.calls[0][1].p_starts_at.slice(0, 4)).toBe(String(far.getFullYear()));
+  });
+
+  it("re-checks availability against fresh data when saving and refuses a clash that appeared meanwhile", async function () {
+    setup({ fresh: [booking({ id: "zz", staff_id: "st1", pet_id: "other", starts_at: today(9, 30), ends_at: today(10, 30) })] });
+    await screen.findByLabelText("Open booking for Simba at 10:00");
+    openForm();
+    fireEvent.click(screen.getByLabelText(/Full groom/));
+    fireEvent.change(screen.getByLabelText("Staff member (optional)"), { target: { value: "st1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create booking" }));
+    expect(await screen.findByText(/That staff member already has a booking from \d\d:\d\d – \d\d:\d\d\. Pick another time/)).toBeTruthy();
+    expect(mockRpc).not.toHaveBeenCalled();
+    var fetched = mockDb.mock.calls.filter(function (c) { return c[0] === "GET" && c[1] === "pet_bookings" && /status=not\.in/.test(c[3] || ""); });
+    expect(fetched.length).toBe(1);
+  });
+
+  it("still lets the database decide when the fresh availability check cannot be loaded", async function () {
+    setup({ fresh: "fail" });
+    await screen.findByLabelText("Open booking for Simba at 10:00");
+    openForm();
+    fireEvent.click(screen.getByLabelText(/Full groom/));
+    fireEvent.click(screen.getByRole("button", { name: "Create booking" }));
+    await waitFor(function () { expect(mockRpc).toHaveBeenCalled(); });
+  });
+
+  it("does not warn about duration when rescheduling keeps the original length", async function () {
+    setup();
+    fireEvent.click(await screen.findByLabelText("Open booking for Simba at 10:00"));
+    fireEvent.click(screen.getByRole("button", { name: /Reschedule|Edit/ }));
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.change(screen.getByLabelText("End"), { target: { value: "11:30" } });
+    expect(await screen.findByText(/add up to 1 h, but this booking runs 1 h 30 min/)).toBeTruthy();
   });
 });

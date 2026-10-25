@@ -10,6 +10,7 @@
 import React, { useEffect, useState } from "react";
 import { db } from "../../lib/db";
 import { fmt } from "../../lib/utils";
+import { serviceBlockMessage, unknownDeleteFailure } from "./deleteGuards";
 import { SPECIES } from "./petData";
 import { MUTED_FG, MUTED, BORDER, FOREGROUND } from "./theme";
 import {
@@ -44,6 +45,7 @@ export default function GroomingPage({ canEdit }) {
   var inactiveState = useState(false); var showInactive = inactiveState[0]; var setShowInactive = inactiveState[1];
   var formState = useState(null); var form = formState[0]; var setForm = formState[1]; // {mode, id, draft}
   var deletingState = useState(null); var deleting = deletingState[0]; var setDeleting = deletingState[1];
+  var blockedState = useState(""); var blocked = blockedState[0]; var setBlocked = blockedState[1];
   var savingState = useState(false); var saving = savingState[0]; var setSaving = savingState[1];
   var errState = useState(""); var err = errState[0]; var setErr = errState[1];
 
@@ -116,14 +118,32 @@ export default function GroomingPage({ canEdit }) {
     setServices(services.map(function (x) { return x.id === s.id ? Object.assign({}, x, { active: !s.active }) : x; }));
   }
 
+  // Checks history FIRST, so a delete that the database would refuse is never sent
+  // (a failed delete would also be queued for retry by the generic db() helper).
   async function confirmDelete() {
     if (saving) return;
-    setSaving(true); setErr("");
-    var ok = await db("DELETE", "pet_services", null, "?id=eq." + deleting.id);
+    setSaving(true); setErr(""); setBlocked("");
+    var id = deleting.id;
+    var inBookings = await db("GET", "pet_booking_services", null, "?service_id=eq." + id + "&select=id&limit=101");
+    var inInvoices = await db("GET", "pet_invoice_lines", null, "?service_id=eq." + id + "&select=id&limit=101");
+    if (!Array.isArray(inBookings) || !Array.isArray(inInvoices)) {
+      setSaving(false);
+      setErr("Couldn't check whether this service has booking or invoice history, so nothing was deleted. Check your connection and try again.");
+      return;
+    }
+    var msg = serviceBlockMessage(deleting.name, { bookings: inBookings.length, invoices: inInvoices.length });
+    if (msg) { setSaving(false); setBlocked(msg); return; }
+    var ok = await db("DELETE", "pet_services", null, "?id=eq." + id);
     setSaving(false);
-    if (!ok) { setErr("Couldn't delete the service. If it has been used in bookings, deactivate it instead. Otherwise check your connection and try again."); return; }
-    setServices(services.filter(function (s) { return s.id !== deleting.id; }));
+    if (!ok) { setErr(unknownDeleteFailure("service")); return; }
+    setServices(services.filter(function (s) { return s.id !== id; }));
     setDeleting(null);
+  }
+  function closeDelete() { if (!saving) { setDeleting(null); setErr(""); setBlocked(""); } }
+  async function deactivateInstead() {
+    var s = deleting;
+    await toggleActive(s);
+    setDeleting(null); setBlocked("");
   }
 
   return (
@@ -179,7 +199,7 @@ export default function GroomingPage({ canEdit }) {
                       ariaLabel={(s.active ? "Deactivate " : "Activate ") + s.name}>{s.active ? "Deactivate" : "Activate"}</Button>
                     <div style={{ display: "flex", gap: 4 }}>
                       <Button size="sm" variant="ghost" onClick={function () { openEdit(s); }} ariaLabel={"Edit " + s.name}>Edit</Button>
-                      <Button size="sm" variant="ghost-danger" onClick={function () { setErr(""); setDeleting(s); }} ariaLabel={"Delete " + s.name}>Delete</Button>
+                      <Button size="sm" variant="ghost-danger" onClick={function () { setErr(""); setBlocked(""); setDeleting(s); }} ariaLabel={"Delete " + s.name}>Delete</Button>
                     </div>
                   </div>
                 ) : null}
@@ -230,15 +250,22 @@ export default function GroomingPage({ canEdit }) {
         ) : null}
       </Modal>
 
-      <Modal open={!!deleting} onClose={function () { if (!saving) { setDeleting(null); setErr(""); } }}
+      <Modal open={!!deleting} onClose={closeDelete}
         title={deleting ? "Delete " + deleting.name + "?" : ""}
         footer={<>
-          <Button variant="ghost" onClick={function () { setDeleting(null); setErr(""); }} disabled={saving}>Keep service</Button>
-          <Button variant="danger" onClick={confirmDelete} disabled={saving}>{saving ? "Deleting…" : "Delete service"}</Button>
+          <Button variant="ghost" onClick={closeDelete} disabled={saving}>Keep service</Button>
+          {blocked && deleting && deleting.active
+            ? <Button onClick={deactivateInstead} disabled={saving}>Deactivate instead</Button>
+            : null}
+          {!blocked ? <Button variant="danger" onClick={confirmDelete} disabled={saving}>{saving ? "Checking…" : "Delete service"}</Button> : null}
         </>}>
-        <p style={{ margin: 0, fontSize: 13, color: FOREGROUND, lineHeight: 1.5 }}>
-          This removes the service from the catalogue. If you only want to stop offering it, use Deactivate instead so it can come back later.
-        </p>
+        {blocked ? (
+          <p role="alert" style={{ margin: 0, fontSize: 13, color: FOREGROUND, lineHeight: 1.5 }}>{blocked}</p>
+        ) : (
+          <p style={{ margin: 0, fontSize: 13, color: FOREGROUND, lineHeight: 1.5 }}>
+            This removes the service from the catalogue. If it has been used in a booking or invoice it can't be deleted; you'll be offered Deactivate instead.
+          </p>
+        )}
         <ErrorLine>{err}</ErrorLine>
       </Modal>
     </div>

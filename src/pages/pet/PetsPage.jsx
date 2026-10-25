@@ -9,6 +9,7 @@
 // No allergy/medical field exists yet by design -- see migration 083.
 import React, { useEffect, useMemo, useState } from "react";
 import { db } from "../../lib/db";
+import { petBlockMessage, unknownDeleteFailure } from "./deleteGuards";
 import {
   MUTED_FG, MUTED, BORDER, FOREGROUND,
 } from "./theme";
@@ -47,6 +48,7 @@ export default function PetsPage() {
 
   var formState = useState(null); var form = formState[0]; var setForm = formState[1]; // {mode, id, draft}
   var deletingState = useState(null); var deleting = deletingState[0]; var setDeleting = deletingState[1];
+  var blockedState = useState(""); var blocked = blockedState[0]; var setBlocked = blockedState[1];
   var profileState = useState(null); var profileId = profileState[0]; var setProfileId = profileState[1];
   var savingState = useState(false); var saving = savingState[0]; var setSaving = savingState[1];
   var errState = useState(""); var err = errState[0]; var setErr = errState[1];
@@ -127,12 +129,25 @@ export default function PetsPage() {
     setForm(null);
   }
 
+  // Checks history first so a delete the database would refuse is never sent.
   async function confirmDelete() {
     if (saving || !deleting) return;
-    setSaving(true); setErr("");
-    var ok = await db("DELETE", "pet_pets", null, "?id=eq." + deleting.id);
+    setSaving(true); setErr(""); setBlocked("");
+    var id = deleting.id;
+    var q = "?pet_id=eq." + id + "&select=id&limit=101";
+    var hb = await db("GET", "pet_bookings", null, q);
+    var hs = await db("GET", "pet_boarding_stays", null, q);
+    var hi = await db("GET", "pet_invoices", null, q);
+    if (!Array.isArray(hb) || !Array.isArray(hs) || !Array.isArray(hi)) {
+      setSaving(false);
+      setErr("Couldn't check this pet's booking and invoice history, so nothing was deleted. Check your connection and try again.");
+      return;
+    }
+    var msg = petBlockMessage(deleting.name, { bookings: hb.length, stays: hs.length, invoices: hi.length });
+    if (msg) { setSaving(false); setBlocked(msg); return; }
+    var ok = await db("DELETE", "pet_pets", null, "?id=eq." + id);
     setSaving(false);
-    if (!ok) { setErr("Couldn't delete the pet. A pet with bookings can't be deleted. Otherwise check your connection and try again."); return; }
+    if (!ok) { setErr(unknownDeleteFailure("pet")); return; }
     setPets(pets.filter(function (p) { return p.id !== deleting.id; }));
     setVaccs(vaccs.filter(function (v) { return v.pet_id !== deleting.id; }));
     setDeleting(null);
@@ -278,15 +293,19 @@ export default function PetsPage() {
         ) : null}
       </Modal>
 
-      <Modal open={!!deleting} onClose={function () { if (!saving) { setDeleting(null); setErr(""); } }}
+      <Modal open={!!deleting} onClose={function () { if (!saving) { setDeleting(null); setErr(""); setBlocked(""); } }}
         title={deleting ? "Delete " + deleting.name + "?" : ""}
         footer={<>
-          <Button variant="ghost" onClick={function () { setDeleting(null); setErr(""); }} disabled={saving}>Keep pet</Button>
-          <Button variant="danger" onClick={confirmDelete} disabled={saving}>{saving ? "Deleting…" : "Delete pet"}</Button>
+          <Button variant="ghost" onClick={function () { setDeleting(null); setErr(""); setBlocked(""); }} disabled={saving}>Keep pet</Button>
+          {!blocked ? <Button variant="danger" onClick={confirmDelete} disabled={saving}>{saving ? "Checking…" : "Delete pet"}</Button> : null}
         </>}>
-        <p style={{ margin: 0, fontSize: 13, color: FOREGROUND, lineHeight: 1.5 }}>
-          This permanently removes the pet and all of its vaccination records. This can't be undone.
-        </p>
+        {blocked ? (
+          <p role="alert" style={{ margin: 0, fontSize: 13, color: FOREGROUND, lineHeight: 1.5 }}>{blocked}</p>
+        ) : (
+          <p style={{ margin: 0, fontSize: 13, color: FOREGROUND, lineHeight: 1.5 }}>
+            This permanently removes the pet and all of its vaccination records. This can't be undone. A pet with bookings, boarding stays or invoices can't be deleted.
+          </p>
+        )}
         <ErrorLine>{err}</ErrorLine>
       </Modal>
 
