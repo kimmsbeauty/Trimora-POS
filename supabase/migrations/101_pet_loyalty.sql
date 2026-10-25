@@ -2,8 +2,8 @@
 --
 -- Trimora Pet -- Phase 9: loyalty programme (points, tiers, rewards).
 --
--- STATUS: written for owner review. NOT applied anywhere. Apply only after the
--- owner says "apply 101".
+-- STATUS: applied to production 2026-10-25 on the owner's instruction (Supabase
+-- history name `pet_loyalty`); see the migrations README for the verification.
 --
 -- ADDITIVE ONLY: five new tables, three triggers and eight functions. Nothing existing is
 -- altered. The live invoice and booking functions are NOT replaced: points are
