@@ -40,7 +40,7 @@ function setup(opts) {
     if (opts.getFail && table === "pet_kennels") return Promise.resolve(null);
     var map = {
       pet_kennels: opts.kennels || KENNELS, pet_boarding_stays: opts.stays || STAYS, customers: CUSTOMERS, pet_pets: PETS,
-      pet_vaccinations: opts.vaccs || [], pet_services: SERVICES,
+      pet_vaccinations: opts.vaccs || [], pet_services: SERVICES, pet_customer_profiles: opts.profiles || [],
     };
     return Promise.resolve(map[table] || []);
   });
@@ -153,7 +153,52 @@ describe("BoardingPage", function () {
     expect(rpcCall("pet_create_stay")[1]).toEqual({
       p_customer_id: "c2", p_pet_id: "p2", p_kennel_id: "k4", p_check_in: addDaysKey(T, 10), p_check_out: addDaysKey(T, 12),
       p_service_id: "sv1", p_feeding: "Wet food pm", p_notes: "", p_check_in_now: false,
+      p_emergency_name: "", p_emergency_phone: "", p_medication: "",
     });
+  });
+
+  it("sends medication instructions and an emergency contact with a new stay, suggesting the profile contact", async function () {
+    setup({ profiles: [{ customer_id: "c2", emergency_contact_name: "Grace Njeri", emergency_contact_phone: "0733111222" }] });
+    await screen.findByLabelText("Check out Simba");
+    fireEvent.click(screen.getByText("+ New stay"));
+    fireEvent.change(await screen.findByLabelText("Customer"), { target: { value: "c2" } });
+    expect(screen.getByLabelText("Emergency contact name").value).toBe("Grace Njeri");
+    expect(screen.getByLabelText("Emergency contact number").value).toBe("0733111222");
+    fireEvent.change(screen.getByLabelText("Pet"), { target: { value: "p2" } });
+    fireEvent.change(screen.getByLabelText("Kennel"), { target: { value: "k4" } });
+    fireEvent.change(screen.getByLabelText("Check-in"), { target: { value: addDaysKey(T, 10) } });
+    fireEvent.change(screen.getByLabelText("Check-out"), { target: { value: addDaysKey(T, 12) } });
+    fireEvent.change(screen.getByLabelText("Medication instructions (optional)"), { target: { value: "Half a tablet at 8am" } });
+    fireEvent.change(screen.getByLabelText("Emergency contact name"), { target: { value: "Peter Otieno" } });
+    fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
+    await waitFor(function () { expect(rpcCall("pet_create_stay")).toBeTruthy(); });
+    expect(rpcCall("pet_create_stay")[1]).toMatchObject({ p_medication: "Half a tablet at 8am", p_emergency_name: "Peter Otieno", p_emergency_phone: "0733111222" });
+  });
+
+  it("refuses half an emergency contact before calling the database", async function () {
+    setup();
+    await screen.findByLabelText("Check out Simba");
+    fireEvent.click(screen.getByText("+ New stay"));
+    fireEvent.change(await screen.findByLabelText("Customer"), { target: { value: "c2" } });
+    fireEvent.change(screen.getByLabelText("Pet"), { target: { value: "p2" } });
+    fireEvent.change(screen.getByLabelText("Kennel"), { target: { value: "k4" } });
+    fireEvent.change(screen.getByLabelText("Emergency contact name"), { target: { value: "Peter" } });
+    fireEvent.click(screen.getByRole("button", { name: "Reserve" }));
+    expect(await screen.findByText(/both the emergency contact/)).toBeTruthy();
+    expect(rpcCall("pet_create_stay")).toBeUndefined();
+  });
+
+  it("shows medication, the emergency contact and an overdue badge on a checked-in stay", async function () {
+    setup({ stays: [stay({ check_out_on: addDaysKey(T, -2), medication_notes: "Insulin at 7am", emergency_contact_name: "Mary", emergency_contact_phone: "0712000000" })] });
+    expect(await screen.findByText(/Insulin at 7am/)).toBeTruthy();
+    expect(screen.getByText(/Mary · 0712000000/)).toBeTruthy();
+    expect(screen.getByText("Overdue by 2 days")).toBeTruthy();
+  });
+
+  it("tells staff when a checkout is early", async function () {
+    setup();
+    fireEvent.click(await screen.findByLabelText("Check out Simba"));
+    expect(await screen.findByText(/Leaving 2 nights before the planned check-out/)).toBeTruthy();
   });
 
   it("warns, but still lets the database decide, when a kennel looks taken", async function () {

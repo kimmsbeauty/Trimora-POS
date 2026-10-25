@@ -121,6 +121,32 @@ export function validateStay(draft) {
   return "";
 }
 
+// Overdue and early departure are DERIVED from the planned check-out date, never stored.
+// Display only: nothing is charged for either until stays are invoiced.
+export function overdueDays(stay, today) {
+  if (!stay || stay.status !== "occupied") return 0;
+  return Math.max(0, daysBetween(stay.check_out_on, today));
+}
+export function earlyNights(stay, today) {
+  if (!stay || stay.status !== "occupied") return 0;
+  return Math.max(0, daysBetween(today, stay.check_out_on));
+}
+function plural(n, one, many) { return n + " " + (n === 1 ? one : many); }
+export function overdueLabel(n) { return n > 0 ? "Overdue by " + plural(n, "day", "days") : ""; }
+export function earlyLabel(n) { return n > 0 ? "Leaving " + plural(n, "night", "nights") + " before the planned check-out." : ""; }
+
+export var PHONE_PATTERN = /^[0-9+() -]{6,30}$/;
+// Emergency contact is both a name and a number, or neither. Notes are at most 500 characters.
+export function validateCareDetails(d) {
+  var name = String(d.emergency_contact_name || "").trim();
+  var phone = String(d.emergency_contact_phone || "").trim();
+  if (!!name !== !!phone) return "Enter both the emergency contact's name and number, or leave both empty.";
+  if (name.length > 80) return "The emergency contact's name must be 80 characters or fewer.";
+  if (phone && !PHONE_PATTERN.test(phone)) return "The emergency number can only use digits, spaces, + ( ) and -.";
+  if (String(d.medication_notes || "").trim().length > 500) return "Medication instructions must be 500 characters or fewer.";
+  return "";
+}
+
 export function validateKennel(draft) {
   var name = String(draft.name || "").trim();
   if (!name) return "Kennel name is required.";
@@ -150,6 +176,8 @@ var ERROR_TEXT = {
   STAY_NOT_FOUND: "That stay could not be found. Refresh and try again.",
   STAY_NOT_EDITABLE: "This stay can no longer be changed.",
   STAY_CHECKIN_LOCKED: "The check-in date can't change after the pet has checked in.",
+  INVALID_CONTACT: "Enter both the emergency contact's name and a valid number, or leave both empty.",
+  INVALID_NOTES: "Medication instructions must be 500 characters or fewer.",
   INVALID_STATUS_CHANGE: "That change isn't allowed for this stay.",
 };
 // Turns the message returned by the database function into friendly wording.
