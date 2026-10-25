@@ -41,7 +41,7 @@ function setup(opts) {
     if (opts.rpcError) return Promise.resolve({ error: opts.rpcError });
     return Promise.resolve({ data: name === "pet_create_booking" ? "new-id" : true });
   });
-  return render(<CalendarPage />);
+  return render(<CalendarPage initialView={opts.initialView} startNew={opts.startNew} />);
 }
 
 describe("CalendarPage", function () {
@@ -52,6 +52,28 @@ describe("CalendarPage", function () {
     var chip = await screen.findByLabelText("Open booking for Simba at 10:00");
     expect(chip.textContent).toMatch(/Booked/);
     expect(chip.textContent).toMatch(/10:00 – 11:00/);
+  });
+
+  it("opens on the day view when asked to (Overview shortcut): loads exactly one day", async function () {
+    setup({ initialView: "day" });
+    // the day layout labels its button without a time (the week grid includes one)
+    await screen.findByLabelText("Open booking for Simba");
+    expect(screen.queryByLabelText("Open booking for Simba at 10:00")).toBeNull();
+    var q = String(mockDb.mock.calls.filter(function (c) { return c[1] === "pet_bookings"; })[0][3]);
+    var from = new Date(/starts_at=gte\.([^&]+)/.exec(q)[1]); var to = new Date(/starts_at=lt\.([^&]+)/.exec(q)[1]);
+    expect(to.getTime() - from.getTime()).toBeGreaterThanOrEqual(23 * 3600000);
+    expect(to.getTime() - from.getTime()).toBeLessThanOrEqual(25 * 3600000);
+  });
+
+  it("opens the new-booking form straight away when asked to (Overview 'New Booking')", async function () {
+    setup({ startNew: true });
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+  });
+
+  it("does not open the form by itself in normal use", async function () {
+    setup();
+    await screen.findByLabelText("Open booking for Simba at 10:00");
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("shows an error with retry when the lookups fail, not an empty calendar", async function () {

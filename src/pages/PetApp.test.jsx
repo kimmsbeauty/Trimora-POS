@@ -54,7 +54,10 @@ describe("PetApp module gate", function () {
 describe("PetApp shell", function () {
   beforeEach(function () {
     db.mockReset();
-    db.mockResolvedValue([{ module_key: "pet", enabled: true }]);
+    // The module gate gets its row; every other table (Overview's reads) is simply empty.
+    db.mockImplementation(function (method, table) {
+      return Promise.resolve(table === "salon_enabled_modules" ? [{ module_key: "pet", enabled: true }] : []);
+    });
   });
 
   it("renders the Pet login (isPet) before sign-in", async function () {
@@ -71,11 +74,27 @@ describe("PetApp shell", function () {
     expect(screen.queryByText("Settings")).not.toBeInTheDocument();
   });
 
-  it("shows all navigation to admin and an honest placeholder, not fake data", async function () {
+  it("lands on the real Overview, not a placeholder, and shows all navigation to admin", async function () {
     render(<PetApp />);
     fireEvent.click(await screen.findByText("login-admin"));
     await waitFor(function () { expect(screen.getAllByText("Settings").length).toBeGreaterThan(0); });
-    expect(screen.getAllByText("Coming soon").length).toBeGreaterThan(0);
+    expect(await screen.findByText("Today's Appointments")).toBeInTheDocument();
+    expect(screen.queryByText("Coming soon")).not.toBeInTheDocument();
     expect(screen.getAllByText("Happy Paws").length).toBeGreaterThan(0);
+  });
+
+  it("still shows an honest placeholder, not fake data, for sections that are not built yet", async function () {
+    render(<PetApp />);
+    fireEvent.click(await screen.findByText("login-admin"));
+    fireEvent.click((await screen.findAllByText("Loyalty Programme"))[0]);
+    expect(await screen.findByText("Coming soon")).toBeInTheDocument();
+  });
+
+  it("opens the new-booking form from the Overview shortcut", async function () {
+    render(<PetApp />);
+    fireEvent.click(await screen.findByText("login-staff"));
+    fireEvent.click((await screen.findAllByText("New Booking"))[0]);
+    // calendar lookups are empty, so the form can open once they are ready
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 });

@@ -11,7 +11,8 @@
 // screen (customers + pet_customer_profiles); Phase 4 adds the Grooming
 // service catalogue (pet_services); Phase 5 adds Staff & Permissions
 // (admin-defined roles, pet_roles / pet_staff_roles). Every other section is still an honest
-// "coming soon" placeholder -- no mock data.
+// "coming soon" placeholder -- no mock data. Overview is now real: it only reads
+// existing records and acts through the same pet_* functions as the other screens.
 //
 // NOTE on roles: LoginPage's onLogin(role) gives "staff" or "admin". The
 // adminOnly flags in pet/petNav.js only HIDE navigation. They are not access
@@ -36,6 +37,7 @@ import SuppliesPage from "./pet/SuppliesPage";
 import StaffPage from "./pet/StaffPage";
 import BoardingPage from "./pet/BoardingPage";
 import ReportsPage from "./pet/ReportsPage";
+import OverviewPage from "./pet/OverviewPage";
 import WorkingAs from "./pet/WorkingAs";
 import { clearPetActor } from "../lib/petActor";
 import { visiblePetNav } from "./pet/petNav";
@@ -127,6 +129,11 @@ function PetStaffRoute() {
   var tab = tabState[0]; var setTab = tabState[1];
   var openInvoiceState = useState(null);
   var openInvoice = openInvoiceState[0]; var setOpenInvoice = openInvoiceState[1];
+  // Where an Overview shortcut should land (e.g. the calendar's day view). Cleared by any other navigation.
+  var intentState = useState(null);
+  var intent = intentState[0]; var setIntent = intentState[1];
+  function selectTab(key) { setIntent(null); setTab(key); }
+  function goFromOverview(key, opts) { setIntent(opts || null); setTab(key); }
 
   if (!loggedIn) {
     return <LoginPage isPet={true} onLogin={function (role) { setIsAdmin(role === "admin"); setLoggedIn(true); }} />;
@@ -140,24 +147,26 @@ function PetStaffRoute() {
     <PetShell
       nav={nav}
       active={activeItem.key}
-      onSelect={setTab}
+      onSelect={selectTab}
       businessName={salon && salon.name}
       roleLabel={isAdmin ? "Admin" : "Staff"}
       footerSlot={<WorkingAs />}
-      onLogout={function () { clearPetActor(); setLoggedIn(false); setIsAdmin(false); setTab("overview"); }}
+      onLogout={function () { clearPetActor(); setLoggedIn(false); setIsAdmin(false); setIntent(null); setTab("overview"); }}
     >
-      {activeItem.key === "pets"
+      {activeItem.key === "overview"
+        ? <OverviewPage businessName={salon && salon.name} isAdmin={isAdmin} onNavigate={goFromOverview} />
+        : activeItem.key === "pets"
         ? <PetsPage />
         : activeItem.key === "customers"
         ? <CustomersPage />
         : activeItem.key === "grooming"
         ? <GroomingPage canEdit={isAdmin} />
         : activeItem.key === "calendar"
-        ? <CalendarPage />
+        ? <CalendarPage initialView={intent && intent.view} startNew={!!(intent && intent.startNew)} />
         : activeItem.key === "checkout"
         ? <CheckoutPage onInvoiceCreated={function (id) { setOpenInvoice(id); setTab("invoices"); }} />
         : activeItem.key === "invoices"
-        ? <InvoicesPage openInvoiceId={openInvoice} onDetailClosed={function () { setOpenInvoice(null); }} />
+        ? <InvoicesPage openInvoiceId={openInvoice} onDetailClosed={function () { setOpenInvoice(null); }} initialStatus={intent && intent.status} />
         : activeItem.key === "supplies"
         ? <SuppliesPage canEdit={isAdmin} />
         : activeItem.key === "settings"

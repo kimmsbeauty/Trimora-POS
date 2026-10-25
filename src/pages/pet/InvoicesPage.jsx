@@ -20,12 +20,12 @@ import { PageHeader, Card, Button, Field, Badge, Modal, ErrorLine, EmptyState, i
 
 var PAGE = 50;
 
-export default function InvoicesPage({ openInvoiceId, onDetailClosed }) {
+export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialStatus }) {
   var salon = useSalon();
   var dataState = useState(null); var data = dataState[0]; var setData = dataState[1];
   var statusState = useState("loading"); var loadStatus = statusState[0]; var setLoadStatus = statusState[1];
   var tickState = useState(0); var tick = tickState[0]; var setTick = tickState[1];
-  var fState = useState({ q: "", status: "all" }); var filters = fState[0]; var setFilters = fState[1];
+  var fState = useState({ q: "", status: initialStatus || "all" }); var filters = fState[0]; var setFilters = fState[1];
   var shownState = useState(PAGE); var shown = shownState[0]; var setShown = shownState[1];
   var detailState = useState(openInvoiceId || null); var detailId = detailState[0]; var setDetailId = detailState[1];
   var payState = useState({ method: "cash", amount: "", reference: "" }); var pay = payState[0]; var setPay = payState[1];
@@ -123,6 +123,7 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed }) {
           onChange={function (e) { setF("q", e.target.value); }} style={Object.assign({}, inputStyle, { flex: "1 1 220px", width: "auto" })} />
         <select aria-label="Filter by status" value={filters.status} onChange={function (e) { setF("status", e.target.value); }} style={Object.assign({}, inputStyle, { width: 160 })}>
           <option value="all">All statuses</option>
+          <option value="outstanding">Outstanding (unpaid or part paid)</option>
           {["issued", "partial", "paid", "overdue", "void"].map(function (s) { return <option key={s} value={s}>{STATUS_LABELS[s]}</option>; })}
         </select>
       </Card>

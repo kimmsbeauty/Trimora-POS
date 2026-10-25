@@ -116,7 +116,8 @@ export function displayStatus(inv, now) { return isOverdue(inv, now) ? "overdue"
 export function filterInvoices(invoices, f, names, now) {
   var needle = String((f && f.q) || "").trim().toLowerCase();
   return (invoices || []).filter(function (inv) {
-    if (f && f.status && f.status !== "all" && displayStatus(inv, now) !== f.status) return false;
+    if (f && f.status === "outstanding") { if (outstanding(inv) <= 0) return false; }
+    else if (f && f.status && f.status !== "all" && displayStatus(inv, now) !== f.status) return false;
     if (!needle) return true;
     var n = names(inv);
     return String(inv.invoice_number).toLowerCase().indexOf(needle) !== -1 ||
