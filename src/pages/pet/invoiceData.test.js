@@ -97,6 +97,17 @@ describe("filterInvoices", function () {
     expect(filterInvoices(list, { q: "inv-0002" }, names, now).length).toBe(1);
     expect(filterInvoices(list, { q: "simba" }, names, now).length).toBe(1);
   });
+
+  it("'outstanding' keeps every invoice that still owes money (unpaid, part paid, overdue) and drops paid and void", function () {
+    var all = [
+      { id: "a", invoice_number: "INV-1", status: "issued", total: 1000, amount_paid: 0, due_date: "2026-12-01" },
+      { id: "b", invoice_number: "INV-2", status: "partial", total: 1000, amount_paid: 400, due_date: "2026-12-01" },
+      { id: "c", invoice_number: "INV-3", status: "issued", total: 1000, amount_paid: 0, due_date: "2026-10-01" },
+      { id: "d", invoice_number: "INV-4", status: "paid", total: 1000, amount_paid: 1000 },
+      { id: "e", invoice_number: "INV-5", status: "void", total: 1000, amount_paid: 0 },
+    ];
+    expect(filterInvoices(all, { status: "outstanding" }, names, now).map(function (i) { return i.id; })).toEqual(["a", "b", "c"]);
+  });
 });
 
 describe("messages and keys", function () {
