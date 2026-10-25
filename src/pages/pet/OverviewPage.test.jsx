@@ -163,7 +163,7 @@ describe("OverviewPage", function () {
     fireEvent.click(quick.getByText("New Booking"));
     expect(h.onNavigate).toHaveBeenLastCalledWith("calendar", { view: "day", startNew: true });
     fireEvent.click(quick.getByText("Register Customer & Pet"));
-    expect(h.onNavigate).toHaveBeenLastCalledWith("customers", undefined);
+    expect(h.onNavigate).toHaveBeenLastCalledWith("pets", { startNew: true });
     fireEvent.click(quick.getByText("Create Invoice"));
     expect(h.onNavigate).toHaveBeenLastCalledWith("checkout", undefined);
     fireEvent.click(quick.getByText("Record Payment"));
@@ -203,6 +203,14 @@ describe("OverviewPage", function () {
     expect(await screen.findByText("Today's Appointments")).toBeTruthy();
     expect(screen.queryByText(/Vaccinations:/)).toBeNull();
     expect(screen.getByText("Nothing needs your attention right now.")).toBeTruthy();
+  });
+
+  it("Add Customer / Pet opens the Pets add form, and View booking opens that exact booking", async function () {
+    var h = setup({ data: { bookings: [booking({ id: "b-42" })] } });
+    fireEvent.click(await screen.findByRole("button", { name: "Add Customer / Pet" }));
+    expect(h.onNavigate).toHaveBeenLastCalledWith("pets", { startNew: true });
+    fireEvent.click(await screen.findByRole("button", { name: "View booking for Simba" }));
+    expect(h.onNavigate).toHaveBeenLastCalledWith("calendar", { view: "day", bookingId: "b-42" });
   });
 
   it("does not crash and keeps cards as plain text when no navigation handler is given", async function () {

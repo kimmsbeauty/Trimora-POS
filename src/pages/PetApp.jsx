@@ -156,13 +156,13 @@ function PetStaffRoute() {
       {activeItem.key === "overview"
         ? <OverviewPage businessName={salon && salon.name} isAdmin={isAdmin} onNavigate={goFromOverview} />
         : activeItem.key === "pets"
-        ? <PetsPage />
+        ? <PetsPage startNew={!!(intent && intent.startNew)} />
         : activeItem.key === "customers"
         ? <CustomersPage />
         : activeItem.key === "grooming"
         ? <GroomingPage canEdit={isAdmin} />
         : activeItem.key === "calendar"
-        ? <CalendarPage initialView={intent && intent.view} startNew={!!(intent && intent.startNew)} />
+        ? <CalendarPage initialView={intent && intent.view} startNew={!!(intent && intent.startNew)} openBookingId={intent && intent.bookingId} />
         : activeItem.key === "checkout"
         ? <CheckoutPage onInvoiceCreated={function (id) { setOpenInvoice(id); setTab("invoices"); }} />
         : activeItem.key === "invoices"

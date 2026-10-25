@@ -129,7 +129,7 @@ export default function OverviewPage({ businessName, isAdmin, onNavigate }) {
       actions={
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {allowed.calendar ? <Button onClick={function () { go("calendar", { view: "day", startNew: true }); }}>New Booking</Button> : null}
-          {allowed.customers ? <Button variant="outline" onClick={function () { go("customers"); }}>Add Customer / Pet</Button> : null}
+          {allowed.pets ? <Button variant="outline" onClick={function () { go("pets", { startNew: true }); }}>Add Customer / Pet</Button> : null}
         </div>
       } />
   );
@@ -180,7 +180,7 @@ export default function OverviewPage({ businessName, isAdmin, onNavigate }) {
 
   var tiles = [
     { key: "calendar", icon: "calendar", label: "New Booking", opts: { view: "day", startNew: true } },
-    { key: "customers", icon: "customers", label: "Register Customer & Pet" },
+    { key: "pets", icon: "customers", label: "Register Customer & Pet", opts: { startNew: true } },
     { key: "checkout", icon: "checkout", label: "Create Invoice" },
     { key: "invoices", icon: "invoices", label: "Record Payment", opts: { status: "outstanding" } },
     { key: "boarding", icon: "boarding", label: "Check In Boarding Pet" },
@@ -231,7 +231,7 @@ export default function OverviewPage({ businessName, isAdmin, onNavigate }) {
                   {r.actions.map(function (a) {
                     return <Button key={a.status} size="sm" disabled={!!busy} ariaLabel={a.label + " " + r.pet} onClick={function () { moveBooking(r, a); }}>{a.label}</Button>;
                   })}
-                  {allowed.calendar ? <Button size="sm" variant="outline" ariaLabel={"View booking for " + r.pet} onClick={function () { go("calendar", { view: "day" }); }}>View booking</Button> : null}
+                  {allowed.calendar ? <Button size="sm" variant="outline" ariaLabel={"View booking for " + r.pet} onClick={function () { go("calendar", { view: "day", bookingId: r.id }); }}>View booking</Button> : null}
                 </div>
               </div>
             );
