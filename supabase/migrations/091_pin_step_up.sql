@@ -1,8 +1,8 @@
--- 090_pin_step_up.sql
+-- 091_pin_step_up.sql
 --
 -- Salon PIN hardening, part 1 of 2: two NEW functions that put a proof requirement in front of
 -- PIN changes. ADDITIVE ONLY: no existing function, table, policy or grant is altered.
--- Migration 091 (held) later removes the old unconditional path.
+-- Migration 092 (held) later removes the old unconditional path.
 --
 -- THE PROBLEM (verified against the live project, 2026-10-24)
 --   update_salon_pin(p_role, p_new_pin) is SECURITY DEFINER and keys off auth_salon_id() only.
@@ -31,12 +31,12 @@
 -- super_admin_reset_salon_pin, complete_salon_onboarding, the lockout function, pgcrypto.
 --
 -- STATUS: written for owner review; tested on the staging project (see supabase/tests/
--- 090_pin_step_up.sql). NOT applied to production.
+-- 091_pin_step_up.sql). NOT applied to production.
 --
 -- KNOWN LIMITS
 --   * The recovery check relies on the amr claim. It is verified against production's recorded
 --     session methods but NOT end-to-end with a real recovery email (that needs a mailbox). The
---     reset pages therefore keep a fallback to the old function until 091 ships.
+--     reset pages therefore keep a fallback to the old function until 092 ships.
 --   * Failed "current admin PIN" attempts count toward the same lockout as admin login (same
 --     verify_staff_pin counter). A bad actor on a staff device could already lock the admin out
 --     for 15 minutes by guessing at login; this adds no new capability.

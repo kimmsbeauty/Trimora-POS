@@ -1,5 +1,5 @@
--- supabase/tests/090_pin_step_up.sql
--- STAGING ONLY. Needs 090 applied and staging to mirror production's PIN functions
+-- supabase/tests/091_pin_step_up.sql
+-- STAGING ONLY. Needs 091 applied and staging to mirror production's PIN functions
 -- (verify_staff_pin, update_salon_pin, check_pin_lockout) and its revoked salon_pins grants.
 -- Self-cleaning: raises its results so the transaction rolls back. Expected FAILED=0.
 -- A NULL outcome counts as a failure (ok is not true).
@@ -49,7 +49,7 @@ begin
 
   -- ---- baseline facts that justify the fix
   insert into t_res select 'authenticated has no table access to salon_pins (policies inert)', pg_temp.as_claims(pw1,'authenticated','select count(*) from salon_pins') like 'ERR:%permission denied%', null;
-  insert into t_res select 'THE HOLE (pre-091): a staff-PIN device can set the ADMIN PIN via the old function', pg_temp.as_claims(pw1,'authenticated','select update_salon_pin(''admin'',''0420'')::text') is not null
+  insert into t_res select 'THE HOLE (pre-092): a staff-PIN device can set the ADMIN PIN via the old function', pg_temp.as_claims(pw1,'authenticated','select update_salon_pin(''admin'',''0420'')::text') is not null
      and pg_temp.as_claims(pw1,'authenticated','select verify_staff_pin(''admin'',''0420'')::text')='true', null;
   perform pg_temp.as_claims(pw1,'authenticated','select update_salon_pin(''admin'',''9999'')::text');   -- put it back
 

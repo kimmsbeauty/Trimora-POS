@@ -5,10 +5,10 @@ function load(n) {
   var raw = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/" + n), "utf8");
   return { raw: raw, code: raw.split("\n").filter(function (l) { return !/^\s*--/.test(l); }).join("\n") };
 }
-var m90 = load("090_pin_step_up.sql");
-var m91 = load("091_pin_lockdown.sql");
+var m90 = load("091_pin_step_up.sql");
+var m91 = load("092_pin_lockdown.sql");
 
-describe("migration 090 (PIN step-up)", function () {
+describe("migration 091 (PIN step-up)", function () {
   it("is additive: creates only the two new functions and never alters or drops existing PIN machinery", function () {
     expect(m90.code).not.toMatch(/drop\s+(function|table|policy|trigger)/i);
     expect(m90.code).not.toMatch(/create or replace function public\.(update_salon_pin|verify_staff_pin|verify_pin_for_device_login|super_admin_reset_salon_pin|complete_salon_onboarding|check_pin_lockout)/i);
@@ -57,15 +57,15 @@ describe("migration 090 (PIN step-up)", function () {
   });
 });
 
-describe("migration 091 (PIN lockdown, HELD)", function () {
+describe("migration 092 (PIN lockdown, HELD)", function () {
   it("is clearly marked held, with the two release conditions", function () {
     expect(m91.raw).toMatch(/STATUS: HELD/);
     expect(m91.raw).toMatch(/REAL forgot-PIN recovery/);
   });
-  it("refuses to run unless 090 is applied", function () {
+  it("refuses to run unless 091 is applied", function () {
     expect(m91.code).toMatch(/to_regprocedure\('public\.change_salon_pins\(text, text, text\)'\) is null/);
     expect(m91.code).toMatch(/to_regprocedure\('public\.reset_salon_admin_pin_via_recovery\(text\)'\) is null/);
-    expect(m91.code).toMatch(/091 refused: apply 090 first/);
+    expect(m91.code).toMatch(/092 refused: apply 091 first/);
   });
   it("only revokes the old function and drops the two inert client policies", function () {
     expect(m91.code).toMatch(/revoke execute on function public\.update_salon_pin\(text, text\) from public, anon, authenticated/);

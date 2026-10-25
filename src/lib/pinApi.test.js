@@ -72,7 +72,7 @@ describe("resetAdminPinViaRecovery (forgot-PIN)", function () {
     expect(c[0].body).toEqual({ p_new_pin: "4321" });
     expect(c[0].headers.Authorization).toBe("Bearer rec");
   });
-  it("falls back to the legacy function when 090 is not applied yet (404 / PGRST202)", async function () {
+  it("falls back to the legacy function when 091 is not applied yet (404 / PGRST202)", async function () {
     global.fetch = vi.fn().mockReturnValueOnce(reply(404, { code: "PGRST202", message: "Could not find the function" })).mockReturnValueOnce(reply(200, null));
     var r = await resetAdminPinViaRecovery({ token: "rec", newPin: "4321" });
     expect(r).toEqual({ ok: true, via: "legacy-fallback" });

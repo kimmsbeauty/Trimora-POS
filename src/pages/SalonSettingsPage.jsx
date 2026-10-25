@@ -7,7 +7,7 @@
 //   - PIN management (change staff PIN, change admin PIN)
 //
 // All settings are saved to the salon_settings table via db() PATCH.
-// PIN changes go through the change_salon_pins RPC (migration 090), which needs the current
+// PIN changes go through the change_salon_pins RPC (migration 091), which needs the current
 // admin PIN. salon_pins itself is never read or written from the client.
 // salon_settings is now in TENANT_TABLES so db() auto-scopes all calls.
 
@@ -360,7 +360,7 @@ export default function SalonSettingsPage({ salon, onSettingsUpdated }) {
 
     setPinSaving(true);
 
-    // Server-side (migration 090): both PINs change in ONE atomic call and the CURRENT admin
+    // Server-side (migration 091): both PINs change in ONE atomic call and the CURRENT admin
     // PIN is required as proof. Never write raw or client-hashed values to salon_pins.
     var token = await getValidAccessToken();
     var result = await changeSalonPins({

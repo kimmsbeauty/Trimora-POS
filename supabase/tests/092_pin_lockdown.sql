@@ -1,5 +1,5 @@
--- supabase/tests/091_pin_lockdown.sql
--- STAGING ONLY, with 090 AND 091 applied (and staging mirroring production's PIN functions).
+-- supabase/tests/092_pin_lockdown.sql
+-- STAGING ONLY, with 091 AND 092 applied (and staging mirroring production's PIN functions).
 -- Proves the old unconditional path is closed AND that everything legitimate still works.
 -- Self-cleaning; expected FAILED=0; NULL counts as failure.
 
@@ -61,17 +61,17 @@ begin
   perform pg_temp.as_claims(pwn,'authenticated','select count(*) from complete_salon_onboarding(''Brand New'',''brand-new'',''1357'',''2468'',''tok-s'')');
   insert into t_res select 'ONBOARDING still creates both PIN rows (definer needs no client grant)', (select count(*) from salon_pins p join salons s on s.id=p.salon_id where s.slug='brand-new')=2, (select count(*) from salon_pins p join salons s on s.id=p.salon_id where s.slug='brand-new')::text;
   insert into t_res select 'new business can sign in with its onboarding admin PIN', pg_temp.as_claims(pwn,'authenticated','select verify_staff_pin(''admin'',''2468'')::text')='true', null;
-  -- the guard in 091 really refuses when a replacement function is missing (rolled back with the test)
+  -- the guard in 092 really refuses when a replacement function is missing (rolled back with the test)
   drop function public.reset_salon_admin_pin_via_recovery(text);
   begin
     execute $g$ do $$ begin
       if to_regprocedure('public.change_salon_pins(text, text, text)') is null
          or to_regprocedure('public.reset_salon_admin_pin_via_recovery(text)') is null then
-        raise exception '091 refused: apply 090 first (replacement functions are missing)';
+        raise exception '092 refused: apply 091 first (replacement functions are missing)';
       end if; end $$ $g$;
-    insert into t_res values ('091 guard refuses when a replacement function is missing', false, 'guard did not fire');
+    insert into t_res values ('092 guard refuses when a replacement function is missing', false, 'guard did not fire');
   exception when others then
-    insert into t_res values ('091 guard refuses when a replacement function is missing', sqlerrm like '%091 refused%', sqlerrm);
+    insert into t_res values ('092 guard refuses when a replacement function is missing', sqlerrm like '%092 refused%', sqlerrm);
   end;
 
   select count(*) filter (where ok is not true) into fails from t_res;

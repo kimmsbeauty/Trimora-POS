@@ -85,7 +85,7 @@ export default function ResetPasswordPage() {
       return setError("Session expired. Please request a new reset link.");
     }
 
-    // Reset the admin PIN. Needs the email-link session (migration 090); see src/lib/pinApi.js
+    // Reset the admin PIN. Needs the email-link session (migration 091); see src/lib/pinApi.js
     // for the temporary legacy fallback.
     var pinResult = await resetAdminPinViaRecovery({ token: token, newPin: newPin });
 
