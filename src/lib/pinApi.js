@@ -3,7 +3,7 @@
 // The ONLY client code that changes a salon PIN. Shared by SalonSettingsPage, AutoSettingsPage,
 // ResetPinPage and ResetPasswordPage so the security-sensitive calls live in one tested place.
 //
-// Server side: supabase/migrations/091_pin_step_up.sql (and 092, held).
+// Server side: supabase/migrations/091_pin_step_up.sql (and 093, held).
 //   change_salon_pins(current_admin_pin, new_staff_pin?, new_admin_pin?) -> boolean
 //       Settings pages. Needs the CURRENT admin PIN. true = changed, false = wrong PIN.
 //   reset_salon_admin_pin_via_recovery(new_pin)
@@ -65,12 +65,12 @@ export async function changeSalonPins(opts) {
 
 // Forgot-PIN pages (the owner cannot supply the current PIN). Uses the email-link-only function.
 //
-// TEMPORARY FALLBACK: until migration 092 removes it, fall back to the old update_salon_pin if the
+// TEMPORARY FALLBACK: until migration 093 removes it, fall back to the old update_salon_pin if the
 // new function is missing (404 / PGRST202: 091 not applied yet) or reports that it does not
 // recognise the session as an email-link session. The recovery check relies on the JWT amr
 // claim, which has been verified against production's recorded session methods but not with a
 // real recovery email. The fallback guarantees an owner can never be locked out of recovery.
-// Once the owner has completed a real recovery through the new path and 092 is applied, delete
+// Once the owner has completed a real recovery through the new path and 093 is applied, delete
 // the fallback and the legacy call.
 export async function resetAdminPinViaRecovery(opts) {
   var res;

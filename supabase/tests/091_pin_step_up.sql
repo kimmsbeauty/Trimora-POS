@@ -49,7 +49,7 @@ begin
 
   -- ---- baseline facts that justify the fix
   insert into t_res select 'authenticated has no table access to salon_pins (policies inert)', pg_temp.as_claims(pw1,'authenticated','select count(*) from salon_pins') like 'ERR:%permission denied%', null;
-  insert into t_res select 'THE HOLE (pre-092): a staff-PIN device can set the ADMIN PIN via the old function', pg_temp.as_claims(pw1,'authenticated','select update_salon_pin(''admin'',''0420'')::text') is not null
+  insert into t_res select 'THE HOLE (pre-093): a staff-PIN device can set the ADMIN PIN via the old function', pg_temp.as_claims(pw1,'authenticated','select update_salon_pin(''admin'',''0420'')::text') is not null
      and pg_temp.as_claims(pw1,'authenticated','select verify_staff_pin(''admin'',''0420'')::text')='true', null;
   perform pg_temp.as_claims(pw1,'authenticated','select update_salon_pin(''admin'',''9999'')::text');   -- put it back
 

@@ -1,4 +1,4 @@
--- 092_pin_lockdown.sql
+-- 093_pin_lockdown.sql
 --
 -- Salon PIN hardening, part 2 of 2: remove the old unconditional PIN-change path.
 --
@@ -7,7 +7,7 @@
 --      reset_salon_admin_pin_via_recovery is deployed to production, and
 --   2. the owner has completed a REAL forgot-PIN recovery (email link) end to end and confirmed it
 --      worked through the new function. The reset pages carry a fallback to the old function
---      until then; applying 092 removes that safety net, so a recovery that only ever worked via
+--      until then; applying 093 removes that safety net, so a recovery that only ever worked via
 --      the fallback would break.
 --
 -- WHAT IT DOES
@@ -32,7 +32,7 @@ do $$
 begin
   if to_regprocedure('public.change_salon_pins(text, text, text)') is null
      or to_regprocedure('public.reset_salon_admin_pin_via_recovery(text)') is null then
-    raise exception '092 refused: apply 091 first (replacement functions are missing)';
+    raise exception '093 refused: apply 091 first (replacement functions are missing)';
   end if;
 end $$;
 
