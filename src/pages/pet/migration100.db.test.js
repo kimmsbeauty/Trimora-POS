@@ -3,7 +3,7 @@
 // Behavioural test of migration 100 (manual reminder queue) against a REAL Postgres
 // engine (PGlite, in process), using the repo's real pet migrations 083-097 and 100.
 // The platform stand-in (salons, customers, staff, auth) is NOT the live schema; the
-// customers stand-in carries the two columns 099 reads (phone, marketing_opt_out),
+// customers stand-in carries the two columns 100 reads (phone, marketing_opt_out),
 // verified against the live table on 2026-10-25.
 // Note: PGlite is a single connection, so "double submit" is tested as two sequential
 // calls, not true parallel sessions; the unique index is what guarantees it in production.

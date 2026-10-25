@@ -5,8 +5,8 @@
 // invoices. The client only READS the tables; payments and voids go through the
 // pet_* database functions. Overdue is derived from the due date, not stored.
 //
-// Not built yet: refunds (so a paid invoice cannot be voided), M-Pesa STK push
-// and automatic callback matching (M-Pesa payments are recorded by receipt code).
+// M-Pesa: "Send M-Pesa request" starts an STK push (migration 099); recording by M-Pesa
+// code stays available as a fallback. Not built yet: refunds (so a paid invoice cannot be voided).
 import React, { useEffect, useMemo, useState } from "react";
 import { db, dbRpcAuth } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
@@ -18,16 +18,17 @@ import {
 import InvoiceDocument from "./InvoiceDocument";
 import ReceiptDocument from "./ReceiptDocument";
 import { sortedPayments, latestPaymentId, receiptFor } from "./receiptData";
+import MpesaStkPush from "./MpesaStkPush";
 import { PageHeader, Card, Button, Field, Badge, Modal, ErrorLine, EmptyState, inputStyle } from "./ui";
 
 var PAGE = 50;
 
-export default function InvoicesPage({ openInvoiceId, onDetailClosed }) {
+export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialStatus }) {
   var salon = useSalon();
   var dataState = useState(null); var data = dataState[0]; var setData = dataState[1];
   var statusState = useState("loading"); var loadStatus = statusState[0]; var setLoadStatus = statusState[1];
   var tickState = useState(0); var tick = tickState[0]; var setTick = tickState[1];
-  var fState = useState({ q: "", status: "all" }); var filters = fState[0]; var setFilters = fState[1];
+  var fState = useState({ q: "", status: initialStatus || "all" }); var filters = fState[0]; var setFilters = fState[1];
   var shownState = useState(PAGE); var shown = shownState[0]; var setShown = shownState[1];
   var detailState = useState(openInvoiceId || null); var detailId = detailState[0]; var setDetailId = detailState[1];
   var payState = useState({ method: "cash", amount: "", reference: "" }); var pay = payState[0]; var setPay = payState[1];
@@ -128,6 +129,7 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed }) {
           onChange={function (e) { setF("q", e.target.value); }} style={Object.assign({}, inputStyle, { flex: "1 1 220px", width: "auto" })} />
         <select aria-label="Filter by status" value={filters.status} onChange={function (e) { setF("status", e.target.value); }} style={Object.assign({}, inputStyle, { width: 160 })}>
           <option value="all">All statuses</option>
+          <option value="outstanding">Outstanding (unpaid or part paid)</option>
           {["issued", "partial", "paid", "overdue", "void"].map(function (s) { return <option key={s} value={s}>{STATUS_LABELS[s]}</option>; })}
         </select>
       </Card>
@@ -172,6 +174,14 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed }) {
             {(detail.status === "issued" || detail.status === "partial") ? (
               <div style={{ marginTop: 14, padding: 12, border: "1px solid " + BORDER, borderRadius: 12, background: MUTED }}>
                 <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, color: FOREGROUND }}>Record a payment · {fmt(outstanding(detail))} owed</div>
+                {pay.method === "mpesa" ? (
+                  <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid " + BORDER }}>
+                    <MpesaStkPush key={detail.id + ":" + outstanding(detail)} salonId={salon && salon.id} invoice={detail} owed={outstanding(detail)}
+                      defaultPhone={(maps.customers[detail.customer_id] || {}).phone || ""} reference={detail.invoice_number}
+                      onRecorded={function () { setTick(tick + 1); }} />
+                    <div style={{ fontSize: 12, color: MUTED_FG, marginTop: 8 }}>Or record a payment the customer already made, using its M-Pesa code:</div>
+                  </div>
+                ) : null}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1.4fr", gap: 8 }}>
                   <Field label="Method" htmlFor="pay-method">
                     <select id="pay-method" style={inputStyle} value={pay.method} onChange={function (e) { setPay(Object.assign({}, pay, { method: e.target.value })); }}>

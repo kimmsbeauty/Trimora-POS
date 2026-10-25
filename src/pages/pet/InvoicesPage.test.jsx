@@ -29,7 +29,7 @@ function setup(opts) {
     return Promise.resolve(null);
   });
   mockRpc.mockImplementation(function () { return Promise.resolve(opts.rpcError ? { error: opts.rpcError } : { data: "ok" }); });
-  render(<InvoicesPage openInvoiceId={opts.open} />);
+  render(<InvoicesPage openInvoiceId={opts.open} initialStatus={opts.initialStatus} />);
 }
 
 describe("InvoicesPage", function () {
@@ -38,6 +38,19 @@ describe("InvoicesPage", function () {
   it("shows an error with retry when loading fails", async function () {
     setup({ fail: true });
     expect(await screen.findByText("Couldn't load invoices")).toBeTruthy();
+  });
+
+  it("opens on the status it was asked to (Overview shortcuts), and defaults to all", async function () {
+    setup({ initialStatus: "outstanding", invoices: [inv(), inv({ id: "i2", invoice_number: "INV-0002", status: "paid", amount_paid: 3000 })] });
+    await screen.findByText("INV-0001");
+    expect(screen.getByLabelText("Filter by status").value).toBe("outstanding");
+    expect(screen.queryByText("INV-0002")).toBeNull();
+  });
+
+  it("defaults to all statuses when opened normally", async function () {
+    setup();
+    await screen.findByText("INV-0001");
+    expect(screen.getByLabelText("Filter by status").value).toBe("all");
   });
 
   it("shows an honest empty state", async function () {

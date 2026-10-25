@@ -57,7 +57,9 @@ serve(async (req) => {
     // job_id is optional -- present when this push was initiated from
     // Trimora Auto's Board page (Section: Auto Phase 5). POS's checkout
     // never sends it, so this is purely additive.
-    const { salon_id, amount, phone, reference, job_id } = await req.json();
+    // pet_invoice_id is optional -- present when the push is started from a
+    // Trimora Pet invoice (migration 099). Salon and Auto never send it.
+    const { salon_id, amount, phone, reference, job_id, pet_invoice_id } = await req.json();
 
     if (!salon_id || !amount || !phone) {
       return new Response(
@@ -122,6 +124,37 @@ serve(async (req) => {
         JSON.stringify({ error: "This salon's account is currently suspended." }),
         { status: 403, headers: { ...CORS, "Content-Type": "application/json" } }
       );
+    }
+
+    // Pet: the push must be for a real, payable invoice of THIS business, and
+    // may not ask the customer for more than is still owed. The browser's
+    // amount is checked against the database, not trusted.
+    if (pet_invoice_id) {
+      const { data: invRow } = await supabase
+        .from("pet_invoices")
+        .select("status, total, amount_paid")
+        .eq("id", pet_invoice_id)
+        .eq("salon_id", salon_id)
+        .maybeSingle();
+      if (!invRow) {
+        return new Response(
+          JSON.stringify({ error: "Invoice not found." }),
+          { status: 404, headers: { ...CORS, "Content-Type": "application/json" } }
+        );
+      }
+      const owed = Number(invRow.total) - Number(invRow.amount_paid || 0);
+      if ((invRow.status !== "issued" && invRow.status !== "partial") || owed <= 0) {
+        return new Response(
+          JSON.stringify({ error: "This invoice can't take a payment." }),
+          { status: 409, headers: { ...CORS, "Content-Type": "application/json" } }
+        );
+      }
+      if (!Number.isInteger(Number(amount)) || Number(amount) <= 0 || Number(amount) > owed) {
+        return new Response(
+          JSON.stringify({ error: "The amount is more than is still owed on this invoice." }),
+          { status: 400, headers: { ...CORS, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // Normalise phone to 254XXXXXXXXX format
@@ -259,6 +292,7 @@ serve(async (req) => {
         phone:     cleanPhone,
         reference: reference || null,
         job_id:    job_id || null,
+        ...(pet_invoice_id ? { pet_invoice_id } : {}),
         status:    "pending",
         callback_token: callbackToken,
       });

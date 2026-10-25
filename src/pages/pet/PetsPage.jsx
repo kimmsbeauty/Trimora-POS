@@ -7,7 +7,7 @@
 //
 // Permissions note: admin/staff is a UI split only (shared device session).
 // No allergy/medical field exists yet by design -- see migration 083.
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { db } from "../../lib/db";
 import { petBlockMessage, unknownDeleteFailure } from "./deleteGuards";
 import {
@@ -34,7 +34,8 @@ function draftFromPet(p) {
   };
 }
 
-export default function PetsPage() {
+// startNew (optional, from the Overview): open the add-pet form once, when the list is ready. The form can also create the owner.
+export default function PetsPage({ startNew }) {
   var petsState = useState(null); var pets = petsState[0]; var setPets = petsState[1];
   var ownersState = useState([]); var owners = ownersState[0]; var setOwners = ownersState[1];
   var vaccState = useState([]); var vaccs = vaccState[0]; var setVaccs = vaccState[1];
@@ -78,6 +79,11 @@ export default function PetsPage() {
     });
     return function () { cancelled = true; };
   }, [attempt]);
+
+  var startedRef = useRef(false);
+  useEffect(function () {
+    if (startNew && loadStatus === "ready" && !startedRef.current) { startedRef.current = true; openAdd(); }
+  }, [startNew, loadStatus]); // eslint-disable-line
 
   var ownersById = useMemo(function () {
     var m = {}; owners.forEach(function (o) { m[o.id] = o; }); return m;
