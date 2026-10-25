@@ -30,8 +30,10 @@
 -- NOT TOUCHED: update_salon_pin, verify_staff_pin, verify_pin_for_device_login,
 -- super_admin_reset_salon_pin, complete_salon_onboarding, the lockout function, pgcrypto.
 --
--- STATUS: written for owner review; tested on the staging project (see supabase/tests/
--- 091_pin_step_up.sql). NOT applied to production.
+-- STATUS: applied to production 2026-10-24 on the owner's instruction. Tested first on the
+-- staging project (supabase/tests/091_pin_step_up.sql). Verified live from the catalog:
+-- both functions SECURITY DEFINER with search_path pinned, EXECUTE for authenticated only (anon
+-- none), existing PIN functions untouched, old update_salon_pin still open until 093.
 --
 -- KNOWN LIMITS
 --   * The recovery check relies on the amr claim. It is verified against production's recorded
