@@ -4,27 +4,35 @@
 // (migration 088) is the authority on conflicts and on allowed status changes;
 // the checks here only give faster, friendlier feedback.
 //
+// Statuses follow the approved prototype (booked / checked-in / in-progress / ready /
+// completed / cancelled) plus no-show (migration 092).
+//
 // Dates: bookings are stored as timestamptz. These helpers use the browser's
 // local time for display and input, via plain Date objects.
 
-export var STATUSES = ["pending", "confirmed", "checked-in", "in-progress", "completed", "cancelled", "no-show"];
+export var STATUSES = ["booked", "checked-in", "in-progress", "ready", "completed", "cancelled", "no-show"];
+// Labels and badge colours copied from the prototype's bookingStatusMeta (no-show is new).
 export var STATUS_LABELS = {
-  pending: "Pending", confirmed: "Confirmed", "checked-in": "Checked in", "in-progress": "In progress",
+  booked: "Booked", "checked-in": "Checked In", "in-progress": "In Progress", ready: "Ready for Collection",
   completed: "Completed", cancelled: "Cancelled", "no-show": "No-show",
 };
 export var STATUS_TONES = {
-  pending: "warning", confirmed: "info", "checked-in": "info", "in-progress": "info",
-  completed: "success", cancelled: "neutral", "no-show": "danger",
+  booked: "info", "checked-in": "gold", "in-progress": "warning", ready: "violet",
+  completed: "success", cancelled: "danger", "no-show": "neutral",
 };
-// Same moves the database allows (088_pet_bookings.sql).
+// Same moves the database allows (092_pet_booking_statuses.sql).
 export var NEXT_STATUSES = {
-  pending: ["confirmed", "checked-in", "cancelled"],
-  confirmed: ["checked-in", "cancelled", "no-show"],
+  booked: ["checked-in", "cancelled", "no-show"],
   "checked-in": ["in-progress", "cancelled"],
-  "in-progress": ["completed"],
+  "in-progress": ["ready"],
+  ready: ["completed"],
   completed: [], cancelled: [], "no-show": [],
 };
-export var EDITABLE = ["pending", "confirmed", "checked-in"];
+// Button wording for moving a booking to each status.
+export var STATUS_ACTIONS = {
+  "checked-in": "Check in", "in-progress": "Start", ready: "Mark ready", completed: "Complete", "no-show": "Mark no-show",
+};
+export var EDITABLE = ["booked", "checked-in"];
 // Cancelled and no-show bookings free their slot.
 export function isActive(b) { return b.status !== "cancelled" && b.status !== "no-show"; }
 
