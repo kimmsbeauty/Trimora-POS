@@ -37,7 +37,7 @@ async function fetchAll() {
     db("GET", "pet_kennels", null, "?select=*&order=name.asc&limit=500"),
     db("GET", "pet_boarding_stays", null, "?select=*&order=check_in_on.asc&limit=3000"),
     db("GET", "customers", null, "?select=id,name,phone&order=name.asc&limit=2000"),
-    db("GET", "pet_pets", null, "?select=id,customer_id,name,species&order=name.asc&limit=5000"),
+    db("GET", "pet_pets", null, "?select=id,customer_id,name,species,archived_at&order=name.asc&limit=5000"),
     db("GET", "pet_vaccinations", null, "?select=id,pet_id,next_due_on&limit=5000"),
     db("GET", "pet_services", null, "?select=id,name,category,price,active&order=name.asc&limit=1000"),
   ]);
@@ -163,7 +163,7 @@ export default function BoardingPage({ canEdit }) {
 
   // ---- form helpers ----
   var draft = stayForm ? stayForm.draft : null;
-  var ownerPets = draft ? data.pets.filter(function (p) { return p.customer_id === draft.customer_id; }) : [];
+  var ownerPets = draft ? data.pets.filter(function (p) { return p.customer_id === draft.customer_id && (!p.archived_at || p.id === draft.pet_id); }) : [];
   var formKennels = kennels.filter(function (k) { return !k.maintenance || (draft && k.id === draft.kennel_id); });
   var conflict = draft && draft.kennel_id && draft.check_in_on && draft.check_out_on >= draft.check_in_on
     ? findStayConflict(stays, draft, stayForm.id) : null;

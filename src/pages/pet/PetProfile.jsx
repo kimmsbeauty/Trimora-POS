@@ -4,13 +4,13 @@
 import React, { useState } from "react";
 import { db } from "../../lib/db";
 import { MUTED_FG, BORDER, FOREGROUND } from "./theme";
-import { ageLabel, vaccinationStatus, validateVaccination } from "./petData";
+import { ageLabel, vaccinationStatus, validateVaccination, warnDaysFor, RECORD_TYPES, recordTypeLabel, isArchived, archiveReasonLabel } from "./petData";
 import { Modal, Button, Field, Badge, ErrorLine, inputStyle } from "./ui";
 
 var STATUS_BADGE = {
   current: { tone: "success", label: "Current" },
   "due-soon": { tone: "warning", label: "Due soon" },
-  overdue: { tone: "danger", label: "Overdue" },
+  overdue: { tone: "danger", label: "Expired" },
 };
 
 function fmtDate(iso) {
@@ -29,8 +29,8 @@ function Row({ label, value }) {
   );
 }
 
-export default function PetProfile({ pet, owner, vaccinations, onVaccinationsChange, onClose, onEdit }) {
-  var draftState = useState({ vaccine: "", given_on: "", next_due_on: "" });
+export default function PetProfile({ pet, owner, vaccinations, windows, onVaccinationsChange, onClose, onEdit }) {
+  var draftState = useState({ record_type: "vaccination", vaccine: "", given_on: "", next_due_on: "" });
   var draft = draftState[0]; var setDraft = draftState[1];
   var errState = useState(""); var err = errState[0]; var setErr = errState[1];
   var savingState = useState(false); var saving = savingState[0]; var setSaving = savingState[1];
@@ -43,12 +43,12 @@ export default function PetProfile({ pet, owner, vaccinations, onVaccinationsCha
     var msg = validateVaccination(draft);
     if (msg) { setErr(msg); return; }
     setSaving(true); setErr("");
-    var row = { pet_id: pet.id, vaccine: draft.vaccine.trim(), given_on: draft.given_on, next_due_on: draft.next_due_on || null };
+    var row = { pet_id: pet.id, record_type: draft.record_type || "vaccination", vaccine: draft.vaccine.trim(), given_on: draft.given_on, next_due_on: draft.next_due_on || null };
     var res = await db("POST", "pet_vaccinations", row);
     setSaving(false);
-    if (!Array.isArray(res) || !res[0]) { setErr("Couldn't save the vaccination. Check your connection and try again."); return; }
+    if (!Array.isArray(res) || !res[0]) { setErr("Couldn't save the record. Check your connection and try again."); return; }
     onVaccinationsChange(vaccinations.concat([res[0]]));
-    setDraft({ vaccine: "", given_on: "", next_due_on: "" });
+    setDraft({ record_type: draft.record_type, vaccine: "", given_on: "", next_due_on: "" });
   }
 
   async function removeVaccination(v) {
@@ -68,6 +68,7 @@ export default function PetProfile({ pet, owner, vaccinations, onVaccinationsCha
       description={pet.species + (pet.breed ? " · " + pet.breed : "") + " · " + ageLabel(pet.date_of_birth)}
       footer={<><Button variant="outline" onClick={onEdit}>Edit pet</Button><Button onClick={onClose}>Close</Button></>}>
       <div style={{ borderBottom: "1px solid " + BORDER, paddingBottom: 8, marginBottom: 12 }}>
+        {isArchived(pet) ? <Row label="Status" value={"Archived (" + archiveReasonLabel(pet.archived_reason) + ")"} /> : null}
         <Row label="Owner" value={owner ? owner.name + (owner.phone ? " · " + owner.phone : "") : "Unknown"} />
         <Row label="Sex" value={pet.sex} />
         <Row label="Colour" value={pet.color} />
@@ -76,18 +77,19 @@ export default function PetProfile({ pet, owner, vaccinations, onVaccinationsCha
         <Row label="Grooming notes" value={pet.grooming_notes} />
       </div>
 
-      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8, color: FOREGROUND }}>Vaccinations</div>
+      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8, color: FOREGROUND }}>Vaccinations and preventive care</div>
       {sorted.length === 0 ? (
-        <p style={{ margin: "0 0 12px", color: MUTED_FG, fontSize: 13 }}>No vaccinations recorded yet.</p>
+        <p style={{ margin: "0 0 12px", color: MUTED_FG, fontSize: 13 }}>No vaccination or preventive-care records yet.</p>
       ) : (
         <ul style={{ listStyle: "none", margin: "0 0 12px", padding: 0, display: "grid", gap: 8 }}>
           {sorted.map(function (v) {
-            var s = vaccinationStatus(v.next_due_on);
+            var warn = warnDaysFor(windows, v.record_type);
+            var s = vaccinationStatus(v.next_due_on, undefined, warn);
             var badge = s ? STATUS_BADGE[s] : null;
             return (
               <li key={v.id} style={{ border: "1px solid " + BORDER, borderRadius: 12, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 13 }}>{v.vaccine}</div>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>{v.vaccine} <span style={{ fontWeight: 400, color: MUTED_FG }}>· {recordTypeLabel(v.record_type)}</span></div>
                   <div style={{ fontSize: 12, color: MUTED_FG }}>Given {fmtDate(v.given_on)} · Next due {v.next_due_on ? fmtDate(v.next_due_on) : "not set"}</div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -108,13 +110,18 @@ export default function PetProfile({ pet, owner, vaccinations, onVaccinationsCha
       )}
 
       <div style={{ border: "1px solid " + BORDER, borderRadius: 12, padding: 12, display: "grid", gap: 10 }}>
-        <div style={{ fontSize: 12, fontWeight: 700 }}>Add a vaccination</div>
-        <Field label="Vaccine" htmlFor="vacc-name"><input id="vacc-name" style={inputStyle} value={draft.vaccine} onChange={function (e) { setField("vaccine", e.target.value); }} placeholder="e.g. Rabies" /></Field>
+        <div style={{ fontSize: 12, fontWeight: 700 }}>Add a record</div>
+        <Field label="Type" htmlFor="vacc-type">
+          <select id="vacc-type" style={inputStyle} value={draft.record_type} onChange={function (e) { setField("record_type", e.target.value); }}>
+            {RECORD_TYPES.map(function (t) { return <option key={t.key} value={t.key}>{t.label}</option>; })}
+          </select>
+        </Field>
+        <Field label={draft.record_type === "vaccination" ? "Vaccine" : "Treatment"} htmlFor="vacc-name"><input id="vacc-name" style={inputStyle} value={draft.vaccine} onChange={function (e) { setField("vaccine", e.target.value); }} placeholder="e.g. Rabies" /></Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <Field label="Given on" htmlFor="vacc-given"><input id="vacc-given" type="date" style={inputStyle} value={draft.given_on} onChange={function (e) { setField("given_on", e.target.value); }} /></Field>
           <Field label="Next due (optional)" htmlFor="vacc-due"><input id="vacc-due" type="date" style={inputStyle} value={draft.next_due_on} onChange={function (e) { setField("next_due_on", e.target.value); }} /></Field>
         </div>
-        <div><Button size="sm" onClick={addVaccination} disabled={saving}>{saving ? "Saving…" : "Add vaccination"}</Button></div>
+        <div><Button size="sm" onClick={addVaccination} disabled={saving}>{saving ? "Saving…" : "Add record"}</Button></div>
         <ErrorLine>{err}</ErrorLine>
       </div>
     </Modal>
