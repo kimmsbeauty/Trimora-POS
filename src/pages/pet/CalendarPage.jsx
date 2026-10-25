@@ -53,7 +53,7 @@ export default function CalendarPage() {
     setLookStatus("loading");
     Promise.all([
       db("GET", "customers", null, "?select=id,name,phone&order=name.asc&limit=2000"),
-      db("GET", "pet_pets", null, "?select=id,customer_id,name,species&order=name.asc&limit=5000"),
+      db("GET", "pet_pets", null, "?select=id,customer_id,name,species,archived_at&order=name.asc&limit=5000"),
       db("GET", "staff", null, "?select=id,name,role,active&order=name.asc&limit=500"),
       db("GET", "pet_services", null, "?select=id,name,category,price,duration_minutes,species,active&active=eq.true&order=name.asc&limit=1000"),
     ]).then(function (res) {
@@ -228,7 +228,7 @@ export default function CalendarPage() {
   var formCtx = form ? formContext() : null;
   var warnings = draft ? bookingWarnings(draft, formCtx) : [];
   var chosenPet = formCtx ? formCtx.pet : null;
-  var petsOfCustomer = form ? look.pets.filter(function (p) { return p.customer_id === form.draft.customer_id; }) : [];
+  var petsOfCustomer = form ? look.pets.filter(function (p) { return p.customer_id === form.draft.customer_id && (!p.archived_at || p.id === form.draft.pet_id); }) : [];
 
   return (
     <div>
