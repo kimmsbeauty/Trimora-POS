@@ -29,6 +29,7 @@ function setup(opts) {
     if (table === "customers") return Promise.resolve(CUSTOMERS);
     if (table === "pet_pets") return Promise.resolve(PETS);
     if (table === "pet_services") return Promise.resolve(opts.noServices ? [] : SERVICES);
+    if (table === "pet_items") return Promise.resolve(opts.noItems ? [] : [{ id: "i1", name: "Dog food", price: 1200, unit: "each", quantity_on_hand: 3 }]);
     if (table === "pet_bookings") return Promise.resolve(BOOKINGS);
     if (table === "pet_invoices") return Promise.resolve([{ booking_id: "b2" }]); // b2 already invoiced
     return Promise.resolve(null);
@@ -42,7 +43,7 @@ function setup(opts) {
 async function fillBasic() {
   await screen.findByText("1. Customer and visit");
   fireEvent.change(screen.getByLabelText("Customer"), { target: { value: "c1" } });
-  fireEvent.change(screen.getByLabelText("Service 1"), { target: { value: "s1" } });
+  fireEvent.change(screen.getByLabelText("Item 1"), { target: { value: "service:s1" } });
 }
 
 describe("CheckoutPage", function () {
@@ -53,8 +54,8 @@ describe("CheckoutPage", function () {
     expect(await screen.findByText("Couldn't load checkout")).toBeTruthy();
   });
 
-  it("explains what to do when there are no services", async function () {
-    setup({ noServices: true });
+  it("explains what to do when there are no services or products", async function () {
+    setup({ noServices: true, noItems: true });
     expect(await screen.findByText("No services to sell")).toBeTruthy();
   });
 
@@ -74,7 +75,7 @@ describe("CheckoutPage", function () {
     var options = screen.getByLabelText("Booking (optional)").querySelectorAll("option");
     expect(options.length).toBe(2); // walk-in + b1 only (b2 is invoiced)
     fireEvent.change(screen.getByLabelText("Booking (optional)"), { target: { value: "b1" } });
-    expect(screen.getByLabelText("Service 1").value).toBe("s1");
+    expect(screen.getByLabelText("Item 1").value).toBe("service:s1");
     expect(screen.getByText(/no longer in the active catalogue/)).toBeTruthy();
   });
 
@@ -120,5 +121,40 @@ describe("CheckoutPage", function () {
     fireEvent.click(screen.getByRole("button", { name: "Complete sale" }));
     await waitFor(function () { expect(mockRpc).toHaveBeenCalledTimes(2); });
     expect(mockRpc.mock.calls[0][1].p_idempotency_key).toBe(mockRpc.mock.calls[1][1].p_idempotency_key);
+  });
+
+  it("sells a product line by item id, shows stock, and sends no price", async function () {
+    var onCreated = setup();
+    await screen.findByText("1. Customer and visit");
+    fireEvent.change(screen.getByLabelText("Customer"), { target: { value: "c1" } });
+    expect(screen.getByRole("option", { name: /Dog food · KES 1,200 · 3 in stock/ })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Item 1"), { target: { value: "item:i1" } });
+    fireEvent.change(screen.getByLabelText("Quantity 1"), { target: { value: "2" } });
+    expect(screen.getByText("Total").nextSibling.textContent).toBe("KES 2,400");
+    fireEvent.click(screen.getByRole("button", { name: "Complete sale" }));
+    await waitFor(function () { expect(onCreated).toHaveBeenCalledWith("inv-1"); });
+    var call = mockRpc.mock.calls[0][1];
+    expect(call.p_lines).toEqual([{ item_id: "i1", quantity: 2 }]);
+    expect(JSON.stringify(call)).not.toMatch(/price|total|subtotal/i);
+  });
+
+  it("warns before sending when a product quantity is more than the stock loaded", async function () {
+    setup();
+    await screen.findByText("1. Customer and visit");
+    fireEvent.change(screen.getByLabelText("Customer"), { target: { value: "c1" } });
+    fireEvent.change(screen.getByLabelText("Item 1"), { target: { value: "item:i1" } });
+    fireEvent.change(screen.getByLabelText("Quantity 1"), { target: { value: "5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Complete sale" }));
+    expect(await screen.findByText("There isn't enough Dog food in stock (3 left).")).toBeTruthy();
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it("shows the database's own message when it refuses for stock", async function () {
+    setup({ rpcError: "INSUFFICIENT_STOCK" });
+    await screen.findByText("1. Customer and visit");
+    fireEvent.change(screen.getByLabelText("Customer"), { target: { value: "c1" } });
+    fireEvent.change(screen.getByLabelText("Item 1"), { target: { value: "item:i1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Complete sale" }));
+    expect(await screen.findByText(/There isn't enough stock of a product on this sale/)).toBeTruthy();
   });
 });
