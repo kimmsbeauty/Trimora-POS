@@ -1,6 +1,6 @@
 // src/pages/pet/RemindersPage.jsx
 //
-// Manual reminders (migration 099). The page lists what is due, staff prepare a
+// Manual reminders (migration 100). The page lists what is due, staff prepare a
 // message, open it in WhatsApp or SMS on their own device, then record what happened.
 // NOTHING IS SENT AUTOMATICALLY and the app cannot see whether a message was delivered:
 // "Sent" means a staff member says they sent it. Automated delivery is a later phase.
@@ -57,7 +57,7 @@ export default function RemindersPage() {
     ]).then(function (res) {
       if (cancelled) return;
       for (var i = 0; i < 5; i++) { if (!Array.isArray(res[i])) { setLoadStatus("error"); return; } }
-      // The reminders table is missing until migration 099 is applied: say so plainly.
+      // The reminders table is missing until migration 100 is applied: say so plainly.
       if (!Array.isArray(res[5])) { setLoadStatus("needs-db"); return; }
       setData({ bookings: res[0], pets: res[1], customers: res[2], vaccinations: res[3], stays: res[4], reminders: res[5], now: now });
       setLoadStatus("ready");
@@ -125,7 +125,7 @@ export default function RemindersPage() {
   if (loadStatus === "needs-db") {
     return (
       <div><PageHeader title="Reminders" />
-        <Card><EmptyState title="Reminders need a database update" description="The reminder tables haven't been set up for this system yet. Ask your administrator to apply migration 099, then refresh." action={<Button onClick={reload}>Refresh</Button>} /></Card>
+        <Card><EmptyState title="Reminders need a database update" description="The reminder tables haven't been set up for this system yet. Ask your administrator to apply migration 100, then refresh." action={<Button onClick={reload}>Refresh</Button>} /></Card>
       </div>
     );
   }

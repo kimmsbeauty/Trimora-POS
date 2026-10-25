@@ -1,9 +1,9 @@
--- 099_pet_reminders.sql
+-- 100_pet_reminders.sql
 --
 -- Trimora Pet -- manual reminder queue and delivery history (Module C, first slice).
 --
 -- STATUS: written for owner review. NOT applied anywhere. Apply by hand only
--- after the owner says "apply 099".
+-- after the owner says "apply 100".
 --
 -- WHAT THIS IS: staff-driven reminders. The app lists what is due (upcoming
 -- appointments, vaccinations due, boarding collections, missed appointments,

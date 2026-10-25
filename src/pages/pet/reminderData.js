@@ -1,6 +1,6 @@
 // src/pages/pet/reminderData.js
 //
-// Pure logic for the manual reminders screen (migration 099). Works out what is due
+// Pure logic for the manual reminders screen (migration 100). Works out what is due
 // from bookings, vaccinations and boarding stays, builds message text and WhatsApp /
 // SMS links, and translates database errors. Nothing here sends anything: a link only
 // opens the staff member's own WhatsApp or SMS app, and staff then record the result.
@@ -57,7 +57,7 @@ export function channelUrl(channel, phone, text) {
   return channel === "sms" ? smsUrl(phone, text) : whatsappUrl(phone, text);
 }
 
-// ---- stable keys (must match pet_queue_reminder in migration 099) ------------------
+// ---- stable keys (must match pet_queue_reminder in migration 100) ------------------
 
 export function bookingBasis(startsAtIso) {
   var d = new Date(startsAtIso);

@@ -1,7 +1,7 @@
 // @vitest-environment node
 //
-// Behavioural test of migration 099 (manual reminder queue) against a REAL Postgres
-// engine (PGlite, in process), using the repo's real pet migrations 083-097 and 099.
+// Behavioural test of migration 100 (manual reminder queue) against a REAL Postgres
+// engine (PGlite, in process), using the repo's real pet migrations 083-097 and 100.
 // The platform stand-in (salons, customers, staff, auth) is NOT the live schema; the
 // customers stand-in carries the two columns 099 reads (phone, marketing_opt_out),
 // verified against the live table on 2026-10-25.
@@ -59,7 +59,7 @@ beforeAll(async function () {
   `);
   var files = ["083_pet_pets_vaccinations.sql", "084_pet_customer_profiles.sql", "085_pet_services.sql", "086_pet_roles.sql",
     "087_pet_audit_log.sql", "088_pet_bookings.sql", "092_pet_booking_statuses.sql", "089_pet_boarding.sql",
-    "096_pet_delete_kennel_fix.sql", "097_pet_archiving.sql", "099_pet_reminders.sql"];
+    "096_pet_delete_kennel_fix.sql", "097_pet_archiving.sql", "100_pet_reminders.sql"];
   for (var f of files) { await db.exec(sql(f)); }
   await db.exec(`
     insert into public.salons values ('${A}','A'),('${B}','B');
@@ -74,7 +74,7 @@ beforeAll(async function () {
   `);
 }, 60000);
 
-describe("migration 099: queueing is derived, validated and idempotent", function () {
+describe("migration 100: queueing is derived, validated and idempotent", function () {
   it("queues an appointment reminder, deriving customer, pet and key from the booking", async function () {
     await as(A);
     var b = await booking(PET1, CUST_A, "booked", "2026-12-01T09:00:00Z");
@@ -141,7 +141,7 @@ describe("migration 099: queueing is derived, validated and idempotent", functio
   });
 });
 
-describe("migration 099: consent, contact and archive rules", function () {
+describe("migration 100: consent, contact and archive rules", function () {
   it("refuses follow-ups for customers who opted out of marketing, but allows service reminders", async function () {
     await as(A);
     var done = await booking(PET_OUT, CUST_OUT, "completed", "2026-09-01T09:00:00Z");
@@ -180,7 +180,7 @@ describe("migration 099: consent, contact and archive rules", function () {
   });
 });
 
-describe("migration 099: status workflow", function () {
+describe("migration 100: status workflow", function () {
   async function fresh(day) {
     await as(A);
     var b = await booking(PET1, CUST_A, "booked", "2027-01-" + day + "T09:00:00Z");
@@ -214,7 +214,7 @@ describe("migration 099: status workflow", function () {
   });
 });
 
-describe("migration 099: tenant isolation and grants", function () {
+describe("migration 100: tenant isolation and grants", function () {
   it("another business can neither queue nor see these reminders", async function () {
     await as(A);
     var b = await booking(PET1, CUST_A, "booked", "2027-02-01T09:00:00Z");
