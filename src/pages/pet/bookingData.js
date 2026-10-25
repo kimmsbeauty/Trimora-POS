@@ -42,6 +42,8 @@ var ERROR_TEXT = {
   NO_SERVICES: "Choose at least one service.",
   CUSTOMER_NOT_FOUND: "That customer could not be found.",
   PET_NOT_FOUND: "That pet doesn't belong to the chosen customer.",
+  PET_ARCHIVED: "This pet is archived. Restore it on the Pets screen before booking.",
+  SERVICE_SPECIES_MISMATCH: "One of the chosen services isn't offered for this pet's species. Remove it or choose a different pet.",
   STAFF_NOT_FOUND: "That staff member isn't available.",
   SERVICE_NOT_FOUND: "One of the chosen services is no longer available.",
   BOOKING_CONFLICT_STAFF: "That staff member already has a booking at that time.",

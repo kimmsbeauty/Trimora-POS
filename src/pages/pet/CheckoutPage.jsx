@@ -41,7 +41,7 @@ export default function CheckoutPage({ onInvoiceCreated }) {
     setLoadStatus("loading");
     Promise.all([
       db("GET", "customers", null, "?select=id,name,phone&order=name.asc&limit=2000"),
-      db("GET", "pet_pets", null, "?select=id,customer_id,name,species&order=name.asc&limit=5000"),
+      db("GET", "pet_pets", null, "?select=id,customer_id,name,species,archived_at&order=name.asc&limit=5000"),
       db("GET", "pet_services", null, "?select=id,name,category,price,active&active=eq.true&order=name.asc&limit=1000"),
       db("GET", "pet_bookings", null, "?select=id,customer_id,pet_id,starts_at,status,pet_booking_services(service_id,service_name)&status=in.(checked-in,in-progress,ready,completed)&order=starts_at.desc&limit=300"),
       db("GET", "pet_invoices", null, "?select=booking_id&booking_id=not.is.null&status=neq.void&limit=2000"),
@@ -79,7 +79,7 @@ export default function CheckoutPage({ onInvoiceCreated }) {
     );
   }
 
-  var petsOfCustomer = data.pets.filter(function (p) { return p.customer_id === draft.customer_id; });
+  var petsOfCustomer = data.pets.filter(function (p) { return p.customer_id === draft.customer_id && !p.archived_at; });
   var bookingsOfCustomer = data.bookings.filter(function (b) { return b.customer_id === draft.customer_id; });
   // A line's ref is "service:<id>" or "item:<id>"; the price shown is the catalogue price.
   function lineSource(l) {

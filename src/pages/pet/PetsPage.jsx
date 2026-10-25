@@ -8,13 +8,14 @@
 // Permissions note: admin/staff is a UI split only (shared device session).
 // No allergy/medical field exists yet by design -- see migration 083.
 import React, { useEffect, useMemo, useState } from "react";
-import { db } from "../../lib/db";
+import { db, dbRpcAuth } from "../../lib/db";
 import { petBlockMessage, unknownDeleteFailure } from "./deleteGuards";
 import {
   MUTED_FG, MUTED, BORDER, FOREGROUND,
 } from "./theme";
 import {
   SPECIES, SEX, ageLabel, validatePet, petRow, isDuplicatePet, vaccinationSummary, filterPets,
+  ARCHIVE_REASONS, archiveReasonLabel, archiveErrorMessage, isArchived,
 } from "./petData";
 import { PageHeader, Card, Button, Field, Badge, Modal, ErrorLine, EmptyState, inputStyle } from "./ui";
 import PetProfile from "./PetProfile";
@@ -49,6 +50,10 @@ export default function PetsPage() {
   var formState = useState(null); var form = formState[0]; var setForm = formState[1]; // {mode, id, draft}
   var deletingState = useState(null); var deleting = deletingState[0]; var setDeleting = deletingState[1];
   var blockedState = useState(""); var blocked = blockedState[0]; var setBlocked = blockedState[1];
+  var settingsState = useState([]); var reminderSettings = settingsState[0]; var setReminderSettings = settingsState[1];
+  var viewState = useState("active"); var view = viewState[0]; var setView = viewState[1];
+  var archivingState = useState(null); var archiving = archivingState[0]; var setArchiving = archivingState[1];
+  var reasonState = useState(""); var archiveReason = reasonState[0]; var setArchiveReason = reasonState[1];
   var profileState = useState(null); var profileId = profileState[0]; var setProfileId = profileState[1];
   var savingState = useState(false); var saving = savingState[0]; var setSaving = savingState[1];
   var errState = useState(""); var err = errState[0]; var setErr = errState[1];
@@ -62,10 +67,13 @@ export default function PetsPage() {
       db("GET", "pet_pets", null, "?select=*&order=name.asc&limit=1000"),
       db("GET", "customers", null, "?select=id,name,phone&order=name.asc&limit=1000"),
       db("GET", "pet_vaccinations", null, "?select=id,pet_id,vaccine,given_on,next_due_on&order=given_on.desc&limit=5000"),
+      db("GET", "pet_reminder_settings", null, "?select=id,record_type,window_days&limit=200"),
     ]).then(function (res) {
       if (cancelled) return;
       // db() returns null when a request failed -- that is an error, not "no data".
       if (!Array.isArray(res[0]) || !Array.isArray(res[1]) || !Array.isArray(res[2])) { setLoadStatus("error"); return; }
+      // Reminder windows are optional: if they can't be loaded the default window is used.
+      setReminderSettings(Array.isArray(res[3]) ? res[3] : []);
       setPets(res[0]); setOwners(res[1]); setVaccs(res[2]); setLoadStatus("ready");
     });
     return function () { cancelled = true; };
@@ -82,7 +90,7 @@ export default function PetsPage() {
     return Object.keys(set).sort();
   }, [pets]);
 
-  var filtered = filterPets(pets || [], ownersById, q, species, breed);
+  var filtered = filterPets(pets || [], ownersById, q, species, breed, view);
   var pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   var safePage = Math.min(page, pageCount - 1);
   var visible = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
@@ -153,6 +161,28 @@ export default function PetsPage() {
     setDeleting(null);
   }
 
+  function openArchive(p) { setErr(""); setArchiveReason(""); setArchiving(p); }
+  function closeArchive() { if (!saving) { setArchiving(null); setErr(""); } }
+  async function confirmArchive() {
+    if (saving || !archiving) return;
+    if (!archiveReason) { setErr(archiveErrorMessage("INVALID_ARCHIVE_REASON")); return; }
+    var id = archiving.id; var reason = archiveReason;
+    setSaving(true); setErr("");
+    var res = await dbRpcAuth("pet_set_archived", { p_id: id, p_archived: true, p_reason: reason });
+    setSaving(false);
+    if (res.error) { setErr(archiveErrorMessage(res.error)); return; }
+    setPets(pets.map(function (x) { return x.id === id ? Object.assign({}, x, { archived_at: new Date().toISOString(), archived_reason: reason }) : x; }));
+    setArchiving(null);
+  }
+  async function restorePet(pet) {
+    if (saving) return;
+    setSaving(true); setErr("");
+    var res = await dbRpcAuth("pet_set_archived", { p_id: pet.id, p_archived: false });
+    setSaving(false);
+    if (res.error) { setErr(archiveErrorMessage(res.error)); return; }
+    setPets(pets.map(function (x) { return x.id === pet.id ? Object.assign({}, x, { archived_at: null, archived_reason: null }) : x; }));
+  }
+
   var profilePet = profileId && pets ? pets.filter(function (p) { return p.id === profileId; })[0] : null;
 
   if (loadStatus === "loading") {
@@ -183,6 +213,12 @@ export default function PetsPage() {
         <input aria-label="Search pets by pet or owner name" placeholder="Search by pet or owner name" value={q}
           onChange={function (e) { setQ(e.target.value); setPage(0); }}
           style={Object.assign({}, inputStyle, { flex: "1 1 220px", width: "auto" })} />
+        <select aria-label="Show pets" value={view} onChange={function (e) { setView(e.target.value); setPage(0); }}
+          style={Object.assign({}, inputStyle, { width: "auto" })}>
+          <option value="active">Active pets</option>
+          <option value="archived">Archived pets</option>
+          <option value="all">All pets</option>
+        </select>
         <select aria-label="Filter by species" value={species} onChange={function (e) { setSpecies(e.target.value); setPage(0); }}
           style={Object.assign({}, inputStyle, { width: 150 })}>
           <option value="all">All species</option>
@@ -199,18 +235,20 @@ export default function PetsPage() {
         <Card><EmptyState title="No pets yet" description="Add your first pet to start building the pet and vaccination records."
           action={<Button onClick={openAdd}>+ Add pet</Button>} /></Card>
       ) : filtered.length === 0 ? (
-        <Card><EmptyState title="No pets found" description="Try a different name, species or breed filter." /></Card>
+        <Card><EmptyState title={view === "archived" ? "No archived pets" : "No pets found"} description={view === "archived" ? "Pets you archive (passed away, moved away or no longer active) appear here and can be restored." : "Try a different name, species or breed filter."} /></Card>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
           {visible.map(function (p) {
             var owner = ownersById[p.customer_id];
-            var sum = vaccinationSummary(vaccsByPet[p.id]);
+            var sum = vaccinationSummary(vaccsByPet[p.id], undefined, reminderSettings);
+            var archived = isArchived(p);
             return (
               <Card key={p.id} style={{ overflow: "hidden" }}>
                 <div style={{ padding: "12px 16px", borderBottom: "1px solid " + BORDER, background: MUTED }}>
                   <div style={{ fontWeight: 700, fontSize: 14 }}>{p.name}</div>
                   <div style={{ color: MUTED_FG, fontSize: 12 }}>{p.species}{p.breed ? " · " + p.breed : ""} · {ageLabel(p.date_of_birth)}</div>
                   <div style={{ color: MUTED_FG, fontSize: 12 }}>Owner: {owner ? owner.name : "Unknown"}</div>
+                  {archived ? <div style={{ marginTop: 6 }}><Badge tone="neutral">Archived · {archiveReasonLabel(p.archived_reason) || "No longer active"}</Badge></div> : null}
                 </div>
                 <div style={{ padding: "12px 16px", minHeight: 56 }}>
                   <p style={{ margin: 0, color: MUTED_FG, fontSize: 12, lineHeight: 1.5 }}>{p.care_notes || "No care notes yet."}</p>
@@ -223,6 +261,9 @@ export default function PetsPage() {
                   <Button size="sm" variant="outline" onClick={function () { setProfileId(p.id); }} ariaLabel={"View profile of " + p.name}>View profile</Button>
                   <div style={{ display: "flex", gap: 4 }}>
                     <Button size="sm" variant="ghost" onClick={function () { openEdit(p); }} ariaLabel={"Edit " + p.name}>Edit</Button>
+                    {archived
+                      ? <Button size="sm" variant="outline" onClick={function () { restorePet(p); }} disabled={saving} ariaLabel={"Restore " + p.name}>Restore</Button>
+                      : <Button size="sm" variant="ghost" onClick={function () { openArchive(p); }} ariaLabel={"Archive " + p.name}>Archive</Button>}
                     <Button size="sm" variant="ghost-danger" onClick={function () { setErr(""); setDeleting(p); }} ariaLabel={"Delete " + p.name}>Delete</Button>
                   </div>
                 </div>
@@ -297,6 +338,9 @@ export default function PetsPage() {
         title={deleting ? "Delete " + deleting.name + "?" : ""}
         footer={<>
           <Button variant="ghost" onClick={function () { setDeleting(null); setErr(""); setBlocked(""); }} disabled={saving}>Keep pet</Button>
+          {blocked && deleting && !isArchived(deleting)
+            ? <Button onClick={function () { var pet = deleting; setDeleting(null); setBlocked(""); openArchive(pet); }} disabled={saving}>Archive instead</Button>
+            : null}
           {!blocked ? <Button variant="danger" onClick={confirmDelete} disabled={saving}>{saving ? "Checking…" : "Delete pet"}</Button> : null}
         </>}>
         {blocked ? (
@@ -309,8 +353,28 @@ export default function PetsPage() {
         <ErrorLine>{err}</ErrorLine>
       </Modal>
 
+      <Modal open={!!archiving} onClose={closeArchive}
+        title={archiving ? "Archive " + archiving.name + "?" : ""}
+        footer={<>
+          <Button variant="ghost" onClick={closeArchive} disabled={saving}>Cancel</Button>
+          <Button onClick={confirmArchive} disabled={saving}>{saving ? "Archiving…" : "Archive pet"}</Button>
+        </>}>
+        <div style={{ display: "grid", gap: 10 }}>
+          <p style={{ margin: 0, fontSize: 13, color: FOREGROUND, lineHeight: 1.5 }}>
+            Archiving hides the pet from the normal lists and from new bookings and boarding. Nothing is deleted: bookings, payments, grooming and medical history stay on record, and you can restore the pet at any time.
+          </p>
+          <Field label="Reason" htmlFor="archive-reason">
+            <select id="archive-reason" style={inputStyle} value={archiveReason} onChange={function (e) { setArchiveReason(e.target.value); setErr(""); }}>
+              <option value="">Choose a reason</option>
+              {ARCHIVE_REASONS.map(function (r) { return <option key={r.value} value={r.value}>{r.label}</option>; })}
+            </select>
+          </Field>
+          <ErrorLine>{err}</ErrorLine>
+        </div>
+      </Modal>
+
       {profilePet ? (
-        <PetProfile pet={profilePet} owner={ownersById[profilePet.customer_id]} vaccinations={vaccsByPet[profilePet.id] || []}
+        <PetProfile pet={profilePet} reminderSettings={reminderSettings} owner={ownersById[profilePet.customer_id]} vaccinations={vaccsByPet[profilePet.id] || []}
           onVaccinationsChange={function (list) {
             setVaccs(vaccs.filter(function (v) { return v.pet_id !== profilePet.id; }).concat(list));
           }}

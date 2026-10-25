@@ -53,7 +53,7 @@ export default function CustomersPage() {
     Promise.all([
       db("GET", "customers", null, "?select=id,name,phone,visit_count,total_spend,last_visit,marketing_opt_out&order=name.asc&limit=2000"),
       db("GET", "pet_customer_profiles", null, "?select=*&limit=2000"),
-      db("GET", "pet_pets", null, "?select=id,customer_id,name,species,breed&order=name.asc&limit=5000"),
+      db("GET", "pet_pets", null, "?select=id,customer_id,name,species,breed,archived_at&order=name.asc&limit=5000"),
     ]).then(function (res) {
       if (cancelled) return;
       // db() returns null when a request failed -- that is an error, not "no data".
@@ -67,7 +67,8 @@ export default function CustomersPage() {
     var m = {}; profiles.forEach(function (p) { m[p.customer_id] = p; }); return m;
   }, [profiles]);
   var petsByCustomer = useMemo(function () {
-    var m = {}; pets.forEach(function (p) { (m[p.customer_id] = m[p.customer_id] || []).push(p); }); return m;
+    // Archived pets are hidden from the active list (restore them on the Pets screen).
+    var m = {}; pets.forEach(function (p) { if (p.archived_at) return; (m[p.customer_id] = m[p.customer_id] || []).push(p); }); return m;
   }, [pets]);
 
   if (loadStatus === "loading") {

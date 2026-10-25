@@ -2,7 +2,11 @@ import React from "react";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 
 var mockDb = vi.fn();
-vi.mock("../../lib/db", () => ({ db: function () { return mockDb.apply(null, arguments); } }));
+var mockRpc = vi.fn();
+vi.mock("../../lib/db", () => ({
+  db: function () { return mockDb.apply(null, arguments); },
+  dbRpcAuth: function () { return mockRpc.apply(null, arguments); },
+}));
 
 import PetsPage from "./PetsPage";
 
@@ -18,7 +22,8 @@ function setup(opts) {
   mockDb.mockImplementation(function (method, table, data, filters) {
     if (method === "GET" && table === "pet_pets") return Promise.resolve(opts.petsFail ? null : (opts.pets || PETS));
     if (method === "GET" && table === "customers") return Promise.resolve(OWNERS);
-    if (method === "GET" && table === "pet_vaccinations") return Promise.resolve(VACCS);
+    if (method === "GET" && table === "pet_vaccinations") return Promise.resolve(opts.vaccs || VACCS);
+    if (method === "GET" && table === "pet_reminder_settings") return Promise.resolve(opts.reminders === undefined ? null : opts.reminders);
     if (method === "POST" && table === "pet_pets") return Promise.resolve(opts.postFail ? null : [Object.assign({ id: "p9" }, data)]);
     if (method === "GET" && (table === "pet_bookings" || table === "pet_boarding_stays" || table === "pet_invoices")) {
       if (opts.historyFail) return Promise.resolve(null);
@@ -32,7 +37,7 @@ function setup(opts) {
 }
 
 describe("PetsPage", function () {
-  beforeEach(function () { mockDb.mockReset(); });
+  beforeEach(function () { mockDb.mockReset(); mockRpc.mockReset(); mockRpc.mockResolvedValue({ data: true }); });
 
   it("lists real pets with owner and an overdue vaccination badge", async function () {
     setup();
@@ -157,5 +162,89 @@ describe("PetsPage", function () {
     await screen.findByText("Simba");
     fireEvent.click(screen.getByText("+ Add pet"));
     expect(screen.queryByLabelText(/allerg|medical/i)).toBeNull();
+  });
+
+  var ARCHIVED = Object.assign({}, PETS[1], { archived_at: "2026-09-01T10:00:00Z", archived_reason: "moved-away" });
+
+  it("hides archived pets by default and shows them (with the reason) under Archived pets", async function () {
+    setup({ pets: [PETS[0], ARCHIVED] });
+    await screen.findByText("Simba");
+    expect(screen.queryByText("Nala")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Show pets"), { target: { value: "archived" } });
+    expect(screen.getByText("Nala")).toBeTruthy();
+    expect(screen.queryByText("Simba")).toBeNull();
+    expect(screen.getByText(/Archived · Moved away/)).toBeTruthy();
+    expect(screen.getByLabelText("Restore Nala")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Show pets"), { target: { value: "all" } });
+    expect(screen.getByText("Simba")).toBeTruthy(); expect(screen.getByText("Nala")).toBeTruthy();
+  });
+
+  it("archives with a required reason through the database function, keeping the record", async function () {
+    setup();
+    await screen.findByText("Simba");
+    fireEvent.click(screen.getByLabelText("Archive Simba"));
+    expect(screen.getByText(/Nothing is deleted: bookings, payments, grooming and medical history stay on record/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Archive pet" }));
+    expect(await screen.findByText("Choose why this pet is being archived.")).toBeTruthy();
+    expect(mockRpc).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "passed-away" } });
+    fireEvent.click(screen.getByRole("button", { name: "Archive pet" }));
+    await waitFor(function () { expect(screen.queryByText("Simba")).toBeNull(); });
+    expect(mockRpc).toHaveBeenCalledWith("pet_set_archived", { p_id: "p1", p_archived: true, p_reason: "passed-away" });
+    expect(mockDb.mock.calls.filter(function (c) { return c[0] === "DELETE"; }).length).toBe(0);
+    fireEvent.change(screen.getByLabelText("Show pets"), { target: { value: "archived" } });
+    expect(screen.getByText(/Archived · Passed away/)).toBeTruthy();
+  });
+
+  it("explains what to do first when the pet still has an open booking, and keeps the pet", async function () {
+    mockRpc.mockResolvedValue({ error: "PET_HAS_OPEN_BOOKINGS" });
+    setup();
+    await screen.findByText("Simba");
+    fireEvent.click(screen.getByLabelText("Archive Simba"));
+    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "inactive" } });
+    fireEvent.click(screen.getByRole("button", { name: "Archive pet" }));
+    expect(await screen.findByText(/Complete or cancel it in Calendar first, then archive the pet/)).toBeTruthy();
+    expect(screen.getByLabelText("Archive Simba")).toBeTruthy();
+  });
+
+  it("restores an archived pet to the active list", async function () {
+    setup({ pets: [PETS[0], ARCHIVED] });
+    await screen.findByText("Simba");
+    fireEvent.change(screen.getByLabelText("Show pets"), { target: { value: "archived" } });
+    fireEvent.click(screen.getByLabelText("Restore Nala"));
+    await waitFor(function () { expect(mockRpc).toHaveBeenCalledWith("pet_set_archived", { p_id: "p2", p_archived: false }); });
+    await waitFor(function () { expect(screen.queryByText("Nala")).toBeNull(); });
+    fireEvent.change(screen.getByLabelText("Show pets"), { target: { value: "active" } });
+    expect(screen.getByText("Nala")).toBeTruthy();
+  });
+
+  it("offers Archive instead when a delete is blocked by history", async function () {
+    setup({ history: { pet_bookings: [{ id: "b1" }] } });
+    await screen.findByText("Simba");
+    fireEvent.click(screen.getByLabelText("Delete Simba"));
+    fireEvent.click(screen.getByText("Delete pet"));
+    expect(await screen.findByText(/Archive the pet instead/)).toBeTruthy();
+    fireEvent.click(screen.getByText("Archive instead"));
+    expect(await screen.findByText("Archive Simba?")).toBeTruthy();
+  });
+
+  it("uses a record type's own reminder window for the vaccine badge", async function () {
+    var due = new Date(); due.setDate(due.getDate() + 40);
+    var iso = due.getFullYear() + "-" + String(due.getMonth() + 1).padStart(2, "0") + "-" + String(due.getDate()).padStart(2, "0");
+    var vaccs = [{ id: "v9", pet_id: "p1", vaccine: "Rabies", given_on: "2025-01-01", next_due_on: iso }];
+    var first = setup({ vaccs: vaccs });
+    await screen.findByText("Simba");
+    expect(screen.getByText("Vaccine due soon")).toBeTruthy(); // 40 days is inside the six-month default
+    first.unmount();
+    setup({ vaccs: vaccs, reminders: [{ id: "r1", record_type: "rabies", window_days: 30 }] });
+    await screen.findByText("Simba");
+    expect(screen.queryByText("Vaccine due soon")).toBeNull();   // outside Rabies' own 30-day window
+  });
+
+  it("still flags an expired date separately, whatever the window", async function () {
+    setup({ reminders: [{ id: "r1", record_type: "Rabies", window_days: 30 }] });
+    await screen.findByText("Simba");
+    expect(screen.getByText("Vaccination overdue")).toBeTruthy();
+    expect(screen.queryByText("Vaccine due soon")).toBeNull();
   });
 });

@@ -26,7 +26,8 @@ describe("petBlockMessage", function () {
     var m = petBlockMessage("Rex", { bookings: 2, stays: 1, invoices: 4 });
     expect(m).toMatch(/Rex has 2 bookings, 1 boarding stay and 4 invoices/);
     expect(m).toMatch(/kept for your history and finances/);
-    expect(m).toMatch(/Archiving pets isn't available yet/);
+    expect(m).toMatch(/Archive the pet instead/);
+    expect(m).toMatch(/restore it later/);
   });
 });
 

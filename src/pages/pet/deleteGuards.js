@@ -40,7 +40,7 @@ export function petBlockMessage(name, counts) {
   if (c.invoices > 0) parts.push(capped(c.invoices, "invoice", "invoices"));
   if (parts.length === 0) return "";
   return name + " has " + listText(parts) + ", so the profile can't be deleted: these records are kept for your history and finances. "
-    + "Archiving pets isn't available yet; leave the profile in place.";
+    + "Archive the pet instead: it disappears from the active lists and from new bookings, and every record stays on file. You can restore it later.";
 }
 
 // Message when the delete was rejected although no history was found (a race, or

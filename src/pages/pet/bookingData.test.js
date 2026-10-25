@@ -270,3 +270,10 @@ describe("save-time conflict detail", function () {
     expect(conflictMessage(null)).toBe("");
   });
 });
+
+describe("messages for the new database guards", function () {
+  it("explains an archived pet and a species mismatch", function () {
+    expect(bookingErrorMessage("PET_ARCHIVED")).toMatch(/archived.*Restore it on the Pets screen/);
+    expect(bookingErrorMessage("SERVICE_SPECIES_MISMATCH")).toMatch(/isn't offered for this pet's species/);
+  });
+});

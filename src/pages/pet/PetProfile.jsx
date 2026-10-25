@@ -4,7 +4,7 @@
 import React, { useState } from "react";
 import { db } from "../../lib/db";
 import { MUTED_FG, BORDER, FOREGROUND } from "./theme";
-import { ageLabel, vaccinationStatus, validateVaccination } from "./petData";
+import { ageLabel, recordStatus, dueText, reminderWindowFor, validateVaccination } from "./petData";
 import { Modal, Button, Field, Badge, ErrorLine, inputStyle } from "./ui";
 
 var STATUS_BADGE = {
@@ -29,7 +29,7 @@ function Row({ label, value }) {
   );
 }
 
-export default function PetProfile({ pet, owner, vaccinations, onVaccinationsChange, onClose, onEdit }) {
+export default function PetProfile({ pet, owner, vaccinations, onVaccinationsChange, onClose, onEdit, reminderSettings }) {
   var draftState = useState({ vaccine: "", given_on: "", next_due_on: "" });
   var draft = draftState[0]; var setDraft = draftState[1];
   var errState = useState(""); var err = errState[0]; var setErr = errState[1];
@@ -82,13 +82,14 @@ export default function PetProfile({ pet, owner, vaccinations, onVaccinationsCha
       ) : (
         <ul style={{ listStyle: "none", margin: "0 0 12px", padding: 0, display: "grid", gap: 8 }}>
           {sorted.map(function (v) {
-            var s = vaccinationStatus(v.next_due_on);
+            var s = recordStatus(v, undefined, reminderSettings);
             var badge = s ? STATUS_BADGE[s] : null;
             return (
               <li key={v.id} style={{ border: "1px solid " + BORDER, borderRadius: 12, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 13 }}>{v.vaccine}</div>
                   <div style={{ fontSize: 12, color: MUTED_FG }}>Given {fmtDate(v.given_on)} · Next due {v.next_due_on ? fmtDate(v.next_due_on) : "not set"}</div>
+                  {v.next_due_on ? <div style={{ fontSize: 12, color: s === "overdue" ? "#b42318" : MUTED_FG }}>{dueText(v.next_due_on)}{s === "due-soon" ? " · reminder window " + reminderWindowFor(v.vaccine, reminderSettings) + " days" : ""}</div> : null}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   {badge ? <Badge tone={badge.tone}>{badge.label}</Badge> : <Badge tone="neutral">No due date</Badge>}

@@ -301,4 +301,24 @@ describe("CalendarPage", function () {
     fireEvent.change(screen.getByLabelText("End"), { target: { value: "11:30" } });
     expect(await screen.findByText(/add up to 1 h, but this booking runs 1 h 30 min/)).toBeTruthy();
   });
+
+  it("does not offer an archived pet for a new booking, but still names it on old bookings", async function () {
+    var pets = [{ id: "p1", customer_id: "c1", name: "Simba", species: "Dog", archived_at: null },
+      { id: "p2", customer_id: "c1", name: "Nala", species: "Cat", archived_at: "2026-09-01T00:00:00Z" }];
+    mockDb.mockImplementation(function (method, table) {
+      if (table === "customers") return Promise.resolve(CUSTOMERS);
+      if (table === "pet_pets") return Promise.resolve(pets);
+      if (table === "staff") return Promise.resolve(STAFF);
+      if (table === "pet_services") return Promise.resolve(SERVICES);
+      if (table === "pet_bookings") return Promise.resolve([booking({ id: "b9", pet_id: "p2" })]);
+      return Promise.resolve(null);
+    });
+    render(<CalendarPage />);
+    expect(await screen.findByLabelText("Open booking for Nala at 10:00")).toBeTruthy(); // history keeps the name
+    fireEvent.click(screen.getByText("+ New booking"));
+    fireEvent.change(screen.getByLabelText("Customer"), { target: { value: "c1" } });
+    var options = Array.prototype.map.call(screen.getByLabelText("Pet").querySelectorAll("option"), function (o) { return o.textContent; });
+    expect(options.join("|")).toMatch(/Simba/);
+    expect(options.join("|")).not.toMatch(/Nala/);
+  });
 });
