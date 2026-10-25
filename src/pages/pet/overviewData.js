@@ -11,7 +11,7 @@ import {
 } from "./bookingData";
 import { outstanding, isOverdue } from "./invoiceData";
 import { daysBetween, todayKey } from "./boardingData";
-import { vaccinationStatus } from "./petData";
+import { vaccinationStatus, warnDaysFor, isArchived } from "./petData";
 import { stockLevel } from "./supplyData";
 
 export var FEED_DAYS = 7;
@@ -130,7 +130,9 @@ export function attentionItems(input) {
 
   var vaccPets = {}; var dueSoon = 0; var lapsed = 0;
   (input.vaccinations || []).forEach(function (v) {
-    var s = vaccinationStatus(v.next_due_on, today);
+    // Archived pets (migration 097) no longer raise alerts; each record type uses its own window (098).
+    if (isArchived(maps.pets[v.pet_id])) return;
+    var s = vaccinationStatus(v.next_due_on, today, warnDaysFor(input.windows, v.record_type));
     if (s === "overdue") { lapsed += 1; vaccPets[v.pet_id] = true; }
     else if (s === "due-soon") { dueSoon += 1; vaccPets[v.pet_id] = true; }
   });

@@ -45,7 +45,7 @@ function setup(opts) {
     if (table === "pet_bookings") return Promise.resolve(qs.indexOf("starts_at=gte") !== -1 ? d.bookings : d.recentBookings);
     if (table === "pet_boarding_stays") return Promise.resolve(qs.indexOf("status=in.") !== -1 ? d.stays : d.recentStays);
     if (table === "pet_invoices") return Promise.resolve(qs.indexOf("status=in.") !== -1 ? d.invoices : d.recentInvoices);
-    var map = { pet_payments: d.payments, customers: CUSTOMERS, pet_pets: PETS, staff: STAFF, pet_kennels: KENNELS,
+    var map = { pet_payments: d.payments, customers: CUSTOMERS, pet_pets: opts.pets || PETS, staff: STAFF, pet_kennels: KENNELS,
       pet_customer_profiles: d.recentProfiles, pet_vaccinations: d.vaccinations, pet_items: d.items };
     return Promise.resolve(map[table] || []);
   });
@@ -189,6 +189,20 @@ describe("OverviewPage", function () {
     setup({ failTable: "pet_vaccinations" });
     expect(await screen.findByText("Today's Appointments")).toBeTruthy();
     expect(screen.getByText("Nothing needs attention, but some alerts couldn't be loaded.")).toBeTruthy();
+  });
+
+  it("still raises vaccination alerts with the default window when reminder settings aren't available (migration 098 not applied)", async function () {
+    setup({ failTable: "pet_reminder_settings", data: { vaccinations: [{ id: "v1", pet_id: "p1", next_due_on: dayKey(40) }] } });
+    expect(await screen.findByText("Vaccinations: 1 due soon")).toBeTruthy();
+    expect(screen.queryByText(/couldn't be loaded/)).toBeNull();
+  });
+
+  it("raises no vaccination alert for an archived pet", async function () {
+    var pets = PETS.map(function (p) { return p.id === "p1" ? Object.assign({}, p, { archived_at: "2026-09-01T08:00:00Z" }) : p; });
+    setup({ pets: pets, data: { vaccinations: [{ id: "v1", pet_id: "p1", next_due_on: dayKey(-30) }] } });
+    expect(await screen.findByText("Today's Appointments")).toBeTruthy();
+    expect(screen.queryByText(/Vaccinations:/)).toBeNull();
+    expect(screen.getByText("Nothing needs your attention right now.")).toBeTruthy();
   });
 
   it("does not crash and keeps cards as plain text when no navigation handler is given", async function () {

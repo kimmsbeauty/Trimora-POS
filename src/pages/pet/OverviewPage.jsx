@@ -153,7 +153,7 @@ export default function OverviewPage({ businessName, isAdmin, onNavigate }) {
   var today = data.today;
   var rows = scheduleRows(data.bookings, maps, now);
   var stays = boardingRows(data.stays, maps, today);
-  var attention = attentionItems({ now: now, maps: maps, invoices: data.invoices, bookings: data.bookings, stays: data.stays, vaccinations: data.vaccinations, items: data.items });
+  var attention = attentionItems({ now: now, maps: maps, invoices: data.invoices, bookings: data.bookings, stays: data.stays, vaccinations: data.vaccinations, windows: data.windows, items: data.items });
   var feed = activityFeed({ now: now, maps: maps, fmt: fmt, recentBookings: data.recentBookings, recentStays: data.recentStays, recentInvoices: data.recentInvoices,
     payments: data.payments, recentPets: data.pets, recentProfiles: data.recentProfiles });
   var owed = outstandingInvoices(data.invoices);

@@ -116,9 +116,33 @@ describe("attentionItems", function () {
     expect(list[0]).toMatchObject({ key: "collection", count: 2, names: ["Simba", "Rex"] });
   });
 
-  it("reports vaccinations overdue or due within 30 days, and ignores current ones", function () {
+  it("reports vaccinations overdue or due within the default six-month window, and ignores current ones", function () {
     var list = run({ vaccinations: [{ pet_id: "p1", next_due_on: "2026-10-01" }, { pet_id: "p2", next_due_on: "2026-11-10" }, { pet_id: "p2", next_due_on: "2027-06-01" }, { pet_id: "p1", next_due_on: null }] });
     expect(list[0]).toMatchObject({ key: "vaccinations", lapsed: 1, dueSoon: 1, target: "pets" });
+  });
+
+  it("uses each record type's own due-soon window, falling back to the default for types without one", function () {
+    // today 2026-10-25: 2026-12-01 is 37 days away. A 30-day window makes it current; the 180-day default flags it.
+    var dewormingDue = { pet_id: "p1", record_type: "deworming", next_due_on: "2026-12-01" };
+    var vaccDue = { pet_id: "p2", record_type: "vaccination", next_due_on: "2026-12-01" };
+    var narrow = run({ vaccinations: [dewormingDue, vaccDue], windows: { deworming: 30 } });
+    expect(narrow[0]).toMatchObject({ key: "vaccinations", lapsed: 0, dueSoon: 1 });
+    expect(narrow[0].names).toEqual(["Rex"]);
+    var none = run({ vaccinations: [dewormingDue], windows: { deworming: 30 } });
+    expect(none.filter(function (a) { return a.key === "vaccinations"; })).toEqual([]);
+    // a row from before migration 098 has no record_type: it is a vaccination and uses that type's window
+    var legacy = run({ vaccinations: [{ pet_id: "p1", next_due_on: "2026-12-01" }], windows: { vaccination: 30 } });
+    expect(legacy.filter(function (a) { return a.key === "vaccinations"; })).toEqual([]);
+  });
+
+  it("raises no vaccination alert for an archived pet, but still does for an active one", function () {
+    var maps = Object.assign({}, MAPS, { pets: { p1: { id: "p1", name: "Simba", archived_at: "2026-09-01T08:00:00Z" }, p2: { id: "p2", name: "Rex" } } });
+    var overdue = [{ pet_id: "p1", next_due_on: "2026-01-01" }, { pet_id: "p2", next_due_on: "2026-01-01" }];
+    var list = run({ maps: maps, vaccinations: overdue });
+    expect(list[0]).toMatchObject({ key: "vaccinations", lapsed: 1 });
+    expect(list[0].names).toEqual(["Rex"]);
+    var onlyArchived = run({ maps: maps, vaccinations: [overdue[0]] });
+    expect(onlyArchived.filter(function (a) { return a.key === "vaccinations"; })).toEqual([]);
   });
 
   it("reports low and out-of-stock items, but not inactive ones", function () {
