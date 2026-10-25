@@ -141,6 +141,10 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
                   // salon_id on the row; READ-ONLY for the client (writes go
                   // through the pet_* database functions); CalendarPage.jsx.
   "pet_booking_services", // ditto -- service lines snapshotted at booking time.
+  "pet_invoices", // added 2026-10-24 alongside migration 090 -- invoices; READ-ONLY
+                  // for the client (writes via pet_* functions); InvoicesPage.jsx.
+  "pet_invoice_lines", // ditto -- lines copied from the catalogue at issue time.
+  "pet_payments", // ditto -- append-only payment records.
   "pet_kennels", // added 2026-10-24 alongside migration 089 -- kennels; salon_id on
                  // the row; READ-ONLY for the client (writes go through the pet_*
                  // database functions); BoardingPage.jsx.
