@@ -7,13 +7,15 @@
 //   - PIN management (change staff PIN, change admin PIN)
 //
 // All settings are saved to the salon_settings table via db() PATCH.
-// PIN changes go to salon_pins via db() PATCH (scoped by TENANT_TABLES).
+// PIN changes go through the change_salon_pins RPC (migration 091), which needs the current
+// admin PIN. salon_pins itself is never read or written from the client.
 // salon_settings is now in TENANT_TABLES so db() auto-scopes all calls.
 
 import { useState, useEffect } from "react";
 import { db } from "../lib/db";
 import { SUPABASE_URL, SUPABASE_KEY, GOLD, GOLD_LT, GOLD_DIM, BLACK, WHITE, CREAM, DARK, RED, GREEN, AMBER } from "../lib/constants";
 import { getValidAccessToken } from "../lib/deviceAuth";
+import { changeSalonPins } from "../lib/pinApi";
 
 var inputStyle = {
   width: "100%",
@@ -196,6 +198,7 @@ export default function SalonSettingsPage({ salon, onSettingsUpdated }) {
   }
 
   // ── PIN fields ───────────────────────────────────────────────────
+  var [currentAdminPin, setCurrentAdminPin] = useState("");
   var [newStaffPin,   setNewStaffPin]   = useState("");
   var [newAdminPin,   setNewAdminPin]   = useState("");
   var [confirmAdminPin, setConfirmAdminPin] = useState("");
@@ -350,46 +353,30 @@ export default function SalonSettingsPage({ salon, onSettingsUpdated }) {
       setPinError("Staff and admin PINs must be different.");
       return;
     }
-    setPinSaving(true);
-
-    // All PIN hashing is done server-side via update_salon_pin RPC
-    // (bcrypt since the security migration). Never write raw or
-    // client-side hashed values directly to salon_pins.
-    var token = await getValidAccessToken();
-
-    var rpcUpdates = [];
-    if (newStaffPin) {
-      rpcUpdates.push(fetch(SUPABASE_URL + "/rest/v1/rpc/update_salon_pin", {
-        method: "POST",
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: "Bearer " + (token || SUPABASE_KEY),
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ p_role: "staff", p_new_pin: newStaffPin }),
-      }));
-    }
-    if (newAdminPin) {
-      rpcUpdates.push(fetch(SUPABASE_URL + "/rest/v1/rpc/update_salon_pin", {
-        method: "POST",
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: "Bearer " + (token || SUPABASE_KEY),
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ p_role: "admin", p_new_pin: newAdminPin }),
-      }));
-    }
-
-    var results = await Promise.all(rpcUpdates);
-    setPinSaving(false);
-
-    var anyFailed = results.some(function(r) { return !r.ok; });
-    if (anyFailed) {
-      setPinError("PIN update failed. Please try again.");
+    if (!currentAdminPin) {
+      setPinError("Enter your current admin PIN to confirm this change.");
       return;
     }
 
+    setPinSaving(true);
+
+    // Server-side (migration 091): both PINs change in ONE atomic call and the CURRENT admin
+    // PIN is required as proof. Never write raw or client-hashed values to salon_pins.
+    var token = await getValidAccessToken();
+    var result = await changeSalonPins({
+      token: token,
+      currentAdminPin: currentAdminPin,
+      newStaffPin: newStaffPin,
+      newAdminPin: newAdminPin,
+    });
+    setPinSaving(false);
+
+    if (!result.ok) {
+      setPinError(result.error);
+      return;
+    }
+
+    setCurrentAdminPin("");
     setPinSaved(true);
     setNewStaffPin("");
     setNewAdminPin("");
@@ -694,6 +681,19 @@ export default function SalonSettingsPage({ salon, onSettingsUpdated }) {
         <div style={{ fontSize: 11, color: "#888", marginBottom: 14, lineHeight: 1.5 }}>
           Leave a PIN field blank to keep the current PIN unchanged. Admin PIN change requires confirmation.
         </div>
+
+        <Field label="Current Admin PIN (required to change either PIN)">
+          <input
+            type="password"
+            inputMode="numeric"
+            value={currentAdminPin}
+            onChange={function(e) { setCurrentAdminPin(e.target.value.replace(/\D/g, "").slice(0, 6)); setPinSaved(false); }}
+            placeholder="Enter your current admin PIN"
+            maxLength={6}
+            autoComplete="off"
+            style={inputStyle}
+          />
+        </Field>
 
         <Field label="New Staff PIN (4–6 digits)">
           <input

@@ -1,8 +1,9 @@
 // @vitest-environment node
 //
-// Behavioural test of migration 088 (pet bookings) against a REAL Postgres
-// engine (PGlite, in process). The existing migration088.test.js only checks the
-// SQL text; this one applies the repo's real migrations 083-088 and tries to
+// Behavioural test of migration 088 (pet bookings) and 092 (booking statuses) against a
+// REAL Postgres engine (PGlite, in process). The existing migration088.test.js only checks
+// the SQL text; this one applies the repo's real migrations 083-088 plus 092 (so it tests
+// the schema as production will have it) and tries to
 // break them: overlaps, back-to-back, cancel/no-show releasing slots, concurrent
 // attempts, the status flow, cross-business access, grants and RLS.
 //
@@ -73,7 +74,7 @@ beforeAll(async function () {
   `);
   // The pet migrations, in repo order (088 triggers the audit function from 087).
   for (var f of ["083_pet_pets_vaccinations.sql", "084_pet_customer_profiles.sql", "085_pet_services.sql", "086_pet_roles.sql",
-    "087_pet_audit_log.sql", "088_pet_bookings.sql"]) { await db.exec(sql(f)); }
+    "087_pet_audit_log.sql", "088_pet_bookings.sql", "092_pet_booking_statuses.sql"]) { await db.exec(sql(f)); }
   await db.exec(`
     insert into public.salons values ('${A}','A'),('${B}','B');
     insert into public.customers values ('${CUST_A}','${A}','Ann'),('${CUST_A2}','${A}','Cy'),('${CUST_B}','${B}','Bob');
@@ -93,11 +94,11 @@ beforeEach(async function () {
   await as(A);
 });
 
-describe("migration 088 against a real Postgres engine", function () {
+describe("migrations 088 + 092 (bookings and their statuses) against a real Postgres engine", function () {
   it("creates a booking, takes prices from the database and snapshots the service lines", async function () {
     var id = await create({ services: [SVC_BATH, SVC_NAILS], minutes: 90 });
     var b = await row(id);
-    expect(b.status).toBe("confirmed");
+    expect(b.status).toBe("booked");
     expect(b.walk_in).toBe(false);
     var lines = (await db.query("select service_name, price, duration_minutes from public.pet_booking_services where booking_id=$1 order by service_name", [id])).rows;
     expect(lines).toEqual([{ service_name: "Bath", price: 1500, duration_minutes: 60 }, { service_name: "Nails", price: 500, duration_minutes: null }]);
@@ -135,6 +136,15 @@ describe("migration 088 against a real Postgres engine", function () {
     await create({ start: at(2, 9) });
   });
 
+  it("keeps the slot held through every active stage, including ready and completed", async function () {
+    var a = await create({ start: at(2, 9) });
+    for (var s of ["checked-in", "in-progress", "ready", "completed"]) {
+      await setStatus(a, s);
+      await expect(create({ start: at(2, 9) })).rejects.toThrow(/BOOKING_CONFLICT_STAFF/);
+      await expect(create({ staff: STAFF_A2, start: at(2, 9) })).rejects.toThrow(/BOOKING_CONFLICT_PET/);
+    }
+  });
+
   it("serialises concurrent attempts for one slot: exactly one wins", async function () {
     var results = await Promise.allSettled([create({ start: at(3, 14) }), create({ start: at(3, 14) }), create({ start: at(3, 14) })]);
     expect(results.filter(function (r) { return r.status === "fulfilled"; }).length).toBe(1);
@@ -159,8 +169,16 @@ describe("migration 088 against a real Postgres engine", function () {
     expect(after.notes).toBe("short trim");
   });
 
-  it("only lets pending, confirmed and checked-in bookings be edited", async function () {
-    var a = await create(); await setStatus(a, "checked-in"); await setStatus(a, "in-progress");
+  it("only lets booked and checked-in bookings be edited", async function () {
+    var a = await create();
+    await update(a, STAFF_A1, at(2, 10), 60); // booked: allowed
+    await setStatus(a, "checked-in");
+    await update(a, STAFF_A1, at(2, 11), 60); // checked-in: allowed
+    await setStatus(a, "in-progress");
+    await expect(update(a, STAFF_A1, at(2, 15), 60)).rejects.toThrow(/BOOKING_NOT_EDITABLE/);
+    await setStatus(a, "ready");
+    await expect(update(a, STAFF_A1, at(2, 15), 60)).rejects.toThrow(/BOOKING_NOT_EDITABLE/);
+    await setStatus(a, "completed");
     await expect(update(a, STAFF_A1, at(2, 15), 60)).rejects.toThrow(/BOOKING_NOT_EDITABLE/);
     var c = await create({ start: at(4, 9) }); await setStatus(c, "cancelled");
     await expect(update(c, STAFF_A1, at(4, 15), 60)).rejects.toThrow(/BOOKING_NOT_EDITABLE/);
@@ -169,14 +187,20 @@ describe("migration 088 against a real Postgres engine", function () {
   it("enforces the status flow", async function () {
     var a = await create();
     await expect(setStatus(a, "completed")).rejects.toThrow(/INVALID_STATUS_CHANGE/);
+    await expect(setStatus(a, "ready")).rejects.toThrow(/INVALID_STATUS_CHANGE/); // cannot skip stages
     expect(await setStatus(a, "checked-in")).toBe("checked-in");
+    await expect(setStatus(a, "ready")).rejects.toThrow(/INVALID_STATUS_CHANGE/);
     expect(await setStatus(a, "in-progress")).toBe("in-progress");
+    await expect(setStatus(a, "completed")).rejects.toThrow(/INVALID_STATUS_CHANGE/); // must pass through ready
+    expect(await setStatus(a, "ready")).toBe("ready");
     expect(await setStatus(a, "completed")).toBe("completed");
     await expect(setStatus(a, "cancelled")).rejects.toThrow(/INVALID_STATUS_CHANGE/); // final
     var c = await create({ start: at(4, 9) });
     await setStatus(c, "cancelled");
-    await expect(setStatus(c, "confirmed")).rejects.toThrow(/INVALID_STATUS_CHANGE/);
+    await expect(setStatus(c, "booked")).rejects.toThrow(/INVALID_STATUS_CHANGE/);
+    await expect(setStatus(c, "confirmed")).rejects.toThrow(/INVALID_STATUS_CHANGE/); // old name is gone
     await expect(setStatus(c, "bogus")).rejects.toThrow(/INVALID_STATUS_CHANGE/);
+    await expect(db.query("select public.pet_set_booking_status($1, null)", [c])).rejects.toThrow(/INVALID_STATUS_CHANGE/);
   });
 
   it("will not mix businesses: another business's customer, pet, staff, service or booking is refused", async function () {

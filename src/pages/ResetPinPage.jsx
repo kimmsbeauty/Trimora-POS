@@ -5,11 +5,12 @@
 // the path itself signals PIN reset mode to avoid Supabase stripping query strings).
 //
 // Flow: recovery email → /reset-pin#access_token=xxx&type=recovery
-//       → extract token → show PIN form → call update_salon_pin RPC (bcrypt server-side)
+//       → extract token → show PIN form → call reset_salon_admin_pin_via_recovery RPC (bcrypt server-side; see src/lib/pinApi.js)
 
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { SUPABASE_URL, SUPABASE_KEY, GOLD, GOLD_DIM, BLACK, WHITE, RED, GREEN } from "../lib/constants.js";
+import { resetAdminPinViaRecovery } from "../lib/pinApi.js";
 
 export default function ResetPinPage() {
   var [token,      setToken]      = useState("");
@@ -65,25 +66,17 @@ export default function ResetPinPage() {
       return setError("Session expired. Please request a new reset link.");
     }
 
-    // Update the admin PIN
-    var pinRes = await fetch(SUPABASE_URL + "/rest/v1/rpc/update_salon_pin", {
-      method: "POST",
-      headers: {
-        apikey:         SUPABASE_KEY,
-        Authorization:  "Bearer " + token,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ p_role: "admin", p_new_pin: newPin }),
-    });
+    // Reset the admin PIN. Needs the email-link session (migration 091); see src/lib/pinApi.js
+    // for the temporary legacy fallback.
+    var pinResult = await resetAdminPinViaRecovery({ token: token, newPin: newPin });
 
     setLoading(false);
 
-    if (pinRes.ok) {
+    if (pinResult.ok) {
       window.localStorage.removeItem("trimora_pin_reset_slug");
       setDone(true);
     } else {
-      var pinErr = await pinRes.json().catch(function() { return {}; });
-      setError("PIN reset failed: " + (pinErr.message || "Please contact support."));
+      setError("PIN reset failed: " + (pinResult.error || "Please contact support."));
     }
   }
 
