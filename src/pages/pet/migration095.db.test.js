@@ -88,7 +88,7 @@ async function nextNo() { return (await db.query("select next_invoice_number n f
 
 beforeAll(async function () {
   await setupDb(["083_pet_pets_vaccinations.sql", "084_pet_customer_profiles.sql", "085_pet_services.sql", "086_pet_roles.sql",
-    "087_pet_audit_log.sql", "088_pet_bookings.sql", "090_pet_invoices.sql", "094_pet_supplies.sql", "095_pet_invoice_products.sql"]);
+    "087_pet_audit_log.sql", "088_pet_bookings.sql", "092_pet_booking_statuses.sql", "090_pet_invoices.sql", "094_pet_supplies.sql", "095_pet_invoice_products.sql"]);
 }, 60000);
 
 beforeEach(async function () {
@@ -226,5 +226,19 @@ describe("migration 095 against a real Postgres engine", function () {
       await expect(db.query("update public.pet_invoice_lines set quantity = 9")).rejects.toThrow(/permission denied/i);
       expect((await db.query("select count(*)::int n from public.pet_invoice_lines")).rows[0].n).toBeGreaterThan(0);
     } finally { await db.exec("reset role"); }
+  });
+
+  it("invoices a booking that is ready for collection, but not one that is only booked", async function () {
+    async function booking(path) {
+      var st = new Date(Date.now() + (keyN + 3) * 86400000); st.setUTCHours(6, 0, 0, 0); keyN += 1;
+      var id = (await db.query("select public.pet_create_booking($1,$2,null,$3,$4,$5::uuid[],false,null) as id", [CUST_A, PET_A1, st.toISOString(), new Date(st.getTime() + 3600000).toISOString(), [SVC_GROOM]])).rows[0].id;
+      for (var x of path) await db.query("select public.pet_set_booking_status($1,$2)", [id, x]);
+      return id;
+    }
+    var ready = await booking(["checked-in", "in-progress", "ready"]);
+    var id = await db.query("select public.pet_create_invoice($1,$2,$3,$4,$5::jsonb,'amount',0,null,null,'[]') as id", [key(), CUST_A, PET_A1, ready, JSON.stringify([{ service_id: SVC_GROOM, quantity: 1 }])]);
+    expect((await inv(id.rows[0].id)).status).toBe("issued");
+    var booked = await booking([]);
+    await expect(db.query("select public.pet_create_invoice($1,$2,$3,$4,$5::jsonb,'amount',0,null,null,'[]')", [key(), CUST_A, PET_A1, booked, JSON.stringify([{ service_id: SVC_GROOM, quantity: 1 }])])).rejects.toThrow(/BOOKING_NOT_READY/);
   });
 });

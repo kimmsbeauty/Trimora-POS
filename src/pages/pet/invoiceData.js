@@ -19,7 +19,7 @@ var ERROR_TEXT = {
   CUSTOMER_NOT_FOUND: "That customer could not be found.",
   PET_NOT_FOUND: "That pet doesn't belong to the chosen customer.",
   BOOKING_NOT_FOUND: "That booking could not be found for this customer.",
-  BOOKING_NOT_READY: "Only a checked-in, in-progress or completed booking can be invoiced.",
+  BOOKING_NOT_READY: "Only a checked-in, in-progress, ready or completed booking can be invoiced.",
   BOOKING_ALREADY_INVOICED: "This booking already has an invoice.",
   INVALID_LINES: "Check the items: add at least one, with a quantity from 1 to 100.",
   SERVICE_NOT_FOUND: "One of the chosen services is no longer available.",

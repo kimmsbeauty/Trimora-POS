@@ -90,7 +90,7 @@ async function ledgerSum(id) { return (await db.query("select coalesce(sum(chang
 
 beforeAll(async function () {
   await setupDb(["083_pet_pets_vaccinations.sql", "084_pet_customer_profiles.sql", "085_pet_services.sql", "086_pet_roles.sql",
-    "087_pet_audit_log.sql", "088_pet_bookings.sql", "094_pet_supplies.sql"]);
+    "087_pet_audit_log.sql", "088_pet_bookings.sql", "092_pet_booking_statuses.sql", "094_pet_supplies.sql"]);
 }, 60000);
 
 beforeEach(async function () {

@@ -18,6 +18,8 @@
 --     undone. Service lines behave exactly as before.
 --   * pet_void_invoice is REPLACED (same signature): voiding an unpaid invoice now
 --     puts its product lines back into stock (ledger reason sale_void).
+--   * A booking can now also be invoiced when it is 'ready' (Ready for Collection),
+--     matching the booking statuses from migration 092_pet_booking_statuses.sql.
 --   * Everything else in 090 (numbering, idempotency, payments, tax, one live
 --     invoice per booking) is unchanged.
 --
@@ -91,7 +93,7 @@ begin
     select b.id, b.customer_id, b.pet_id, b.status into v_booking
       from public.pet_bookings b where b.id = p_booking_id and b.salon_id = v_salon;
     if not found or v_booking.customer_id <> p_customer_id then raise exception 'BOOKING_NOT_FOUND'; end if;
-    if v_booking.status not in ('checked-in', 'in-progress', 'completed') then raise exception 'BOOKING_NOT_READY'; end if;
+    if v_booking.status not in ('checked-in', 'in-progress', 'ready', 'completed') then raise exception 'BOOKING_NOT_READY'; end if;
     v_pet := v_booking.pet_id;
   end if;
   if v_pet is not null and not exists (
