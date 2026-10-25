@@ -35,6 +35,7 @@ import SettingsPage from "./pet/SettingsPage";
 import SuppliesPage from "./pet/SuppliesPage";
 import StaffPage from "./pet/StaffPage";
 import BoardingPage from "./pet/BoardingPage";
+import ReportsPage from "./pet/ReportsPage";
 import WorkingAs from "./pet/WorkingAs";
 import { clearPetActor } from "../lib/petActor";
 import { visiblePetNav } from "./pet/petNav";
@@ -48,7 +49,6 @@ import {
 
 var PHASES = {
   loyalty: "a later phase",
-  reports: "a later phase",
 };
 
 function CenteredMessage({ title, body, action }) {
@@ -162,6 +162,8 @@ function PetStaffRoute() {
         ? <SuppliesPage canEdit={isAdmin} />
         : activeItem.key === "settings"
         ? <SettingsPage />
+        : activeItem.key === "reports"
+        ? <ReportsPage />
         : activeItem.key === "boarding"
         ? <BoardingPage canEdit={isAdmin} />
         : activeItem.key === "staff"
