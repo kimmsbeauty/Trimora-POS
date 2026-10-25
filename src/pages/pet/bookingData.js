@@ -112,23 +112,105 @@ export function rangeBounds(view, anchor) {
 
 // Advisory only: tells the user about a clash before they submit. Half-open
 // ranges, same as the database. The database remains the real guard.
-export function findConflict(bookings, candidate, ignoreId) {
+// Returns { kind: "pet" | "staff", booking } for the first clash, or null.
+export function findConflictDetail(bookings, candidate, ignoreId) {
   var s = candidate.starts.getTime(); var e = candidate.ends.getTime();
   var hit = null;
   (bookings || []).forEach(function (b) {
     if (hit || b.id === ignoreId || !isActive(b)) return;
     var bs = new Date(b.starts_at).getTime(); var be = new Date(b.ends_at).getTime();
     if (!(s < be && bs < e)) return;
-    if (candidate.pet_id && b.pet_id === candidate.pet_id) hit = "pet";
-    else if (candidate.staff_id && b.staff_id === candidate.staff_id) hit = "staff";
+    if (candidate.pet_id && b.pet_id === candidate.pet_id) hit = { kind: "pet", booking: b };
+    else if (candidate.staff_id && b.staff_id === candidate.staff_id) hit = { kind: "staff", booking: b };
   });
   return hit;
 }
+export function findConflict(bookings, candidate, ignoreId) {
+  var hit = findConflictDetail(bookings, candidate, ignoreId);
+  return hit ? hit.kind : null;
+}
+// Wording used when the check made just before saving finds a clash.
+export function conflictMessage(hit) {
+  if (!hit) return "";
+  var when = formatRange(hit.booking);
+  return hit.kind === "staff"
+    ? "That staff member already has a booking from " + when + ". Pick another time or another staff member."
+    : "This pet already has a booking from " + when + ". Pick another time.";
+}
 
-export function validateBooking(draft) {
+// ---- end time, species and distant dates (advisory + blocking checks) ----
+// How far ahead a booking may be before the form asks the user to confirm the
+// date. This only FLAGS the date for a second look; nothing is ever refused for
+// being far away (no booking-window limit has been agreed).
+export var FAR_FUTURE_MONTHS = 6;
+
+export function durationText(mins) {
+  var m = Math.abs(Math.round(Number(mins) || 0));
+  var h = Math.floor(m / 60); var r = m % 60;
+  if (h && r) return h + " h " + r + " min";
+  return h ? h + " h" : r + " min";
+}
+
+// Services whose species list excludes this pet. An empty list means "all species".
+export function speciesMismatches(services, pet) {
+  if (!pet || !pet.species) return [];
+  return (services || []).filter(function (s) {
+    return s && Array.isArray(s.species) && s.species.length > 0 && s.species.indexOf(pet.species) === -1;
+  });
+}
+export function speciesMessage(mismatched, pet) {
+  if (!mismatched || mismatched.length === 0) return "";
+  var names = mismatched.map(function (s) { return s.name; }).join(", ");
+  return names + (mismatched.length === 1 ? " isn't" : " aren't") + " offered for " + (pet.name ? pet.name + " (" + pet.species + ")" : pet.species + "s")
+    + ". Remove " + (mismatched.length === 1 ? "it" : "them") + " or choose a different pet.";
+}
+
+// { expected, actual, diff } when the chosen time span differs from the sum of the
+// services' durations; null when it matches or the services have no duration.
+export function durationMismatch(start, end, lines) {
+  var expected = totalMinutes(lines);
+  if (!start || !end || expected <= 0) return null;
+  var actual = Math.round((end.getTime() - start.getTime()) / 60000);
+  if (actual === expected) return null;
+  return { expected: expected, actual: actual, diff: actual - expected };
+}
+export function durationMismatchMessage(m) {
+  if (!m) return "";
+  return "The services add up to " + durationText(m.expected) + ", but this booking runs " + durationText(m.actual)
+    + " (" + durationText(m.diff) + (m.diff < 0 ? " shorter" : " longer") + ").";
+}
+
+export function farFutureWarning(start, now, months) {
+  if (!start || !now) return "";
+  // The whole of the day that is exactly N months ahead still counts as inside.
+  var limit = new Date(now.getFullYear(), now.getMonth() + (months || FAR_FUTURE_MONTHS), now.getDate() + 1);
+  if (start.getTime() < limit.getTime()) return "";
+  return "This booking is more than " + (months || FAR_FUTURE_MONTHS) + " months away ("
+    + start.getDate() + "/" + (start.getMonth() + 1) + "/" + start.getFullYear() + "). Check the date is right.";
+}
+
+// Warnings the user can knowingly override with one tick. ctx: { lines, now }.
+export function bookingWarnings(draft, ctx) {
+  var out = [];
+  var start = fromInputs(draft.date, draft.start_time);
+  var end = fromInputs(draft.date, draft.end_time);
+  if (!start || !end || end <= start) return out;
+  var m = durationMismatch(start, end, (ctx && ctx.lines) || []);
+  if (m) out.push({ code: "DURATION_MISMATCH", message: durationMismatchMessage(m) });
+  var far = farFutureWarning(start, (ctx && ctx.now) || new Date());
+  if (far) out.push({ code: "FAR_FUTURE", message: far });
+  return out;
+}
+
+// ctx (optional): { services: [chosen service rows], pet: chosen pet row } enables the species check.
+export function validateBooking(draft, ctx) {
   if (!draft.customer_id) return "Choose a customer.";
   if (!draft.pet_id) return "Choose a pet.";
   if (!draft.service_ids || draft.service_ids.length === 0) return "Choose at least one service.";
+  if (ctx && ctx.pet) {
+    var bad = speciesMismatches(ctx.services, ctx.pet);
+    if (bad.length) return speciesMessage(bad, ctx.pet);
+  }
   var start = fromInputs(draft.date, draft.start_time);
   if (!start) return "Enter a valid date and start time.";
   var end = fromInputs(draft.date, draft.end_time);

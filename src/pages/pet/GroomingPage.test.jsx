@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 var mockDb = vi.fn();
 vi.mock("../../lib/db", () => ({ db: function () { return mockDb.apply(null, arguments); } }));
@@ -18,6 +18,10 @@ function setup(opts) {
     if (method === "GET" && table === "pet_services") return Promise.resolve(opts.getFail ? null : (opts.services || SERVICES));
     if (method === "POST" && table === "pet_services") return Promise.resolve(opts.postFail ? null : [Object.assign({ id: "s9", active: true }, data)]);
     if (method === "PATCH") return Promise.resolve(opts.patchFail ? null : true);
+    if (method === "GET" && (table === "pet_booking_services" || table === "pet_invoice_lines")) {
+      if (opts.historyFail) return Promise.resolve(null);
+      return Promise.resolve((opts.history && opts.history[table]) || []);
+    }
     if (method === "DELETE") return Promise.resolve(true);
     return Promise.resolve(null);
   });
@@ -111,5 +115,40 @@ describe("GroomingPage (service catalogue)", function () {
     var patch = mockDb.mock.calls.filter(function (c) { return c[0] === "PATCH"; })[0];
     expect(patch[2]).toEqual({ active: false });
     expect(patch[3]).toBe("?id=eq.s1");
+  });
+
+  it("deletes a service with no history after the history check", async function () {
+    setup();
+    await screen.findByText("Nail trim");
+    fireEvent.click(screen.getByLabelText("Delete Nail trim"));
+    fireEvent.click(screen.getByText("Delete service"));
+    await waitFor(function () { expect(screen.queryByText("Nail trim")).toBeNull(); });
+    var del = mockDb.mock.calls.filter(function (c) { return c[0] === "DELETE"; });
+    expect(del.length).toBe(1); expect(del[0][1]).toBe("pet_services"); expect(del[0][3]).toBe("?id=eq.s2");
+  });
+
+  it("explains a blocked delete, never sends it, and offers Deactivate instead", async function () {
+    setup({ history: { pet_booking_services: [{ id: "x" }, { id: "y" }, { id: "z" }], pet_invoice_lines: [{ id: "l1" }] } });
+    await screen.findByText("Full groom");
+    fireEvent.click(screen.getByLabelText("Delete Full groom"));
+    fireEvent.click(screen.getByText("Delete service"));
+    expect(await screen.findByText(/used in 3 bookings and 1 invoice line/)).toBeTruthy();
+    expect(screen.getByText(/Deactivate it instead/)).toBeTruthy();
+    expect(screen.queryByText("Delete service")).toBeNull();
+    expect(mockDb.mock.calls.filter(function (c) { return c[0] === "DELETE"; }).length).toBe(0);
+    fireEvent.click(screen.getByText("Deactivate instead"));
+    await waitFor(function () {
+      var patch = mockDb.mock.calls.filter(function (c) { return c[0] === "PATCH"; })[0];
+      expect(patch[1]).toBe("pet_services"); expect(patch[2]).toEqual({ active: false }); expect(patch[3]).toBe("?id=eq.s1");
+    });
+  });
+
+  it("does not delete when the history check fails", async function () {
+    setup({ historyFail: true });
+    await screen.findByText("Nail trim");
+    fireEvent.click(screen.getByLabelText("Delete Nail trim"));
+    fireEvent.click(screen.getByText("Delete service"));
+    expect(await screen.findByText(/nothing was deleted/)).toBeTruthy();
+    expect(mockDb.mock.calls.filter(function (c) { return c[0] === "DELETE"; }).length).toBe(0);
   });
 });

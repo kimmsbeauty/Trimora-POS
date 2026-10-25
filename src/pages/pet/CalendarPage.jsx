@@ -14,7 +14,8 @@ import { MUTED_FG, MUTED, BORDER, FOREGROUND, PRIMARY, CARD } from "./theme";
 import {
   STATUSES, STATUS_LABELS, STATUS_TONES, STATUS_ACTIONS, NEXT_STATUSES, EDITABLE, isActive, bookingErrorMessage, bookingTotal, totalMinutes,
   weekDays, monthGrid, addDays, startOfDay, dateKey, toDateInput, toTimeInput, fromInputs, addMinutes, formatRange, formatTime,
-  bookingsOnDay, rangeBounds, findConflict, validateBooking, filterBookings,
+  bookingsOnDay, rangeBounds, findConflict, findConflictDetail, conflictMessage, validateBooking, filterBookings,
+  speciesMismatches, bookingWarnings,
 } from "./bookingData";
 import { PageHeader, Card, Button, Field, Badge, Modal, ErrorLine, EmptyState, inputStyle } from "./ui";
 
@@ -54,7 +55,7 @@ export default function CalendarPage() {
       db("GET", "customers", null, "?select=id,name,phone&order=name.asc&limit=2000"),
       db("GET", "pet_pets", null, "?select=id,customer_id,name,species&order=name.asc&limit=5000"),
       db("GET", "staff", null, "?select=id,name,role,active&order=name.asc&limit=500"),
-      db("GET", "pet_services", null, "?select=id,name,category,price,duration_minutes,active&active=eq.true&order=name.asc&limit=1000"),
+      db("GET", "pet_services", null, "?select=id,name,category,price,duration_minutes,species,active&active=eq.true&order=name.asc&limit=1000"),
     ]).then(function (res) {
       if (cancelled) return;
       // db() returns null when a request failed -- an error, not "no data".
@@ -134,6 +135,8 @@ export default function CalendarPage() {
   // Changing services or the start time re-derives the end time until the user edits it.
   function patchDraft(patch) {
     var next = Object.assign({}, form.draft, patch);
+    var reviewKeys = ["service_ids", "start_time", "end_time", "date", "pet_id"];
+    for (var rk = 0; rk < reviewKeys.length; rk++) if (reviewKeys[rk] in patch) next.ack = false;
     if (form.mode === "add" && !next.endTouched && ("service_ids" in patch || "start_time" in patch || "date" in patch)) {
       var start = fromInputs(next.date, next.start_time);
       var mins = totalMinutes(next.service_ids.map(function (id) { return look.services.filter(function (s) { return s.id === id; })[0]; }).filter(Boolean)) || 60;
@@ -146,12 +149,37 @@ export default function CalendarPage() {
     patchDraft({ service_ids: cur.indexOf(id) === -1 ? cur.concat([id]) : cur.filter(function (x) { return x !== id; }) });
   }
 
+  // What the checks need to know about the booking being edited or created.
+  function formContext() {
+    if (!form) return null;
+    var chosen = form.mode === "add"
+      ? form.draft.service_ids.map(function (id) { return look.services.filter(function (s) { return s.id === id; })[0]; }).filter(Boolean)
+      : (form.booking.pet_booking_services || []);
+    var pet = form.mode === "add" ? look.pets.filter(function (p) { return p.id === form.draft.pet_id; })[0] : null;
+    return { services: chosen, lines: chosen, pet: pet, now: new Date() };
+  }
+
   async function saveBooking() {
     if (saving) return;
-    var msg = validateBooking(form.draft);
+    var ctx = formContext();
+    var msg = validateBooking(form.draft, ctx);
     if (msg) { setErr(msg); return; }
+    // Duration mismatch and far-away dates are allowed, but only after the user ticks the box.
+    if (bookingWarnings(form.draft, ctx).length > 0 && !form.draft.ack) {
+      setErr("Please read the warnings above and tick the box if you want to save anyway.");
+      return;
+    }
     var start = fromInputs(form.draft.date, form.draft.start_time); var end = fromInputs(form.draft.date, form.draft.end_time);
     setSaving(true); setErr("");
+    // Re-check availability against FRESH data (the calendar on screen may be stale).
+    // The database still makes the final, race-free decision when we save.
+    var fresh = await db("GET", "pet_bookings", null,
+      "?select=id,pet_id,staff_id,starts_at,ends_at,status&status=not.in.(cancelled,no-show)&starts_at=lt." + encodeURIComponent(end.toISOString())
+      + "&ends_at=gt." + encodeURIComponent(start.toISOString()) + "&limit=500");
+    if (Array.isArray(fresh)) {
+      var hit = findConflictDetail(fresh, { starts: start, ends: end, pet_id: form.mode === "add" ? form.draft.pet_id : form.booking.pet_id, staff_id: form.draft.staff_id || null }, form.id);
+      if (hit) { setSaving(false); setErr(conflictMessage(hit)); return; }
+    }
     var res = form.mode === "add"
       ? await dbRpcAuth("pet_create_booking", {
         p_customer_id: form.draft.customer_id, p_pet_id: form.draft.pet_id, p_staff_id: form.draft.staff_id || null,
@@ -197,6 +225,9 @@ export default function CalendarPage() {
     var cs = fromInputs(form.draft.date, form.draft.start_time); var ce = fromInputs(form.draft.date, form.draft.end_time);
     if (cs && ce && ce > cs) conflict = findConflict(bookings, { starts: cs, ends: ce, pet_id: form.draft.pet_id, staff_id: form.draft.staff_id || null }, form.id);
   }
+  var formCtx = form ? formContext() : null;
+  var warnings = draft ? bookingWarnings(draft, formCtx) : [];
+  var chosenPet = formCtx ? formCtx.pet : null;
   var petsOfCustomer = form ? look.pets.filter(function (p) { return p.customer_id === form.draft.customer_id; }) : [];
 
   return (
@@ -322,10 +353,12 @@ export default function CalendarPage() {
                 {bookableServices.length === 0 ? <p style={{ margin: 0, fontSize: 12, color: MUTED_FG }}>No active Grooming or Add-on services. Add some in the Grooming tab first.</p> : (
                   <div style={{ display: "grid", gap: 4 }}>
                     {bookableServices.map(function (s) {
+                      var notForPet = speciesMismatches([s], chosenPet).length > 0;
+                      var picked = draft.service_ids.indexOf(s.id) !== -1;
                       return (
-                        <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: FOREGROUND }}>
-                          <input type="checkbox" checked={draft.service_ids.indexOf(s.id) !== -1} onChange={function () { toggleService(s.id); }} />
-                          <span style={{ flex: 1 }}>{s.name}</span>
+                        <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: notForPet ? MUTED_FG : FOREGROUND }}>
+                          <input type="checkbox" checked={picked} disabled={notForPet && !picked} onChange={function () { toggleService(s.id); }} />
+                          <span style={{ flex: 1 }}>{s.name}{notForPet ? " (not offered for " + chosenPet.species + "s)" : ""}</span>
                           <span style={{ color: MUTED_FG }}>{fmt(s.price)}</span>
                         </label>
                       );
@@ -351,6 +384,16 @@ export default function CalendarPage() {
                 <input type="checkbox" checked={draft.walk_in} onChange={function (e) { patchDraft({ walk_in: e.target.checked }); }} />
                 Walk-in (starts as checked in)
               </label>
+            ) : null}
+            {warnings.length > 0 ? (
+              <div role="alert" style={{ border: "1px solid " + BORDER, borderRadius: 12, padding: "8px 12px", background: MUTED, display: "grid", gap: 6 }}>
+                {warnings.map(function (w) { return <p key={w.code} style={{ margin: 0, fontSize: 12, color: FOREGROUND }}>{w.message}</p>; })}
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: FOREGROUND }}>
+                  <input type="checkbox" checked={!!draft.ack} onChange={function (e) { patchDraft({ ack: e.target.checked }); }} />
+                  {warnings.some(function (w) { return w.code === "DURATION_MISMATCH"; }) ? "I want this end time anyway" : "The date is correct"}
+                  {warnings.length > 1 ? " (applies to the warnings above)" : ""}
+                </label>
+              </div>
             ) : null}
             {conflict ? <p role="status" style={{ margin: 0, fontSize: 12, color: MUTED_FG }}>
               Heads up: {conflict === "staff" ? "this staff member already has a booking" : "this pet already has a booking"} that overlaps this time. The system will refuse a clash if you save.</p> : null}
