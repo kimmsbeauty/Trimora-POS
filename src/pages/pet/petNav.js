@@ -18,6 +18,7 @@ export var PET_NAV = [
   { key: "invoices", label: "Invoices & Payments", icon: "invoices", adminOnly: false },
   { key: "supplies", label: "Supplies & Inventory", icon: "supplies", adminOnly: false },
   { key: "loyalty", label: "Loyalty Programme", icon: "loyalty", adminOnly: false },
+  { key: "reminders", label: "Reminders", icon: "reminders", adminOnly: false },
   { key: "staff", label: "Staff & Permissions", icon: "staff", adminOnly: true },
   { key: "reports", label: "Reports", icon: "reports", adminOnly: true },
   { key: "settings", label: "Settings", icon: "settings", adminOnly: true },

@@ -46,7 +46,7 @@ export function todayIso(now) {
   return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
 }
 
-function addDaysIso(iso, days) {
+export function addDaysIso(iso, days) {
   var p = String(iso).split("-");
   var d = new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2])));
   d.setUTCDate(d.getUTCDate() + days);

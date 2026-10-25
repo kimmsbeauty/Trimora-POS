@@ -2,8 +2,7 @@
 --
 -- Trimora Pet -- preventive-care record types and configurable "due soon" windows.
 --
--- STATUS: written for owner review. NOT applied anywhere. Apply by hand only
--- after the owner says "apply 098".
+-- STATUS: APPLIED to production 2026-10-25.
 --
 -- 1. pet_vaccinations.record_type: 'vaccination' (default; every existing row
 --    keeps it), 'deworming', 'flea-tick', 'other'. The table keeps its name.

@@ -114,4 +114,46 @@ describe("InvoicesPage", function () {
     await screen.findByAltText("Paws & Co logo");
     expect(screen.queryByRole("button", { name: "Void invoice" })).toBeNull();
   });
+
+  describe("receipts", function () {
+    var paid = [{ id: "pay1", method: "mpesa", amount: 1000, reference: "QWE123", paid_at: "2026-10-24T09:00:00Z" }];
+
+    it("lists a receipt per payment and opens a branded receipt, hiding the invoice so only one prints", async function () {
+      setup({ invoices: [inv({ status: "partial", amount_paid: 1000, pet_payments: paid })] });
+      fireEvent.click(await screen.findByLabelText("Open invoice INV-0001"));
+      fireEvent.click(await screen.findByRole("button", { name: "View receipt RCT-0001-1" }));
+      expect(await screen.findByText("RECEIPT")).toBeTruthy();
+      expect(screen.getByAltText("Paws & Co logo")).toBeTruthy();
+      expect(screen.queryByText("INVOICE")).toBeNull();
+      expect(screen.getByText("Balance remaining")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Back to invoice" }));
+      expect(await screen.findByText("INVOICE")).toBeTruthy();
+    });
+
+    it("has no receipts section for an invoice with no payments", async function () {
+      setup();
+      fireEvent.click(await screen.findByLabelText("Open invoice INV-0001"));
+      await screen.findByText("INVOICE");
+      expect(screen.queryByText("Receipts")).toBeNull();
+    });
+
+    it("offers a receipt straight after a payment is recorded", async function () {
+      var after = inv({ status: "paid", amount_paid: 3000, pet_payments: [{ id: "pay9", method: "cash", amount: 3000, reference: null, paid_at: "2026-10-25T09:00:00Z" }] });
+      var calls = 0;
+      mockDb.mockImplementation(function (method, table) {
+        if (table === "pet_invoices") { calls += 1; return Promise.resolve([calls > 1 ? after : inv()]); }
+        if (table === "customers") return Promise.resolve([{ id: "c1", name: "Wanjiru Kamau", phone: "0712345678" }]);
+        if (table === "pet_pets") return Promise.resolve([{ id: "p1", name: "Simba", species: "Dog" }]);
+        return Promise.resolve(null);
+      });
+      mockRpc.mockResolvedValue("paid");
+      render(<InvoicesPage />);
+      fireEvent.click(await screen.findByLabelText("Open invoice INV-0001"));
+      fireEvent.click(await screen.findByRole("button", { name: "Pay full balance" }));
+      fireEvent.click(screen.getByRole("button", { name: "Record payment" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Print receipt" }));
+      expect(await screen.findByText("RECEIPT")).toBeTruthy();
+      expect(screen.getByText("Paid in full")).toBeTruthy();
+    });
+  });
 });

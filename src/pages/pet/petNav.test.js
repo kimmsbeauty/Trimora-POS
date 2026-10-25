@@ -4,7 +4,7 @@ describe("pet navigation", function () {
   it("follows the spec order with Checkout directly under Overview", function () {
     expect(PET_NAV.map(function (n) { return n.label; })).toEqual([
       "Overview", "Checkout", "Calendar & Bookings", "Customers", "Pets", "Grooming", "Boarding",
-      "Invoices & Payments", "Supplies & Inventory", "Loyalty Programme", "Staff & Permissions", "Reports", "Settings",
+      "Invoices & Payments", "Supplies & Inventory", "Loyalty Programme", "Reminders", "Staff & Permissions", "Reports", "Settings",
     ]);
   });
 
