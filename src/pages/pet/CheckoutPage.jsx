@@ -7,8 +7,9 @@
 // preview only. A per-sale key makes a double click or retry return the same
 // invoice instead of a second one.
 //
-// Not built yet: product lines (arrive with Supplies), M-Pesa STK push, refunds,
-// loyalty points.
+// Lines can be catalogue services (including boarding rates) or retail products
+// from Supplies (migration 095 takes the stock out in the same transaction).
+// Not built yet: M-Pesa STK push, refunds, loyalty points.
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { db, dbRpcAuth } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
@@ -20,7 +21,7 @@ import {
 import { PageHeader, Card, Button, Field, ErrorLine, EmptyState, inputStyle } from "./ui";
 
 function blankDraft() {
-  return { customer_id: "", pet_id: "", booking_id: "", lines: [{ service_id: "", quantity: "1" }], discountType: "amount", discountValue: "",
+  return { customer_id: "", pet_id: "", booking_id: "", lines: [{ ref: "", quantity: "1" }], discountType: "amount", discountValue: "",
     due_date: "", notes: "", payments: [] };
 }
 
@@ -42,14 +43,15 @@ export default function CheckoutPage({ onInvoiceCreated }) {
       db("GET", "customers", null, "?select=id,name,phone&order=name.asc&limit=2000"),
       db("GET", "pet_pets", null, "?select=id,customer_id,name,species&order=name.asc&limit=5000"),
       db("GET", "pet_services", null, "?select=id,name,category,price,active&active=eq.true&order=name.asc&limit=1000"),
-      db("GET", "pet_bookings", null, "?select=id,customer_id,pet_id,starts_at,status,pet_booking_services(service_id,service_name)&status=in.(checked-in,in-progress,completed)&order=starts_at.desc&limit=300"),
+      db("GET", "pet_bookings", null, "?select=id,customer_id,pet_id,starts_at,status,pet_booking_services(service_id,service_name)&status=in.(checked-in,in-progress,ready,completed)&order=starts_at.desc&limit=300"),
       db("GET", "pet_invoices", null, "?select=booking_id&booking_id=not.is.null&status=neq.void&limit=2000"),
+      db("GET", "pet_items", null, "?select=id,name,price,unit,quantity_on_hand&kind=eq.retail&active=eq.true&order=name.asc&limit=2000"),
     ]).then(function (res) {
       if (cancelled) return;
       // db() returns null when a request failed -- an error, not "nothing to show".
       if (!res.every(Array.isArray)) { setLoadStatus("error"); return; }
       var invoiced = {}; res[4].forEach(function (i) { invoiced[i.booking_id] = true; });
-      setData({ customers: res[0], pets: res[1], services: res[2], bookings: res[3].filter(function (b) { return !invoiced[b.id]; }) });
+      setData({ customers: res[0], pets: res[1], services: res[2], items: res[5], bookings: res[3].filter(function (b) { return !invoiced[b.id]; }) });
       setLoadStatus("ready");
     });
     return function () { cancelled = true; };
@@ -57,6 +59,9 @@ export default function CheckoutPage({ onInvoiceCreated }) {
 
   var serviceById = useMemo(function () {
     var m = {}; if (data) data.services.forEach(function (s) { m[s.id] = s; }); return m;
+  }, [data]);
+  var itemById = useMemo(function () {
+    var m = {}; if (data) data.items.forEach(function (i) { m[i.id] = i; }); return m;
   }, [data]);
 
   if (loadStatus === "loading") {
@@ -76,9 +81,16 @@ export default function CheckoutPage({ onInvoiceCreated }) {
 
   var petsOfCustomer = data.pets.filter(function (p) { return p.customer_id === draft.customer_id; });
   var bookingsOfCustomer = data.bookings.filter(function (b) { return b.customer_id === draft.customer_id; });
+  // A line's ref is "service:<id>" or "item:<id>"; the price shown is the catalogue price.
+  function lineSource(l) {
+    var parts = String(l.ref || "").split(":");
+    if (parts[0] === "service") return { kind: "service", row: serviceById[parts[1]], id: parts[1] };
+    if (parts[0] === "item") return { kind: "item", row: itemById[parts[1]], id: parts[1] };
+    return { kind: "", row: null, id: "" };
+  }
   var priced = draft.lines.map(function (l) {
-    var s = serviceById[l.service_id];
-    return { unit_price: s ? s.price : 0, quantity: Number(l.quantity) || 0 };
+    var src = lineSource(l);
+    return { unit_price: src.row ? src.row.price : 0, quantity: Number(l.quantity) || 0 };
   });
   var totals = computeTotals({ lines: priced, discountType: draft.discountType, discountValue: draft.discountValue,
     taxEnabled: !!(salon && salon.tax_enabled), taxRate: salon && salon.tax_rate });
@@ -93,21 +105,30 @@ export default function CheckoutPage({ onInvoiceCreated }) {
     var b = data.bookings.filter(function (x) { return x.id === id; })[0];
     if (!b) { patch({ booking_id: "" }); setNote(""); return; }
     var lines = (b.pet_booking_services || []).filter(function (l) { return serviceById[l.service_id]; })
-      .map(function (l) { return { service_id: l.service_id, quantity: "1" }; });
+      .map(function (l) { return { ref: "service:" + l.service_id, quantity: "1" }; });
     var missing = (b.pet_booking_services || []).length - lines.length;
     setNote(missing > 0 ? missing + " service(s) on this booking are no longer in the active catalogue and were not added. Prices come from the current catalogue." : "Prices come from the current catalogue.");
-    patch({ booking_id: id, pet_id: b.pet_id, lines: lines.length ? lines : [{ service_id: "", quantity: "1" }] });
+    patch({ booking_id: id, pet_id: b.pet_id, lines: lines.length ? lines : [{ ref: "", quantity: "1" }] });
   }
 
   async function completeSale() {
     if (saving) return;
-    var cleanLines = draft.lines.filter(function (l) { return l.service_id; });
+    var cleanLines = draft.lines.filter(function (l) { return l.ref; });
     var msg = validateCheckout(Object.assign({}, draft, { lines: cleanLines }), totals);
+    if (!msg) {
+      // Quick check against the stock we loaded; the database makes the real decision.
+      var wanted = {};
+      cleanLines.forEach(function (l) { var src = lineSource(l); if (src.kind === "item") wanted[src.id] = (wanted[src.id] || 0) + (Number(l.quantity) || 0); });
+      Object.keys(wanted).forEach(function (id) { if (!msg && itemById[id] && wanted[id] > itemById[id].quantity_on_hand) msg = "There isn't enough " + itemById[id].name + " in stock (" + itemById[id].quantity_on_hand + " left)."; });
+    }
     if (msg) { setErr(msg); return; }
     setSaving(true); setErr("");
     var res = await dbRpcAuth("pet_create_invoice", {
       p_idempotency_key: keyRef.current, p_customer_id: draft.customer_id, p_pet_id: draft.pet_id || null, p_booking_id: draft.booking_id || null,
-      p_lines: cleanLines.map(function (l) { return { service_id: l.service_id, quantity: Number(l.quantity) }; }),
+      p_lines: cleanLines.map(function (l) {
+        var src = lineSource(l);
+        return src.kind === "item" ? { item_id: src.id, quantity: Number(l.quantity) } : { service_id: src.id, quantity: Number(l.quantity) };
+      }),
       p_discount_type: draft.discountType, p_discount_value: Number(draft.discountValue) || 0,
       p_due_date: draft.due_date || null, p_notes: draft.notes || null, p_payments: paymentRows(draft.payments),
     });
@@ -120,11 +141,12 @@ export default function CheckoutPage({ onInvoiceCreated }) {
   }
 
   var serviceOptions = data.services;
+  var itemOptions = data.items;
   return (
     <div>
       <PageHeader title="Checkout" subtitle="Create an invoice for a visit or a walk-in sale and take payment" />
-      {serviceOptions.length === 0 ? (
-        <Card><EmptyState title="No services to sell" description="Add services in the Grooming tab (including boarding rates) before using checkout." /></Card>
+      {serviceOptions.length === 0 && itemOptions.length === 0 ? (
+        <Card><EmptyState title="No services to sell" description="Add services in the Grooming tab (including boarding rates), or retail products in Products & Supplies, before using checkout." /></Card>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16, alignItems: "start" }}>
           <div style={{ display: "grid", gap: 16 }}>
@@ -156,15 +178,20 @@ export default function CheckoutPage({ onInvoiceCreated }) {
             </Card>
 
             <Card style={{ padding: 16, display: "grid", gap: 10 }}>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>2. Services</div>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>2. Services and products</div>
               {draft.lines.map(function (l, i) {
-                var s = serviceById[l.service_id];
+                var src = lineSource(l); var s = src.row;
                 return (
                   <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 70px auto", gap: 8, alignItems: "end" }}>
-                    <Field label={i === 0 ? "Service" : ""} htmlFor={"co-svc-" + i}>
-                      <select id={"co-svc-" + i} aria-label={"Service " + (i + 1)} style={inputStyle} value={l.service_id} onChange={function (e) { setLine(i, { service_id: e.target.value }); }}>
-                        <option value="">Choose a service</option>
-                        {serviceOptions.map(function (x) { return <option key={x.id} value={x.id}>{x.name} · {x.category} · {fmt(x.price)}</option>; })}
+                    <Field label={i === 0 ? "Service or product" : ""} htmlFor={"co-svc-" + i}>
+                      <select id={"co-svc-" + i} aria-label={"Item " + (i + 1)} style={inputStyle} value={l.ref} onChange={function (e) { setLine(i, { ref: e.target.value }); }}>
+                        <option value="">Choose a service or product</option>
+                        <optgroup label="Services">
+                          {serviceOptions.map(function (x) { return <option key={x.id} value={"service:" + x.id}>{x.name} · {x.category} · {fmt(x.price)}</option>; })}
+                        </optgroup>
+                        {itemOptions.length ? <optgroup label="Products">
+                          {itemOptions.map(function (x) { return <option key={x.id} value={"item:" + x.id}>{x.name} · {fmt(x.price)} · {x.quantity_on_hand} in stock</option>; })}
+                        </optgroup> : null}
                       </select>
                     </Field>
                     <Field label={i === 0 ? "Qty" : ""} htmlFor={"co-qty-" + i}>
@@ -177,7 +204,7 @@ export default function CheckoutPage({ onInvoiceCreated }) {
                   </div>
                 );
               })}
-              <div><Button size="sm" variant="outline" onClick={function () { patch({ lines: draft.lines.concat([{ service_id: "", quantity: "1" }]) }); }}>+ Add item</Button></div>
+              <div><Button size="sm" variant="outline" onClick={function () { patch({ lines: draft.lines.concat([{ ref: "", quantity: "1" }]) }); }}>+ Add item</Button></div>
             </Card>
           </div>
 
