@@ -7,11 +7,11 @@ describe("vaccinationStatus", function () {
   var today = "2026-10-24";
   it("has no status without a due date", function () { expect(vaccinationStatus(null, today)).toBe(null); });
   it("is overdue when the due date has passed", function () { expect(vaccinationStatus("2026-10-23", today)).toBe("overdue"); });
-  it("is due-soon today and within 30 days", function () {
+  it("is due-soon today and within the 180-day default window", function () {
     expect(vaccinationStatus("2026-10-24", today)).toBe("due-soon");
-    expect(vaccinationStatus("2026-11-23", today)).toBe("due-soon");
+    expect(vaccinationStatus("2027-04-22", today)).toBe("due-soon");
   });
-  it("is current beyond 30 days", function () { expect(vaccinationStatus("2026-11-24", today)).toBe("current"); });
+  it("is current beyond 180 days", function () { expect(vaccinationStatus("2027-04-23", today)).toBe("current"); });
   it("summarises overdue and due-soon counts", function () {
     var s = vaccinationSummary([{ next_due_on: "2026-01-01" }, { next_due_on: "2026-10-30" }, { next_due_on: null }], today);
     expect(s).toEqual({ overdue: 1, dueSoon: 1 });

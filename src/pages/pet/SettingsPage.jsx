@@ -10,6 +10,7 @@ import { db } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
 import { MUTED_FG, BORDER, FOREGROUND } from "./theme";
 import { validateSettings, settingsRow } from "./settingsData";
+import ReminderSettings from "./ReminderSettings";
 import { PageHeader, Card, Button, Field, ErrorLine, inputStyle } from "./ui";
 
 function defaultReload() { try { window.location.reload(); } catch (e) { /* ignore */ } }
@@ -81,6 +82,7 @@ export default function SettingsPage({ onSaved }) {
         {saved ? <p role="status" style={{ margin: 0, fontSize: 12, color: MUTED_FG }}>Saved. Refreshing to apply your changes…</p> : null}
         <div><Button onClick={save} disabled={saving}>{saving ? "Saving…" : "Save settings"}</Button></div>
       </Card>
+      <ReminderSettings />
     </div>
   );
 }

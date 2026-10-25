@@ -1,7 +1,7 @@
 // @vitest-environment node
 //
-// Behavioural test of migration 097 (pet loyalty) against a REAL Postgres engine (PGlite,
-// in process). It applies the repo's real migrations 083-088, 090, 092, 094, 095 and 097,
+// Behavioural test of migration 099 (pet loyalty) against a REAL Postgres engine (PGlite,
+// in process). It applies the repo's real migrations 083-088, 090, 092, 089, 094-098 and 099,
 // so points are awarded by the real triggers on the real pet_create_invoice /
 // pet_record_payment / pet_set_booking_status, and then tries to break the rules:
 // double awards, going below zero, someone else's customer, direct writes, a failing
@@ -81,7 +81,7 @@ beforeAll(async function () {
   `);
   for (var f of ["083_pet_pets_vaccinations.sql", "084_pet_customer_profiles.sql", "085_pet_services.sql", "086_pet_roles.sql",
     "087_pet_audit_log.sql", "088_pet_bookings.sql", "092_pet_booking_statuses.sql", "090_pet_invoices.sql", "094_pet_supplies.sql",
-    "095_pet_invoice_products.sql", "097_pet_loyalty.sql"]) { await db.exec(sql(f)); }
+    "095_pet_invoice_products.sql", "089_pet_boarding.sql", "096_pet_delete_kennel_fix.sql", "097_pet_archiving.sql", "098_pet_care_reminder_windows.sql", "099_pet_loyalty.sql"]) { await db.exec(sql(f)); }
   await db.exec(`
     insert into public.salons values ('${A}','A'),('${B}','B');
     insert into public.salon_settings (salon_id) values ('${A}'),('${B}');

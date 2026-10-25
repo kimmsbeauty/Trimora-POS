@@ -145,12 +145,13 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
                   // for the client (writes via pet_* functions); InvoicesPage.jsx.
   "pet_invoice_lines", // ditto -- lines copied from the catalogue at issue time.
   "pet_payments", // ditto -- append-only payment records.
+  "pet_reminder_settings", // added with migration 098 -- per-business "due soon" windows by care-record type; ReminderSettings.jsx.
   "pet_suppliers", // added 2026-10-25 alongside migration 094 -- suppliers; SuppliesPage.jsx.
   "pet_items", // ditto -- products and consumables; quantity changes only via pet_* functions.
   "pet_stock_movements", // ditto -- append-only stock ledger, read-only for the client.
   "pet_purchases", // ditto -- stock receipts, read-only for the client.
   "pet_purchase_lines", // ditto -- receipt lines, read-only for the client.
-  "pet_loyalty_settings", // added alongside migration 097 -- loyalty rules; salon_id on the
+  "pet_loyalty_settings", // added alongside migration 099 -- loyalty rules; salon_id on the
                           // row; READ-ONLY for the client (saved through a database function).
   "pet_loyalty_rewards", // ditto -- the app may add and edit rewards (never delete).
   "pet_loyalty_accounts", // ditto -- points balances; changed only by database functions.

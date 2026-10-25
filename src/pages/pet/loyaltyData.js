@@ -1,7 +1,7 @@
 // src/pages/pet/loyaltyData.js
 //
 // Pure helpers for the Loyalty Programme (no network, no React). The database
-// (migration 097) is the authority: points are awarded by triggers when an invoice is
+// (migration 099) is the authority: points are awarded by triggers when an invoice is
 // paid or a booking is completed, balances change only through database functions, and
 // the ledger is append-only. The checks here only give faster, friendlier feedback.
 

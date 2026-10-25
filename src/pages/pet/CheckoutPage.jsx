@@ -10,7 +10,7 @@
 // Lines can be catalogue services (including boarding rates) or retail products
 // from Supplies (migration 095 takes the stock out in the same transaction).
 // Not built yet: M-Pesa STK push, refunds, applying a loyalty voucher automatically.
-// Loyalty points need nothing here: the database awards them when an invoice becomes paid (097).
+// Loyalty points need nothing here: the database awards them when an invoice becomes paid (099).
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { db, dbRpcAuth } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
