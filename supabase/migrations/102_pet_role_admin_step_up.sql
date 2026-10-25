@@ -6,7 +6,7 @@
 -- removes the open client write policies on pet_roles / pet_staff_roles.
 --
 -- STATUS: NOT APPLIED. Applies to production only after the owner says "apply 102" and has
--- seen this exact SQL. (Numbered 102 because 101 is claimed by the held loyalty PR #34.)
+-- seen this exact SQL. (Numbered 102 because 101 is the held loyalty migration.)
 --
 -- THE PROBLEM (verified against the live project, 2026-10-25)
 --   * pet_roles and pet_staff_roles have INSERT/UPDATE/DELETE policies keyed only on
