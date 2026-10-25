@@ -3,8 +3,8 @@
 -- Trimora Pet -- Phase 7: boarding (kennels, stays, check-in / check-out) with
 -- database-level conflict prevention.
 --
--- STATUS: written for owner review. NOT applied anywhere. Apply only after the
--- owner says "apply 089".
+-- STATUS: applied to production 2026-10-24 on the owner's instruction (Supabase
+-- history name `pet_boarding`); see the migrations README for the verification.
 --
 -- ADDITIVE ONLY: two tables and six functions. Requires btree_gist, which 088
 -- already installed (re-declared with IF NOT EXISTS, so safe either way).

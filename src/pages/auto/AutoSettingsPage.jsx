@@ -6,7 +6,7 @@
 // follow-up.
 //
 // Deliberately NOT a copy-paste-and-reimagine: every save/fetch
-// operation here (update_salon_pin RPC, salon_mpesa_config PATCH/POST)
+// operation here (change_salon_pins RPC, salon_mpesa_config PATCH/POST)
 // is ported line-for-line from SalonSettingsPage.jsx, not reinvented --
 // update_salon_pin in particular is the exact security-sensitive RPC
 // this session already verified live earlier (the pgcrypto/search_path
@@ -35,6 +35,7 @@ import { db } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
 import { SUPABASE_URL, SUPABASE_KEY } from "../../lib/constants";
 import { getValidAccessToken } from "../../lib/deviceAuth";
+import { changeSalonPins } from "../../lib/pinApi";
 import { INK, STEEL, CHROME, SIGNAL, ALERT, PAPER } from "./theme";
 
 var inputStyle = {
@@ -507,7 +508,8 @@ export default function AutoSettingsPage() {
     autoResetSaved(setContactSaved);
   }
 
-  // ── PIN fields -- ported from SalonSettingsPage, identical RPC call ──
+  // ── PIN fields -- same shared change_salon_pins call as SalonSettingsPage (src/lib/pinApi.js) ──
+  var [currentAdminPin, setCurrentAdminPin] = useState("");
   var [newStaffPin, setNewStaffPin] = useState("");
   var [newAdminPin, setNewAdminPin] = useState("");
   var [confirmAdminPin, setConfirmAdminPin] = useState("");
@@ -537,34 +539,27 @@ export default function AutoSettingsPage() {
       setPinError("Staff and admin PINs must be different.");
       return;
     }
+    if (!currentAdminPin) {
+      setPinError("Enter your current admin PIN to confirm this change.");
+      return;
+    }
     setPinSaving(true);
 
     var token = await getValidAccessToken();
-    var rpcUpdates = [];
-    if (newStaffPin) {
-      rpcUpdates.push(fetch(SUPABASE_URL + "/rest/v1/rpc/update_salon_pin", {
-        method: "POST",
-        headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + (token || SUPABASE_KEY), "Content-Type": "application/json" },
-        body: JSON.stringify({ p_role: "staff", p_new_pin: newStaffPin }),
-      }));
-    }
-    if (newAdminPin) {
-      rpcUpdates.push(fetch(SUPABASE_URL + "/rest/v1/rpc/update_salon_pin", {
-        method: "POST",
-        headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + (token || SUPABASE_KEY), "Content-Type": "application/json" },
-        body: JSON.stringify({ p_role: "admin", p_new_pin: newAdminPin }),
-      }));
-    }
-
-    var results = await Promise.all(rpcUpdates);
+    var result = await changeSalonPins({
+      token: token,
+      currentAdminPin: currentAdminPin,
+      newStaffPin: newStaffPin,
+      newAdminPin: newAdminPin,
+    });
     setPinSaving(false);
 
-    var anyFailed = results.some(function (r) { return !r.ok; });
-    if (anyFailed) {
-      setPinError("PIN update failed. Please try again.");
+    if (!result.ok) {
+      setPinError(result.error);
       return;
     }
 
+    setCurrentAdminPin("");
     setPinSaved(true);
     setNewStaffPin(""); setNewAdminPin(""); setConfirmAdminPin("");
     autoResetSaved(setPinSaved);
@@ -989,6 +984,12 @@ export default function AutoSettingsPage() {
           <div style={{ fontSize: 11, color: CHROME, marginBottom: 14, lineHeight: 1.5 }}>
             Leave a PIN field blank to keep the current PIN unchanged. Admin PIN change requires confirmation.
           </div>
+
+          <Field label="Current Admin PIN (required to change either PIN)">
+            <input type="password" inputMode="numeric" value={currentAdminPin} autoComplete="off"
+              onChange={function (e) { setCurrentAdminPin(e.target.value.replace(/\D/g, "").slice(0, 6)); setPinSaved(false); }}
+              placeholder="Enter your current admin PIN" maxLength={6} style={inputStyle} />
+          </Field>
 
           <Field label="New Staff PIN (4–6 digits)">
             <input type="password" inputMode="numeric" value={newStaffPin}

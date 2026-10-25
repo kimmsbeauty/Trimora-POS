@@ -4,7 +4,7 @@
 import React, { useEffect } from "react";
 import {
   CARD, BORDER, MUTED, MUTED_FG, FOREGROUND, PRIMARY, PRIMARY_FG, DESTRUCTIVE, SUCCESS, WARNING, INFO,
-  ACCENT, ACCENT_FG, FONT_BODY, FONT_HEADING,
+  ACCENT, ACCENT_FG, VIOLET, FONT_BODY, FONT_HEADING,
 } from "./theme";
 
 export var inputStyle = {
@@ -56,6 +56,8 @@ export function Field({ label, children, htmlFor }) {
 var TONES = {
   success: { bg: ACCENT, fg: SUCCESS }, warning: { bg: ACCENT, fg: WARNING },
   danger: { bg: ACCENT, fg: DESTRUCTIVE }, info: { bg: ACCENT, fg: INFO }, neutral: { bg: MUTED, fg: MUTED_FG },
+  // prototype status colours: Checked In (gold), Ready for Collection (violet)
+  gold: { bg: ACCENT, fg: ACCENT_FG }, violet: { bg: ACCENT, fg: VIOLET },
 };
 export function Badge({ tone, children }) {
   var t = TONES[tone] || TONES.neutral;

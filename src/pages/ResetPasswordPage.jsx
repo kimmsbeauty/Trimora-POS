@@ -16,6 +16,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { SUPABASE_URL, SUPABASE_KEY, GOLD, GOLD_DIM, BLACK, WHITE, RED, GREEN } from "../lib/constants.js";
+import { resetAdminPinViaRecovery } from "../lib/pinApi.js";
 
 export default function ResetPasswordPage() {
   // Slug can come from:
@@ -84,24 +85,16 @@ export default function ResetPasswordPage() {
       return setError("Session expired. Please request a new reset link.");
     }
 
-    // Now update the admin PIN via RPC
-    var pinRes = await fetch(SUPABASE_URL + "/rest/v1/rpc/update_salon_pin", {
-      method: "POST",
-      headers: {
-        apikey:         SUPABASE_KEY,
-        Authorization:  "Bearer " + token,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ p_role: "admin", p_new_pin: newPin }),
-    });
+    // Reset the admin PIN. Needs the email-link session (migration 091); see src/lib/pinApi.js
+    // for the temporary legacy fallback.
+    var pinResult = await resetAdminPinViaRecovery({ token: token, newPin: newPin });
 
     setLoading(false);
 
-    if (pinRes.ok) {
+    if (pinResult.ok) {
       setDone(true);
     } else {
-      var pinErr = await pinRes.json().catch(function() { return {}; });
-      setError("PIN reset failed: " + (pinErr.message || "Please contact support."));
+      setError("PIN reset failed: " + (pinResult.error || "Please contact support."));
     }
   }
 
