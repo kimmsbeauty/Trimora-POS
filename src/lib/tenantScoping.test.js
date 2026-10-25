@@ -150,6 +150,12 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
   "pet_stock_movements", // ditto -- append-only stock ledger, read-only for the client.
   "pet_purchases", // ditto -- stock receipts, read-only for the client.
   "pet_purchase_lines", // ditto -- receipt lines, read-only for the client.
+  "pet_loyalty_settings", // added alongside migration 097 -- loyalty rules; salon_id on the
+                          // row; READ-ONLY for the client (saved through a database function).
+  "pet_loyalty_rewards", // ditto -- the app may add and edit rewards (never delete).
+  "pet_loyalty_accounts", // ditto -- points balances; changed only by database functions.
+  "pet_loyalty_ledger", // ditto -- append-only points history; read-only for the client.
+  "pet_loyalty_redemptions", // ditto -- reward vouchers; read-only for the client.
   "pet_kennels", // added 2026-10-24 alongside migration 089 -- kennels; salon_id on
                  // the row; READ-ONLY for the client (writes go through the pet_*
                  // database functions); BoardingPage.jsx.
