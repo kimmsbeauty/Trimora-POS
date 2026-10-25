@@ -8,7 +8,7 @@
 // Deliberately NOT a copy-paste-and-reimagine: every save/fetch
 // operation here (change_salon_pins RPC, salon_mpesa_config PATCH/POST)
 // is ported line-for-line from SalonSettingsPage.jsx, not reinvented --
-// update_salon_pin in particular is the exact security-sensitive RPC
+// The PIN-change RPC (formerly update_salon_pin, now change_salon_pins) is the exact security-sensitive RPC
 // this session already verified live earlier (the pgcrypto/search_path
 // fix). Divergence risk on a PIN-reset code path is exactly the kind of
 // thing this project's "don't fork shared security logic" precedent

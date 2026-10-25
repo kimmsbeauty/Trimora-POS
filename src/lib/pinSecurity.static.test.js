@@ -15,17 +15,15 @@ function read(rel) { return fs.readFileSync(path.join(SRC, rel), "utf8"); }
 function stripComments(s) { return s.replace(/\/\*[\s\S]*?\*\//g, "").split("\n").filter(function (l) { return !/^\s*\/\//.test(l); }).join("\n"); }
 
 describe("PIN hardening: client regression guards", function () {
-  it("only src/lib/pinApi.js may call the legacy update_salon_pin RPC", function () {
+  it("NO client code references the revoked legacy update_salon_pin RPC (migration 093)", function () {
     var offenders = files.filter(function (f) { return stripComments(fs.readFileSync(f, "utf8")).indexOf("update_salon_pin") !== -1; })
       .map(function (f) { return path.relative(SRC, f); });
-    expect(offenders).toEqual(["lib/pinApi.js"]);
+    expect(offenders).toEqual([]);
   });
-  it("the legacy call in pinApi.js exists only inside the recovery fallback", function () {
+  it("pinApi.js has no fallback path: exactly one RPC per exported function", function () {
     var code = stripComments(read("lib/pinApi.js"));
-    var fnStart = code.indexOf("export async function resetAdminPinViaRecovery");
-    var changeFn = code.slice(code.indexOf("export async function changeSalonPins"), fnStart);
-    expect(changeFn).not.toMatch(/update_salon_pin/);
-    expect(code.slice(fnStart)).toMatch(/update_salon_pin/);
+    expect((code.match(/await rpc\(/g) || []).length).toBe(2);
+    expect(code).not.toMatch(/legacy|fallback/i);
   });
   it("all four PIN pages go through pinApi", function () {
     expect(read("pages/SalonSettingsPage.jsx")).toMatch(/changeSalonPins/);

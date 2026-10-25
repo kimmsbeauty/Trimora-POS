@@ -10,8 +10,8 @@
 //       Forgot-PIN pages. Needs a recent email-link session (JWT amr method 'otp').
 //
 // The old update_salon_pin(role, new_pin) accepted a PIN change from any signed-in device
-// (including one on the staff PIN) with no proof. It is only used below as a TEMPORARY
-// fallback for the recovery flow (see resetAdminPinViaRecovery).
+// (including one on the staff PIN) with no proof. Migration 093 revoked it from the API and this
+// module no longer references it; a static test fails if any client code does.
 
 import { SUPABASE_URL, SUPABASE_KEY } from "./constants";
 
@@ -23,6 +23,7 @@ var SAFE_MESSAGES = [
   [/Staff and admin PINs must be different/i, "Staff and admin PINs must be different."],
   [/Not signed in/i, "Your session has expired. Please sign in again."],
   [/Nothing to change/i, "Enter at least one new PIN to update."],
+  [/recent recovery email link/i, "This reset link is no longer valid. Request a new PIN reset email and try again."],
 ];
 
 function friendly(serverMessage) {
@@ -63,15 +64,9 @@ export async function changeSalonPins(opts) {
   return { ok: false, error: friendly(body && body.message) };
 }
 
-// Forgot-PIN pages (the owner cannot supply the current PIN). Uses the email-link-only function.
-//
-// TEMPORARY FALLBACK: until migration 093 removes it, fall back to the old update_salon_pin if the
-// new function is missing (404 / PGRST202: 091 not applied yet) or reports that it does not
-// recognise the session as an email-link session. The recovery check relies on the JWT amr
-// claim, which has been verified against production's recorded session methods but not with a
-// real recovery email. The fallback guarantees an owner can never be locked out of recovery.
-// Once the owner has completed a real recovery through the new path and 093 is applied, delete
-// the fallback and the legacy call.
+// Forgot-PIN pages (the owner cannot supply the current PIN). Uses the email-link-only function:
+// the server accepts it only for a session started by an email link within the last hour, so a
+// device signed in with a PIN cannot use it. There is deliberately no fallback to anything else.
 export async function resetAdminPinViaRecovery(opts) {
   var res;
   try {
@@ -79,23 +74,7 @@ export async function resetAdminPinViaRecovery(opts) {
   } catch (e) {
     return { ok: false, error: "Network error. Check your connection and try again." };
   }
-  if (res.ok) return { ok: true, via: "recovery" };
-
+  if (res.ok) return { ok: true };
   var body = await res.json().catch(function () { return {}; });
-  var msg = (body && (body.message || "")) + "";
-  var missing = res.status === 404 || (body && body.code === "PGRST202");
-  var notRecognised = /recent recovery email link/i.test(msg);
-
-  if (missing || notRecognised) {
-    var legacy;
-    try {
-      legacy = await rpc("update_salon_pin", opts.token, { p_role: "admin", p_new_pin: opts.newPin });
-    } catch (e) {
-      return { ok: false, error: "Network error. Check your connection and try again." };
-    }
-    if (legacy.ok) return { ok: true, via: "legacy-fallback" };
-    var lb = await legacy.json().catch(function () { return {}; });
-    return { ok: false, error: friendly(lb && lb.message) };
-  }
-  return { ok: false, error: friendly(msg) };
+  return { ok: false, error: friendly(body && body.message) };
 }
