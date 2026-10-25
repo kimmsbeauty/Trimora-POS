@@ -47,20 +47,20 @@ describe("migrations 094 and 095 (static checks; behaviour is tested in the .db 
     expect(s91).toMatch(/quantity_on_hand integer not null default 0 check \(quantity_on_hand >= 0\)/);
     expect(s91).toMatch(/INSUFFICIENT_STOCK/);
   });
-  it("091 is additive and leaves the shared stock table alone", function () {
+  it("094 is additive and leaves the shared stock table alone", function () {
     expect(s91).not.toMatch(/drop\s+(table|column|policy)/i);
     expect(s91).not.toMatch(/public\.stock\b/);
     expect(s91).not.toMatch(/alter\s+table\s+public\.(?!pet_)/i);
   });
-  it("092 takes product prices from pet_items and never from the caller", function () {
+  it("095 takes product prices from pet_items and never from the caller", function () {
     expect(s92).toMatch(/select i\.price into v_item from public\.pet_items i/);
     expect(s92).toMatch(/i\.active and i\.kind = 'retail'/);
     expect(s92).not.toMatch(/->> 'price'|->> 'unit_price'|p_price/);
   });
-  it("092 requires exactly one of service or product on every line", function () {
+  it("095 requires exactly one of service or product on every line", function () {
     expect(s92).toMatch(/check \(\(service_id is not null\) <> \(item_id is not null\)\)/);
   });
-  it("092 takes stock out on sale and puts it back on void", function () {
+  it("095 takes stock out on sale and puts it back on void", function () {
     expect(s92).toMatch(/pet_apply_stock\(v_salon, \(v_line ->> 'item_id'\)::uuid, -v_qty, 'sale'/);
     expect(s92).toMatch(/pet_apply_stock\(v_salon, v_row\.item_id, v_row\.quantity, 'sale_void'/);
   });
