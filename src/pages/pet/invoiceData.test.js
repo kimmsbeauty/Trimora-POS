@@ -103,6 +103,8 @@ describe("messages and keys", function () {
   it("maps database codes and never leaks raw text", function () {
     expect(invoiceErrorMessage("OVERPAYMENT")).toMatch(/more than the amount/);
     expect(invoiceErrorMessage("INVOICE_HAS_PAYMENTS")).toMatch(/Refunds/);
+    expect(invoiceErrorMessage("INSUFFICIENT_STOCK")).toMatch(/enough stock/);
+    expect(invoiceErrorMessage("ITEM_NOT_FOUND")).toMatch(/product/);
     expect(invoiceErrorMessage("duplicate key value violates unique constraint")).toMatch(/Something went wrong/);
     expect(invoiceErrorMessage("Network error")).toMatch(/Couldn't reach/);
   });

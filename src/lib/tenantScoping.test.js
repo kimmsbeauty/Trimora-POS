@@ -145,6 +145,11 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
                   // for the client (writes via pet_* functions); InvoicesPage.jsx.
   "pet_invoice_lines", // ditto -- lines copied from the catalogue at issue time.
   "pet_payments", // ditto -- append-only payment records.
+  "pet_suppliers", // added 2026-10-25 alongside migration 091 -- suppliers; SuppliesPage.jsx.
+  "pet_items", // ditto -- products and consumables; quantity changes only via pet_* functions.
+  "pet_stock_movements", // ditto -- append-only stock ledger, read-only for the client.
+  "pet_purchases", // ditto -- stock receipts, read-only for the client.
+  "pet_purchase_lines", // ditto -- receipt lines, read-only for the client.
   "pet_kennels", // added 2026-10-24 alongside migration 089 -- kennels; salon_id on
                  // the row; READ-ONLY for the client (writes go through the pet_*
                  // database functions); BoardingPage.jsx.

@@ -23,6 +23,8 @@ var ERROR_TEXT = {
   BOOKING_ALREADY_INVOICED: "This booking already has an invoice.",
   INVALID_LINES: "Check the items: add at least one, with a quantity from 1 to 100.",
   SERVICE_NOT_FOUND: "One of the chosen services is no longer available.",
+  ITEM_NOT_FOUND: "One of the chosen products is no longer available for sale.",
+  INSUFFICIENT_STOCK: "There isn't enough stock of a product on this sale. Check the quantities and try again.",
   INVALID_DISCOUNT: "The discount isn't valid. It can't be negative or more than the subtotal.",
   AMOUNT_TOO_LARGE: "That total is too large.",
   SETTINGS_MISSING: "This business has no invoice settings yet. Contact support.",

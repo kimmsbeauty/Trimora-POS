@@ -32,6 +32,7 @@ import CalendarPage from "./pet/CalendarPage";
 import CheckoutPage from "./pet/CheckoutPage";
 import InvoicesPage from "./pet/InvoicesPage";
 import SettingsPage from "./pet/SettingsPage";
+import SuppliesPage from "./pet/SuppliesPage";
 import StaffPage from "./pet/StaffPage";
 import BoardingPage from "./pet/BoardingPage";
 import WorkingAs from "./pet/WorkingAs";
@@ -46,7 +47,7 @@ import {
 } from "./pet/theme";
 
 var PHASES = {
-  supplies: "a later phase", loyalty: "a later phase",
+  loyalty: "a later phase",
   reports: "a later phase",
 };
 
@@ -157,6 +158,8 @@ function PetStaffRoute() {
         ? <CheckoutPage onInvoiceCreated={function (id) { setOpenInvoice(id); setTab("invoices"); }} />
         : activeItem.key === "invoices"
         ? <InvoicesPage openInvoiceId={openInvoice} onDetailClosed={function () { setOpenInvoice(null); }} />
+        : activeItem.key === "supplies"
+        ? <SuppliesPage canEdit={isAdmin} />
         : activeItem.key === "settings"
         ? <SettingsPage />
         : activeItem.key === "boarding"
