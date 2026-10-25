@@ -62,38 +62,39 @@ describe("changeSalonPins (settings step-up)", function () {
 describe("resetAdminPinViaRecovery (forgot-PIN)", function () {
   afterEach(function () { global.fetch = originalFetch; });
 
-  it("uses the email-link function and does NOT touch the legacy one on success", async function () {
+  it("calls only the email-link function with the recovery token", async function () {
     global.fetch = vi.fn().mockReturnValue(reply(200, null));
     var r = await resetAdminPinViaRecovery({ token: "rec", newPin: "4321" });
-    expect(r).toEqual({ ok: true, via: "recovery" });
+    expect(r).toEqual({ ok: true });
     var c = calls();
     expect(c.length).toBe(1);
     expect(c[0].url).toMatch(/reset_salon_admin_pin_via_recovery$/);
     expect(c[0].body).toEqual({ p_new_pin: "4321" });
     expect(c[0].headers.Authorization).toBe("Bearer rec");
   });
-  it("falls back to the legacy function when 091 is not applied yet (404 / PGRST202)", async function () {
-    global.fetch = vi.fn().mockReturnValueOnce(reply(404, { code: "PGRST202", message: "Could not find the function" })).mockReturnValueOnce(reply(200, null));
-    var r = await resetAdminPinViaRecovery({ token: "rec", newPin: "4321" });
-    expect(r).toEqual({ ok: true, via: "legacy-fallback" });
-    expect(calls()[1].url).toMatch(/update_salon_pin$/);
-    expect(calls()[1].body).toEqual({ p_role: "admin", p_new_pin: "4321" });
-  });
-  it("falls back when the server does not recognise the session as an email link (owner is never locked out)", async function () {
-    global.fetch = vi.fn().mockReturnValueOnce(reply(400, { message: "PIN reset requires a recent recovery email link" })).mockReturnValueOnce(reply(200, null));
-    var r = await resetAdminPinViaRecovery({ token: "rec", newPin: "4321" });
-    expect(r.ok).toBe(true); expect(r.via).toBe("legacy-fallback");
-  });
-  it("does NOT fall back for unrelated errors (e.g. invalid PIN)", async function () {
-    global.fetch = vi.fn().mockReturnValue(reply(400, { message: "PIN must be 4-6 digits" }));
-    var r = await resetAdminPinViaRecovery({ token: "rec", newPin: "12" });
-    expect(r.ok).toBe(false); expect(r.error).toBe("PIN must be 4–6 digits.");
-    expect(calls().length).toBe(1);
-  });
-  it("reports failure if the fallback also fails", async function () {
-    global.fetch = vi.fn().mockReturnValueOnce(reply(404, { code: "PGRST202" })).mockReturnValueOnce(reply(400, { message: "No admin PIN record" }));
+  it("has NO fallback: a missing function (404 / PGRST202) is an error, not a second call", async function () {
+    global.fetch = vi.fn().mockReturnValue(reply(404, { code: "PGRST202", message: "Could not find the function" }));
     var r = await resetAdminPinViaRecovery({ token: "rec", newPin: "4321" });
     expect(r.ok).toBe(false);
+    expect(calls().length).toBe(1);
+  });
+  it("an unrecognised session is an error with a clear message, and never retries another route", async function () {
+    global.fetch = vi.fn().mockReturnValue(reply(400, { message: "PIN reset requires a recent recovery email link" }));
+    var r = await resetAdminPinViaRecovery({ token: "rec", newPin: "4321" });
+    expect(r.ok).toBe(false);
+    expect(r.error).toBe("This reset link is no longer valid. Request a new PIN reset email and try again.");
+    expect(calls().length).toBe(1);
+    expect(calls().some(function (c) { return /update_salon_pin/.test(c.url); })).toBe(false);
+  });
+  it("maps an invalid PIN to friendly text", async function () {
+    global.fetch = vi.fn().mockReturnValue(reply(400, { message: "PIN must be 4-6 digits" }));
+    expect((await resetAdminPinViaRecovery({ token: "rec", newPin: "12" })).error).toBe("PIN must be 4–6 digits.");
+  });
+  it("hides unknown server detail", async function () {
+    global.fetch = vi.fn().mockReturnValue(reply(500, { message: "relation salon_pins internal detail" }));
+    var r = await resetAdminPinViaRecovery({ token: "rec", newPin: "4321" });
+    expect(r.error).toBe("PIN update failed. Please try again.");
+    expect(r.error).not.toMatch(/salon_pins/);
   });
   it("survives a network failure", async function () {
     global.fetch = vi.fn().mockRejectedValue(new Error("offline"));
