@@ -113,6 +113,17 @@ export default function PetPublicBooking() {
       {phoneLink ? <p style={{ margin: "10px 0 0" }}><a href={phoneLink} style={{ color: FOREGROUND, fontWeight: 700 }}>Message us on WhatsApp</a></p> : null}</Card></Shell>;
   }
   if (done) {
+    // Same two WhatsApp hand-offs the salon booking page gives after booking:
+    // a message to the business from the customer, and a booking-details note.
+    var bizName = salon.name || "us";
+    var petLine = form.pet.trim() + " (" + form.species + (form.breed.trim() ? ", " + form.breed.trim() : "") + ")";
+    var customerWaLink = salon.contact_phone ? whatsappUrl(salon.contact_phone,
+      "🐾 " + bizName + "\n\nHi! I've just sent a booking request.\n\nReference: " + done.reference + "\nPet: " + petLine +
+      "\nServices: " + done.services + "\nRequested: " + done.when + "\n\nPlease confirm when you can. Thank you!") : null;
+    var ownerWaLink = salon.contact_phone ? whatsappUrl(salon.contact_phone,
+      "📅 New Booking Request — " + bizName + "\n\nClient: " + form.name.trim() + " (" + form.phone.trim() + ")\nPet: " + petLine +
+      "\nServices: " + done.services + "\nRequested: " + done.when + "\nReference: " + done.reference +
+      (form.notes.trim() ? "\nNotes: " + form.notes.trim() : "")) : null;
     return (
       <Shell salon={salon}>
         <Card style={{ padding: 20 }}>
@@ -123,6 +134,10 @@ export default function PetPublicBooking() {
             <div><span style={{ color: MUTED_FG }}>Requested:</span> {done.when}</div>
             <div><span style={{ color: MUTED_FG }}>For:</span> {form.pet.trim()} · {done.services}</div>
           </div>
+          {customerWaLink ? <a href={customerWaLink} target="_blank" rel="noreferrer"
+            style={{ display: "block", textAlign: "center", background: "#25D366", color: "#fff", borderRadius: 12, padding: "13px 0", fontWeight: 800, fontSize: 15, textDecoration: "none", marginTop: 14 }}>📲 Message us on WhatsApp</a> : null}
+          {ownerWaLink ? <a href={ownerWaLink} target="_blank" rel="noreferrer"
+            style={{ display: "block", textAlign: "center", background: MUTED, border: "1px solid " + BORDER, color: MUTED_FG, borderRadius: 10, padding: "9px 0", fontWeight: 700, fontSize: 12, textDecoration: "none", marginTop: 10 }}>📩 Send booking details to us</a> : null}
           {salon.contact_phone ? <p style={{ margin: "12px 0 0", fontSize: 12, color: MUTED_FG }}>Need to change something? Call {salon.contact_phone} and quote your reference.</p> : null}
         </Card>
       </Shell>
