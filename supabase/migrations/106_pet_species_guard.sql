@@ -2,8 +2,8 @@
 --
 -- Trimora Pet -- enforce "this service is not offered for this species" in the database.
 --
--- STATUS: written for owner review. NOT applied anywhere. Apply by hand in the Supabase
--- SQL Editor only after the owner says "apply 106".
+-- STATUS: APPLIED to production 2026-10-26 (history name pet_species_guard). The live function text
+-- was verified identical to this file afterwards (md5 of both function bodies).
 --
 -- WHY: the booking and boarding forms already refuse a service whose species list excludes the
 -- pet, but the rule lived only in the browser. Anything calling the functions directly (a stale
