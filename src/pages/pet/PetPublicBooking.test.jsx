@@ -10,6 +10,9 @@ vi.mock("../../lib/db", () => ({
 var mockSalon = { id: "s1", slug: "paws", name: "Paws & Co", business_type: "pet", contact_phone: "0700111222", logo_url: "https://example.com/logo.png" };
 vi.mock("../../lib/SalonContext", () => ({ useSalon: function () { return mockSalon; } }));
 
+var mockToken = null;
+vi.mock("../../lib/deviceAuth", () => ({ getValidAccessToken: function () { return Promise.resolve(mockToken); } }));
+
 import PetPublicBooking from "./PetPublicBooking";
 
 var INFO = {
@@ -39,7 +42,7 @@ async function fillAndPick() {
   fireEvent.change(screen.getByLabelText("Phone number"), { target: { value: "0712 345 678" } });
   fireEvent.change(screen.getByLabelText("Pet's name"), { target: { value: "Milo" } });
 }
-beforeEach(function () { mockRpc.mockReset(); mockDb.mockReset(); mockSalon.business_type = "pet"; });
+beforeEach(function () { mockRpc.mockReset(); mockDb.mockReset(); mockSalon.business_type = "pet"; mockToken = null; });
 
 describe("PetPublicBooking", function () {
   it("shows the business branding and the bookable services, and reads nothing private", async function () {
@@ -63,6 +66,18 @@ describe("PetPublicBooking", function () {
     mockSalon.business_type = "salon"; wire();
     render(<PetPublicBooking />);
     expect(await screen.findByText("Online booking isn't available right now")).toBeTruthy();
+  });
+
+  it("points signed-in staff to the settings switch on the closed page, and visitors never see it", async function () {
+    wire({ info: { enabled: false } });
+    var r = render(<PetPublicBooking />);
+    await screen.findByText("Online booking isn't available right now");
+    expect(screen.queryByText(/online booking isn't switched on yet/)).toBeNull();
+    r.unmount();
+    mockToken = "device-token";
+    render(<PetPublicBooking />);
+    expect(await screen.findByText(/online booking isn't switched on yet/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Pet app" }).getAttribute("href")).toBe("/paws/pet");
   });
 
   it("shows a retry when the page can't load", async function () {

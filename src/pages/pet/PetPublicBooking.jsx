@@ -13,6 +13,7 @@ import { MUTED_FG, MUTED, BORDER, FOREGROUND, BACKGROUND, CARD } from "./theme";
 import PetLetterhead from "./PetLetterhead";
 import { Card, Button, Field, ErrorLine, inputStyle } from "./ui";
 import { whatsappUrl } from "./reminderData";
+import { getValidAccessToken } from "../../lib/deviceAuth";
 import {
   SPECIES, publicErrorMessage, isSlotError, validateRequestForm, selectedTotals, groupByCategory, durationLabel,
   dateInZone, addDays, slotTime, slotDateTime, hoursSummary,
@@ -43,6 +44,7 @@ export default function PetPublicBooking() {
   var errState = useState(""); var err = errState[0]; var setErr = errState[1];
   var busyState = useState(false); var busy = busyState[0]; var setBusy = busyState[1];
   var doneState = useState(null); var done = doneState[0]; var setDone = doneState[1];
+  var staffState = useState(false); var staffHere = staffState[0]; var setStaffHere = staffState[1];
 
   useEffect(function () {
     if (!salon.id) return undefined;
@@ -56,6 +58,16 @@ export default function PetPublicBooking() {
     });
     return function () { cancelled = true; };
   }, [salon.id, salon.business_type]);
+
+  // When the page is closed, a signed-in device (staff) gets a pointer to the switch that opens it.
+  useEffect(function () {
+    if (load !== "closed") return undefined;
+    var cancelled = false;
+    try {
+      Promise.resolve(getValidAccessToken()).then(function (t) { if (!cancelled) setStaffHere(!!t); }, function () {});
+    } catch (e) { /* no device session: visitors see the normal closed page */ }
+    return function () { cancelled = true; };
+  }, [load]);
 
   var tz = info ? info.timezone : "Africa/Nairobi";
   var today = info ? dateInZone(new Date(), tz) : "";
@@ -110,7 +122,9 @@ export default function PetPublicBooking() {
   if (load === "closed") {
     return <Shell salon={salon}><Card style={{ padding: 20 }}><div style={{ fontWeight: 700, marginBottom: 6 }}>Online booking isn't available right now</div>
       <p style={{ margin: 0, fontSize: 13, color: MUTED_FG, lineHeight: 1.5 }}>Please contact {salon.name || "us"} directly to book{salon.contact_phone ? ": " + salon.contact_phone : ""}.</p>
-      {phoneLink ? <p style={{ margin: "10px 0 0" }}><a href={phoneLink} style={{ color: FOREGROUND, fontWeight: 700 }}>Message us on WhatsApp</a></p> : null}</Card></Shell>;
+      {phoneLink ? <p style={{ margin: "10px 0 0" }}><a href={phoneLink} style={{ color: FOREGROUND, fontWeight: 700 }}>Message us on WhatsApp</a></p> : null}
+      {staffHere ? <p style={{ margin: "14px 0 0", paddingTop: 12, borderTop: "1px solid " + BORDER, fontSize: 12, color: MUTED_FG, lineHeight: 1.5 }}>
+        Staff: online booking isn't switched on yet. Open the <a href={"/" + (salon.slug || "") + "/pet"} style={{ color: FOREGROUND, fontWeight: 700 }}>Pet app</a>, go to Settings and tick "Accept online booking requests", and add the business phone number so customers can reach you.</p> : null}</Card></Shell>;
   }
   if (done) {
     // Same two WhatsApp hand-offs the salon booking page gives after booking:
