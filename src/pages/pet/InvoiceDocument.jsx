@@ -7,7 +7,8 @@ import React from "react";
 import PetLetterhead from "./PetLetterhead";
 import { fmt } from "../../lib/utils";
 import { FOREGROUND, MUTED_FG, MUTED, BORDER, CARD, PRIMARY, DESTRUCTIVE, SUCCESS } from "./theme";
-import { METHOD_LABELS, STATUS_LABELS, displayStatus, outstanding } from "./invoiceData";
+import { METHOD_LABELS, STATUS_LABELS, displayStatus, outstanding, netPaid } from "./invoiceData";
+import { sortedRefunds } from "./receiptData";
 
 var PRINT_CSS = "@media print { body * { visibility: hidden; } .invoice-print, .invoice-print * { visibility: visible; } " +
   ".invoice-print { position: fixed; top: 0; left: 0; width: 100%; border: none !important; box-shadow: none !important; } }";
@@ -24,6 +25,7 @@ export default function InvoiceDocument({ invoice, customer, pet, salon }) {
   var lines = invoice.pet_invoice_lines || [];
   var payments = (invoice.pet_payments || []).slice().sort(function (a, b) { return new Date(a.paid_at) - new Date(b.paid_at); });
   var isVoid = invoice.status === "void";
+  var refunds = sortedRefunds(invoice);
   var row = { display: "flex", justifyContent: "space-between", fontSize: 13, padding: "3px 0" };
 
   return (
@@ -87,6 +89,8 @@ export default function InvoiceDocument({ invoice, customer, pet, salon }) {
         </div>
         {invoice.tax_enabled ? <div style={Object.assign({}, row, { fontSize: 11, color: MUTED_FG })}><span>Includes VAT ({invoice.tax_rate}%)</span><span>{fmt(invoice.tax_amount)}</span></div> : null}
         {!isVoid ? <div style={row}><span style={{ color: MUTED_FG }}>Paid</span><span>{fmt(invoice.amount_paid)}</span></div> : null}
+        {!isVoid && invoice.amount_refunded > 0 ? <div style={row}><span style={{ color: MUTED_FG }}>Refunded</span><span>- {fmt(invoice.amount_refunded)}</span></div> : null}
+        {!isVoid && invoice.amount_refunded > 0 ? <div style={Object.assign({}, row, { fontWeight: 700 })}><span>Kept after refunds</span><span>{fmt(netPaid(invoice))}</span></div> : null}
         {!isVoid ? <div style={Object.assign({}, row, { fontWeight: 800 })}><span>Balance due</span><span>{fmt(outstanding(invoice))}</span></div> : null}
       </div>
 
@@ -98,6 +102,19 @@ export default function InvoiceDocument({ invoice, customer, pet, salon }) {
               <div key={p.id} style={Object.assign({}, row, { fontSize: 12 })}>
                 <span>{dateLabel(p.paid_at)} · {METHOD_LABELS[p.method] || p.method}{p.reference ? " · " + p.reference : ""}</span>
                 <span>{fmt(p.amount)}</span>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+      {refunds.length ? (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 11, color: MUTED_FG, fontWeight: 700, marginBottom: 4 }}>REFUNDS</div>
+          {refunds.map(function (f) {
+            return (
+              <div key={f.id} style={Object.assign({}, row, { fontSize: 12 })}>
+                <span>{dateLabel(f.refunded_at)} · {METHOD_LABELS[f.method] || f.method}{f.reference ? " · " + f.reference : ""} · {f.reason}</span>
+                <span>- {fmt(f.amount)}</span>
               </div>
             );
           })}

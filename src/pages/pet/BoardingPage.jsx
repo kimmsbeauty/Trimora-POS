@@ -19,17 +19,18 @@ import { vaccinationStatus } from "./petData";
 import {
   KENNEL_LABELS, KENNEL_TONES, STAY_LABELS, kennelStatus, kennelCounts, currentStay, nextReservation,
   upcomingArrivals, timelineDays, timelineCell, findStayConflict, validateStay, validateKennel, isDuplicateKennel,
-  boardingErrorMessage, stayLengthLabel, estimatedCost, formatDay, todayKey, addDaysKey, KENNEL_STATUSES,
+  boardingErrorMessage, validateCareDetails, overdueDays, overdueLabel, earlyNights, earlyLabel, stayLengthLabel, estimatedCost, formatDay, todayKey, addDaysKey, KENNEL_STATUSES,
 } from "./boardingData";
 import { PageHeader, Card, Button, Field, Badge, Modal, ErrorLine, EmptyState, inputStyle } from "./ui";
 
 function emptyStay(today, kennelId, checkInNow) {
   return { customer_id: "", pet_id: "", kennel_id: kennelId || "", service_id: "", check_in_on: today, check_out_on: addDaysKey(today, 1),
-    feeding_notes: "", care_notes: "", check_in_now: !!checkInNow };
+    feeding_notes: "", care_notes: "", medication_notes: "", emergency_contact_name: "", emergency_contact_phone: "", check_in_now: !!checkInNow };
 }
 function stayDraft(s) {
   return { customer_id: s.customer_id, pet_id: s.pet_id, kennel_id: s.kennel_id, service_id: s.service_id || "", check_in_on: s.check_in_on,
-    check_out_on: s.check_out_on, feeding_notes: s.feeding_notes || "", care_notes: s.care_notes || "", check_in_now: false };
+    check_out_on: s.check_out_on, feeding_notes: s.feeding_notes || "", care_notes: s.care_notes || "", medication_notes: s.medication_notes || "",
+    emergency_contact_name: s.emergency_contact_name || "", emergency_contact_phone: s.emergency_contact_phone || "", check_in_now: false };
 }
 
 async function fetchAll() {
@@ -43,7 +44,9 @@ async function fetchAll() {
   ]);
   // db() returns null when a request failed -- that is an error, not "no data".
   for (var i = 0; i < res.length; i++) if (!Array.isArray(res[i])) return null;
-  return { kennels: res[0], stays: res[1], customers: res[2], pets: res[3], vaccs: res[4], services: res[5] };
+  // Customer-profile emergency contacts only PREFILL the stay form; if they can't be loaded, boarding still works.
+  var profiles = await db("GET", "pet_customer_profiles", null, "?select=customer_id,emergency_contact_name,emergency_contact_phone&limit=5000");
+  return { kennels: res[0], stays: res[1], customers: res[2], pets: res[3], vaccs: res[4], services: res[5], profiles: Array.isArray(profiles) ? profiles : [] };
 }
 
 export default function BoardingPage({ canEdit }) {
@@ -120,22 +123,31 @@ export default function BoardingPage({ canEdit }) {
   function closeStay() { if (!busy) { setStayForm(null); setErr(""); } }
   function setStayField(k, v) {
     var next = Object.assign({}, stayForm.draft); next[k] = v;
-    if (k === "customer_id") next.pet_id = "";
+    if (k === "customer_id") {
+      next.pet_id = "";
+      // Suggest the customer's profile contact, but never overwrite what staff already typed.
+      var prof = (data.profiles || []).filter(function (x) { return x.customer_id === v; })[0];
+      if (stayForm.mode === "add" && prof && !next.emergency_contact_name && !next.emergency_contact_phone) {
+        next.emergency_contact_name = prof.emergency_contact_name || ""; next.emergency_contact_phone = prof.emergency_contact_phone || "";
+      }
+    }
     if (k === "check_in_on" && next.check_out_on < v) next.check_out_on = v;
     setStayForm(Object.assign({}, stayForm, { draft: next }));
   }
   async function saveStay() {
-    var msg = validateStay(stayForm.draft);
+    var msg = validateStay(stayForm.draft) || validateCareDetails(stayForm.draft);
     if (msg) { setErr(msg); return; }
     var d = stayForm.draft;
     var ok = stayForm.mode === "add"
       ? await run("pet_create_stay", {
           p_customer_id: d.customer_id, p_pet_id: d.pet_id, p_kennel_id: d.kennel_id, p_check_in: d.check_in_on, p_check_out: d.check_out_on,
           p_service_id: d.service_id || null, p_feeding: d.feeding_notes, p_notes: d.care_notes, p_check_in_now: !!d.check_in_now,
+          p_emergency_name: d.emergency_contact_name, p_emergency_phone: d.emergency_contact_phone, p_medication: d.medication_notes,
         })
       : await run("pet_update_stay", {
           p_id: stayForm.id, p_kennel_id: d.kennel_id, p_check_in: d.check_in_on, p_check_out: d.check_out_on,
           p_feeding: d.feeding_notes, p_notes: d.care_notes,
+          p_emergency_name: d.emergency_contact_name, p_emergency_phone: d.emergency_contact_phone, p_medication: d.medication_notes,
         });
     if (ok) setStayForm(null);
   }
@@ -178,6 +190,9 @@ export default function BoardingPage({ canEdit }) {
         <div style={{ color: MUTED_FG, fontSize: 12 }}>{formatDay(s.check_in_on)} → {formatDay(s.check_out_on)} · {stayLengthLabel(s)}{cost !== null ? " · est. " + fmt(cost) : ""}</div>
         {s.feeding_notes ? <div style={{ color: MUTED_FG, fontSize: 12, marginTop: 4 }}><strong>Feeding:</strong> {s.feeding_notes}</div> : null}
         {s.care_notes ? <div style={{ color: MUTED_FG, fontSize: 12, marginTop: 2 }}><strong>Notes:</strong> {s.care_notes}</div> : null}
+        {s.medication_notes ? <div style={{ color: MUTED_FG, fontSize: 12, marginTop: 2 }}><strong>Medication:</strong> {s.medication_notes}</div> : null}
+        {s.emergency_contact_name ? <div style={{ color: MUTED_FG, fontSize: 12, marginTop: 2 }}><strong>Emergency contact:</strong> {s.emergency_contact_name} · {s.emergency_contact_phone}</div> : null}
+        {overdueDays(s, today) > 0 ? <div style={{ marginTop: 6 }}><Badge tone="danger">{overdueLabel(overdueDays(s, today))}</Badge></div> : null}
         {overdueVaccine(s.pet_id) ? <div style={{ marginTop: 6 }}><Badge tone="danger">Vaccination overdue</Badge></div> : null}
       </div>
     );
@@ -351,6 +366,11 @@ export default function BoardingPage({ canEdit }) {
             ) : null}
             <Field label="Feeding (optional)" htmlFor="stay-feeding"><textarea id="stay-feeding" rows={2} style={inputStyle} value={draft.feeding_notes} onChange={function (e) { setStayField("feeding_notes", e.target.value); }} /></Field>
             <Field label="Care notes (optional)" htmlFor="stay-notes"><textarea id="stay-notes" rows={2} style={inputStyle} value={draft.care_notes} onChange={function (e) { setStayField("care_notes", e.target.value); }} /></Field>
+            <Field label="Medication instructions (optional)" htmlFor="stay-medication"><textarea id="stay-medication" rows={2} maxLength={500} placeholder="What to give, how much, and when" style={inputStyle} value={draft.medication_notes} onChange={function (e) { setStayField("medication_notes", e.target.value); }} /></Field>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <Field label="Emergency contact name" htmlFor="stay-ec-name"><input id="stay-ec-name" maxLength={80} style={inputStyle} value={draft.emergency_contact_name} onChange={function (e) { setStayField("emergency_contact_name", e.target.value); }} /></Field>
+              <Field label="Emergency contact number" htmlFor="stay-ec-phone"><input id="stay-ec-phone" inputMode="tel" maxLength={30} style={inputStyle} value={draft.emergency_contact_phone} onChange={function (e) { setStayField("emergency_contact_phone", e.target.value); }} /></Field>
+            </div>
             {stayForm.mode === "add" ? (
               <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
                 <input type="checkbox" checked={!!draft.check_in_now} onChange={function (e) { setStayField("check_in_now", e.target.checked); }} />
@@ -395,7 +415,7 @@ export default function BoardingPage({ canEdit }) {
           ) : null}
         </>}>
         <p style={{ margin: 0, fontSize: 13, color: FOREGROUND, lineHeight: 1.5 }}>
-          {!confirm ? "" : confirm.kind === "checkout" ? "This frees the kennel straight away, even if the planned check-out date is later."
+          {!confirm ? "" : confirm.kind === "checkout" ? ((earlyNights(confirm.stay, today) > 0 ? earlyLabel(earlyNights(confirm.stay, today)) + " " : overdueDays(confirm.stay, today) > 0 ? overdueLabel(overdueDays(confirm.stay, today)) + ". " : "") + "This frees the kennel straight away, even if the planned check-out date is later.")
             : confirm.kind === "checkin" ? "The kennel will show as occupied from now."
             : confirm.kind === "cancel" ? "This frees the kennel for those dates. A cancelled stay can't be restored."
             : "Only kennels with no stay history can be deleted. Otherwise put it in maintenance."}

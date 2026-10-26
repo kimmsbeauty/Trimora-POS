@@ -23,7 +23,7 @@ import { STATUS_LABELS as BOOKING_LABELS } from "./bookingData";
 import { STATUS_LABELS as INVOICE_LABELS, displayStatus, outstanding } from "./invoiceData";
 import { formatDay } from "./boardingData";
 import {
-  PRESETS, periodBounds, validateCustomRange, collectedTotal, revenueByDay, collectedByMethod, invoiceTotals, openInvoiceSummary,
+  PRESETS, periodBounds, validateCustomRange, collectedTotal, refundedTotal, netCollected, revenueByDay, collectedByMethod, invoiceTotals, openInvoiceSummary,
   topServices, bookingStats, boardingStats, hasAnyData,
 } from "./reportData";
 import { PageHeader, Card, Button, Field, Badge, ErrorLine, EmptyState, inputStyle } from "./ui";
@@ -55,13 +55,18 @@ async function loadReport(b) {
     fetchPaged("pet_kennels", "?select=id&order=id.asc"),
     fetchPaged("customers", "?select=id,name&order=id.asc"),
     fetchPaged("staff", "?select=id,name&order=id.asc"),
+    // Refunds (migration 105). If this one read fails the report still opens, but says so, because
+    // Collected would then be gross of refunds.
+    fetchPaged("pet_refunds", "?select=id,invoice_id,method,amount,refunded_at" + range("refunded_at") + "&order=refunded_at.asc,id.asc"),
   ]);
+  var refundsPart = parts.pop();
   for (var i = 0; i < parts.length; i++) if (!parts[i]) return null;
   var names = function (rows) { var m = {}; rows.forEach(function (r) { m[r.id] = r.name; }); return m; };
   return {
     payments: parts[0].rows, invoices: parts[1].rows, open: parts[2].rows, lines: parts[3].rows, bookings: parts[4].rows,
     stays: parts[5].rows, kennels: parts[6].rows, customerNames: names(parts[7].rows), staffNames: names(parts[8].rows),
-    truncated: parts.some(function (p) { return p.truncated; }),
+    refunds: refundsPart ? refundsPart.rows : [], refundsFailed: !refundsPart,
+    truncated: parts.some(function (p) { return p.truncated; }) || !!(refundsPart && refundsPart.truncated),
   };
 }
 
@@ -165,6 +170,8 @@ export default function ReportsPage() {
   var now = new Date();
   var days = revenueByDay(data.payments, bounds.fromKey, bounds.toKey);
   var collected = collectedTotal(data.payments);
+  var refunded = refundedTotal(data.refunds);
+  var net = netCollected(data.payments, data.refunds);
   var methods = collectedByMethod(data.payments);
   var inv = invoiceTotals(data.invoices);
   var open = openInvoiceSummary(data.open, now);
@@ -196,6 +203,7 @@ export default function ReportsPage() {
         <div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginBottom: 16 }}>
             <Stat label="Collected" value={fmt(collected)} sub={data.payments.length + (data.payments.length === 1 ? " payment" : " payments") + " received"} />
+            <Stat label="Refunded" value={fmt(refunded)} sub={data.refundsFailed ? "Couldn't load refunds, so Collected may be too high" : (data.refunds.length + (data.refunds.length === 1 ? " refund" : " refunds") + " · net collected " + fmt(net))} />
             <Stat label="Invoiced" value={fmt(inv.invoiced)} sub={inv.count + (inv.count === 1 ? " invoice" : " invoices") + (inv.count ? " · avg " + fmt(inv.average) : "")} />
             <Stat label="Still owed (all open invoices)" value={fmt(open.owed)} sub={open.overdueCount > 0 ? fmt(open.overdueOwed) + " overdue (" + open.overdueCount + ")" : open.count + " open"} />
             <Stat label="Bookings" value={String(bk.total)} sub={bk.total ? bk.lost + " cancelled or no-show (" + bk.lostRate + "%)" : "none in period"} />

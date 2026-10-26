@@ -169,4 +169,38 @@ describe("ReportsPage", function () {
     expect(screen.queryByText("KES 99,999", { selector: "div" })).toBeNull();
     expect(screen.getByText("KES 1,234", { selector: "div" })).toBeTruthy();
   });
+
+  describe("refunds (migration 105)", function () {
+    it("asks for the period's refunds by refunded_at, shows Refunded and the net, and keeps Collected gross", async function () {
+      install({ pet_refunds: function () { return Promise.resolve([{ id: "r1", invoice_id: "i1", method: "cash", amount: 500, refunded_at: today(12) }, { id: "r2", invoice_id: "i1", method: "mpesa", amount: 250, refunded_at: today(13) }]); } });
+      expect(await screen.findByText("Refunded")).toBeTruthy();
+      expect(statValue("Refunded")).toBe("KES 750");
+      expect(screen.getByText("2 refunds · net collected KES 2,250")).toBeTruthy();
+      expect(statValue("Collected")).toBe("KES 3,000");
+      var q = calls("pet_refunds")[0][3];
+      expect(q).toMatch(/refunded_at=gte\./); expect(q).toMatch(/refunded_at=lt\./);
+    });
+
+    it("shows zero refunds honestly", async function () {
+      install();
+      expect(await screen.findByText("Refunded")).toBeTruthy();
+      expect(statValue("Refunded")).toBe("KES 0");
+      expect(screen.getByText("0 refunds · net collected KES 3,000")).toBeTruthy();
+    });
+
+    it("still opens the report, but says Collected may be too high, when the refunds read fails", async function () {
+      install({ pet_refunds: function () { return Promise.resolve(null); } });
+      expect(await screen.findByText("Collected")).toBeTruthy();
+      expect(screen.getByText(/Couldn't load refunds, so Collected may be too high/)).toBeTruthy();
+    });
+
+    it("leaves a fully refunded invoice out of Invoiced", async function () {
+      install({ pet_invoices: function (qs) {
+        if (qs.indexOf("status=in.") !== -1) return Promise.resolve(OPEN);
+        return Promise.resolve([BASE.pet_invoices[0], { id: "i2", customer_id: "c1", status: "refunded", total: 9000, discount_amount: 0, tax_amount: 0, amount_paid: 9000, issued_at: today(9) }]);
+      } });
+      expect(await screen.findByText("Invoiced")).toBeTruthy();
+      expect(statValue("Invoiced")).toBe("KES 3,000");
+    });
+  });
 });

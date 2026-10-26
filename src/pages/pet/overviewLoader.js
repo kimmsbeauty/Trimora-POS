@@ -42,8 +42,10 @@ export async function loadOverview(now) {
     q("pet_items", "?select=id,name,active,quantity_on_hand,reorder_level&active=eq.true&limit=3000"),
     // Per-type "due soon" windows (migration 098). No table or no rows = the app default window.
     q("pet_reminder_settings", "?select=record_type,warn_days"),
+    // Refunds paid back in the last week (migration 105); today's are subtracted from today's revenue.
+    q("pet_refunds", "?select=id,invoice_id,amount,method,refunded_at&refunded_at=gte." + w.weekAgo + "&order=refunded_at.desc&limit=500"),
   ]);
-  var names = ["recentBookings", "recentStays", "recentInvoices", "recentProfiles", "vaccinations", "items", "reminderWindows"];
+  var names = ["recentBookings", "recentStays", "recentInvoices", "recentProfiles", "vaccinations", "items", "reminderWindows", "refunds"];
   var failed = {}; var extra = {};
   optional.forEach(function (res, i) { if (Array.isArray(res)) extra[names[i]] = res; else { extra[names[i]] = []; failed[names[i]] = true; } });
 
@@ -52,7 +54,7 @@ export async function loadOverview(now) {
     bookings: critical[0], stays: critical[1], invoices: critical[2], payments: critical[3],
     customers: critical[4], pets: critical[5], staff: critical[6].filter(function (s) { return s.active !== false; }), kennels: critical[7],
     recentBookings: extra.recentBookings, recentStays: extra.recentStays, recentInvoices: extra.recentInvoices,
-    recentProfiles: extra.recentProfiles, vaccinations: extra.vaccinations, items: extra.items,
+    recentProfiles: extra.recentProfiles, vaccinations: extra.vaccinations, items: extra.items, refunds: extra.refunds,
     // A failed or missing settings read falls back to the default window; it is not reported as a failed
     // section, because before 098 is applied that table legitimately doesn't exist.
     windows: windowsFromRows(extra.reminderWindows),

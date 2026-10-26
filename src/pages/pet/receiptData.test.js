@@ -1,4 +1,4 @@
-import { receiptFor, sortedPayments, latestPaymentId } from "./receiptData";
+import { receiptFor, sortedPayments, latestPaymentId, sortedRefunds, refundReceiptFor, latestRefundId } from "./receiptData";
 
 var invoice = {
   invoice_number: "INV-0007", total: 3000,
@@ -35,5 +35,35 @@ describe("receiptData", function () {
   });
   it("never reports a negative balance", function () {
     expect(receiptFor({ invoice_number: "INV-1", total: 100, pet_payments: [{ id: "x", amount: 150, paid_at: "2026-01-01T00:00:00Z" }] }, "x").balanceAfter).toBe(0);
+  });
+});
+
+describe("refund receipts", function () {
+  var invoice = {
+    invoice_number: "INV-0007", total: 2000, amount_paid: 2000, amount_refunded: 1200,
+    pet_refunds: [
+      { id: "f2", amount: 700, refunded_at: "2026-10-26T12:00:00Z", created_at: "2026-10-26T12:00:00Z" },
+      { id: "f1", amount: 500, refunded_at: "2026-10-26T09:00:00Z", created_at: "2026-10-26T09:00:00Z" },
+    ],
+  };
+  it("orders refunds oldest first and numbers them RFD-<invoice>-<n>", function () {
+    expect(sortedRefunds(invoice).map(function (f) { return f.id; })).toEqual(["f1", "f2"]);
+    expect(refundReceiptFor(invoice, "f1").number).toBe("RFD-0007-1");
+    expect(refundReceiptFor(invoice, "f2").number).toBe("RFD-0007-2");
+  });
+  it("tracks refunded to date and what is kept after each refund", function () {
+    var a = refundReceiptFor(invoice, "f1"); var b = refundReceiptFor(invoice, "f2");
+    expect(a.refundedToDate).toBe(500); expect(a.keptAfter).toBe(1500); expect(a.isLatest).toBe(false);
+    expect(b.refundedToDate).toBe(1200); expect(b.keptAfter).toBe(800); expect(b.isLatest).toBe(true);
+  });
+  it("returns null for an unknown refund and handles no refunds", function () {
+    expect(refundReceiptFor(invoice, "nope")).toBeNull();
+    expect(sortedRefunds({})).toEqual([]);
+    expect(latestRefundId({})).toBeNull();
+    expect(latestRefundId(invoice)).toBe("f2");
+  });
+  it("a full refund shows nothing kept", function () {
+    var full = { invoice_number: "INV-0009", amount_paid: 800, pet_refunds: [{ id: "x", amount: 800, refunded_at: "2026-10-26T09:00:00Z" }] };
+    expect(refundReceiptFor(full, "x").keptAfter).toBe(0);
   });
 });
