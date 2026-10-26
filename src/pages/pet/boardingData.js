@@ -171,6 +171,7 @@ var ERROR_TEXT = {
   CUSTOMER_NOT_FOUND: "That customer could not be found.",
   PET_NOT_FOUND: "That pet doesn't belong to the chosen customer.",
   SERVICE_NOT_FOUND: "That boarding service is no longer available.",
+  SERVICE_SPECIES_MISMATCH: "That boarding service isn't offered for this pet's species. Pick a different service or pet.",
   STAY_CONFLICT_KENNEL: "That kennel is already taken for some of those dates.",
   STAY_CONFLICT_PET: "This pet already has a stay on some of those dates.",
   STAY_NOT_FOUND: "That stay could not be found. Refresh and try again.",

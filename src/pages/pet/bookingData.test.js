@@ -53,6 +53,7 @@ describe("bookingErrorMessage", function () {
     expect(bookingErrorMessage("BOOKING_CONFLICT_STAFF")).toMatch(/staff member already has/);
     expect(bookingErrorMessage("BOOKING_CONFLICT_PET")).toMatch(/pet already has/);
     expect(bookingErrorMessage("INVALID_STATUS_CHANGE")).toMatch(/isn't allowed/);
+    expect(bookingErrorMessage("SERVICE_SPECIES_MISMATCH")).toMatch(/isn't offered for this pet's species/);
   });
   it("falls back safely and never leaks raw text", function () {
     expect(bookingErrorMessage("some internal pg error")).toMatch(/Couldn't save/);
