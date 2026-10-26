@@ -2,7 +2,7 @@
 //
 // Behavioural test of migration 104 (boarding: emergency contact + medication notes)
 // against a REAL Postgres engine (PGlite). Applies the repo's real migrations 083-089
-// then 100, and checks the stay functions still behave as before AND the new fields are
+// then 104, and checks the stay functions still behave as before AND the new fields are
 // stored, validated, kept when an old screen doesn't send them, and never leak across
 // businesses. Stand-in platform tables are NOT the live schema.
 import fs from "fs";
