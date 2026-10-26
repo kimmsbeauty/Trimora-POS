@@ -27,6 +27,7 @@ import LoginPage from "./LoginPage";
 import PetShell from "./pet/PetShell";
 import PlaceholderPage from "./pet/PlaceholderPage";
 import RemindersPage from "./pet/RemindersPage";
+import BookingRequestsPage from "./pet/BookingRequestsPage";
 import PetsPage from "./pet/PetsPage";
 import CustomersPage from "./pet/CustomersPage";
 import GroomingPage from "./pet/GroomingPage";
@@ -179,6 +180,8 @@ function PetStaffRoute() {
         ? <BoardingPage canEdit={isAdmin} />
         : activeItem.key === "reminders"
         ? <RemindersPage />
+        : activeItem.key === "requests"
+        ? <BookingRequestsPage />
         : activeItem.key === "staff"
         ? <StaffPage canEdit={isAdmin} />
         : <PlaceholderPage title={activeItem.label} phase={PHASES[activeItem.key]} />}

@@ -29,6 +29,8 @@ var SalesRepGate       = lazy(function() { return import("./pages/SalesRepGate")
 var OnboardingPage     = lazy(function() { return import("./pages/OnboardingPage"); });
 // Trimora Pet is lazy so salon and car-wash visitors never download its code or fonts.
 var PetApp             = lazy(function() { return import("./pages/PetApp"); });
+// Public pet booking-request page (visitors, no login): also lazy so other tenants never download it.
+var PetPublicBooking   = lazy(function() { return import("./pages/pet/PetPublicBooking"); });
 
 function RouteFallback() {
   return (
@@ -242,6 +244,7 @@ export default function App() {
         <Route path="/:slug/auto/rate/:token" element={<SalonGate mode="public"><AutoRatingPage /></SalonGate>} />
         <Route path="/:slug/pos" element={<DeviceGate><SalonGate mode="authenticated"><StaffRoute /></SalonGate></DeviceGate>} />
         <Route path="/:slug/auto" element={<DeviceGate><SalonGate mode="authenticated"><AutoApp /></SalonGate></DeviceGate>} />
+        <Route path="/:slug/pet/book" element={<SalonGate mode="public"><PetPublicBooking /></SalonGate>} />
         <Route path="/:slug/pet" element={<DeviceGate><SalonGate mode="authenticated"><PetApp /></SalonGate></DeviceGate>} />
 
         <Route path="*"            element={<TrimoraLandingPage />} />

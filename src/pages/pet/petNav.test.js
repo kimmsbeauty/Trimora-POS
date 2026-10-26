@@ -3,7 +3,7 @@ import { PET_NAV, visiblePetNav, petInitials } from "./petNav";
 describe("pet navigation", function () {
   it("follows the spec order with Checkout directly under Overview", function () {
     expect(PET_NAV.map(function (n) { return n.label; })).toEqual([
-      "Overview", "Checkout", "Calendar & Bookings", "Customers", "Pets", "Grooming", "Boarding",
+      "Overview", "Checkout", "Calendar & Bookings", "Online Requests", "Customers", "Pets", "Grooming", "Boarding",
       "Invoices & Payments", "Supplies & Inventory", "Loyalty Programme", "Reminders", "Staff & Permissions", "Reports", "Settings",
     ]);
   });

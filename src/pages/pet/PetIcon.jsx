@@ -19,6 +19,7 @@ var PATHS = {
   boarding: <g><path d="M3 11l9-7 9 7v9H3z" /><path d="M9 20v-6h6v6" /></g>,
   invoices: <g><path d="M7 3h8l4 4v14H7z" /><path d="M15 3v4h4M10 12h6M10 16h6" /></g>,
   supplies: <g><path d="M3 7l9-4 9 4v10l-9 4-9-4z" /><path d="M3 7l9 4 9-4M12 11v10" /></g>,
+  requests: <g><path d="M4 13l2.5-7h11L20 13v6H4z" /><path d="M4 13h4.5a3.5 3.5 0 0 0 7 0H20" /></g>,
   reminders: <g><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z" /><path d="M10 20a2 2 0 0 0 4 0" /></g>,
   loyalty: <path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.2 6.5 20.2l1-6.2L3 9.6l6.2-.9z" />,
   staff: <g><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 3.5-6 8-6s8 2 8 6" /></g>,
