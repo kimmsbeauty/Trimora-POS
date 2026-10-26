@@ -1,9 +1,9 @@
--- 105_pet_boarding_billing.sql
+-- 107_pet_boarding_billing.sql
 --
 -- Trimora Pet -- boarding: bill a stay, with the late-collection charge.
 --
 -- STATUS: written for owner review. NOT applied anywhere. Apply by hand in the Supabase SQL
--- Editor only after the owner says "apply 105". Apply it BEFORE the matching app code is
+-- Editor only after the owner says "apply 107". Apply it BEFORE the matching app code is
 -- merged (the Boarding screen calls the new functions).
 --
 -- THE OWNER'S POLICY (decided 2026-10-25)

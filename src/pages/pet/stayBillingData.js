@@ -1,6 +1,6 @@
 // src/pages/pet/stayBillingData.js
 //
-// Pure helpers for billing a boarding stay (migration 105). The DATABASE decides the real
+// Pure helpers for billing a boarding stay (migration 107). The DATABASE decides the real
 // charge (pet_invoice_stay); this only previews it. Policy: the full booked stay is always
 // charged (leaving early changes nothing), each late day is one extra night at the stay's rate,
 // staff may reduce the late days (0 = waive) and add a discount.

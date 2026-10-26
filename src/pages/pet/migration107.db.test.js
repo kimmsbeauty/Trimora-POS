@@ -1,6 +1,6 @@
 // @vitest-environment node
 //
-// Behavioural test of migration 105 (boarding billing) against a REAL Postgres engine (PGlite).
+// Behavioural test of migration 107 (boarding billing) against a REAL Postgres engine (PGlite).
 // Policy under test: early check-out pays the FULL booked stay; each whole day past the planned
 // check-out is one extra night at the stay's nightly rate; staff may reduce (not raise) the late
 // days and may add a discount. Dates are fixed in 2020 and the actual check-out instant is set
@@ -56,7 +56,7 @@ beforeAll(async function () {
     create function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
     grant usage on schema public to anon, authenticated;
   `);
-  for (var f of ["083_pet_pets_vaccinations.sql", "084_pet_customer_profiles.sql", "085_pet_services.sql", "086_pet_roles.sql", "087_pet_audit_log.sql", "088_pet_bookings.sql", "089_pet_boarding.sql", "092_pet_booking_statuses.sql", "090_pet_invoices.sql", "104_pet_boarding_care_details.sql", "105_pet_boarding_billing.sql"]) await db.exec(sql(f));
+  for (var f of ["083_pet_pets_vaccinations.sql", "084_pet_customer_profiles.sql", "085_pet_services.sql", "086_pet_roles.sql", "087_pet_audit_log.sql", "088_pet_bookings.sql", "089_pet_boarding.sql", "092_pet_booking_statuses.sql", "090_pet_invoices.sql", "104_pet_boarding_care_details.sql", "107_pet_boarding_billing.sql"]) await db.exec(sql(f));
   await db.exec(`
     insert into public.salons values ('${A}','A'),('${B}','B');
     insert into public.salon_settings (salon_id) values ('${A}'),('${B}');
@@ -75,7 +75,7 @@ beforeEach(async function () {
   await as(A);
 });
 
-describe("migration 105 against a real Postgres engine", function () {
+describe("migration 107 against a real Postgres engine", function () {
   it("on time: bills the booked nights from the rate saved on the stay", async function () {
     var s = await stay();
     var id = await invoice(s);

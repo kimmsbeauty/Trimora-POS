@@ -48,7 +48,7 @@ async function fetchAll() {
   for (var i = 0; i < res.length; i++) if (!Array.isArray(res[i])) return null;
   // Customer-profile emergency contacts only PREFILL the stay form; if they can't be loaded, boarding still works.
   var profiles = await db("GET", "pet_customer_profiles", null, "?select=customer_id,emergency_contact_name,emergency_contact_phone&limit=5000");
-  // Which stays already have a live invoice. Null until migration 105 is applied: then billing is simply hidden.
+  // Which stays already have a live invoice. Null until migration 107 is applied: then billing is simply hidden.
   var stayInvoices = await db("GET", "pet_invoices", null, "?select=stay_id&stay_id=not.is.null&status=neq.void&limit=5000");
   return { stayInvoices: Array.isArray(stayInvoices) ? stayInvoices : null, kennels: res[0], stays: res[1], customers: res[2], pets: res[3], vaccs: res[4], services: res[5], profiles: Array.isArray(profiles) ? profiles : [] };
 }

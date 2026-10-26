@@ -196,7 +196,7 @@ describe("BoardingPage", function () {
     expect(screen.getByText("Overdue by 2 days")).toBeTruthy();
   });
 
-  it("lists checked-out stays that still need an invoice, and hides billing before migration 105", async function () {
+  it("lists checked-out stays that still need an invoice, and hides billing before migration 107", async function () {
     var done = stay({ id: "s9", status: "checked-out", service_id: "sv1", nightly_rate: 900, check_out_on: addDaysKey(T, -1) });
     setup({ stays: [done] });
     expect(await screen.findByText("Stays to invoice")).toBeTruthy();
