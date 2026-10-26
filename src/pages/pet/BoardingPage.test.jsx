@@ -40,8 +40,9 @@ function setup(opts) {
     if (opts.getFail && table === "pet_kennels") return Promise.resolve(null);
     var map = {
       pet_kennels: opts.kennels || KENNELS, pet_boarding_stays: opts.stays || STAYS, customers: CUSTOMERS, pet_pets: PETS,
-      pet_vaccinations: opts.vaccs || [], pet_services: SERVICES, pet_customer_profiles: opts.profiles || [],
+      pet_vaccinations: opts.vaccs || [], pet_services: SERVICES, pet_customer_profiles: opts.profiles || [], pet_invoices: opts.invoices === undefined ? [] : opts.invoices,
     };
+    if (map[table] === null) return Promise.resolve(null);
     return Promise.resolve(map[table] || []);
   });
   mockRpc.mockImplementation(function () { return Promise.resolve(opts.rpcError ? { error: opts.rpcError } : { data: null }); });
@@ -195,10 +196,41 @@ describe("BoardingPage", function () {
     expect(screen.getByText("Overdue by 2 days")).toBeTruthy();
   });
 
+  it("lists checked-out stays that still need an invoice, and hides billing before migration 105", async function () {
+    var done = stay({ id: "s9", status: "checked-out", service_id: "sv1", nightly_rate: 900, check_out_on: addDaysKey(T, -1) });
+    setup({ stays: [done] });
+    expect(await screen.findByText("Stays to invoice")).toBeTruthy();
+    expect(screen.getByLabelText("Bill the stay of Simba")).toBeTruthy();
+  });
+
+  it("does not list a stay that already has a live invoice", async function () {
+    var done = stay({ id: "s9", status: "checked-out", service_id: "sv1", nightly_rate: 900, check_out_on: addDaysKey(T, -1) });
+    setup({ stays: [done], invoices: [{ stay_id: "s9" }] });
+    await screen.findByText("Arrivals");
+    expect(screen.queryByText("Stays to invoice")).toBeNull();
+  });
+
+  it("hides billing entirely while the database can't report stay invoices yet", async function () {
+    var done = stay({ id: "s9", status: "checked-out", service_id: "sv1", nightly_rate: 900, check_out_on: addDaysKey(T, -1) });
+    setup({ stays: [done], invoices: null });
+    await screen.findByText("Arrivals");
+    expect(screen.queryByText("Stays to invoice")).toBeNull();
+  });
+
+  it("offers to bill the stay right after check-out", async function () {
+    var cur = stay({ service_id: "sv1" });
+    setup({ stays: [cur] });
+    fireEvent.click(await screen.findByLabelText("Check out Simba"));
+    fireEvent.click(await screen.findByRole("button", { name: "Check out" }));
+    await waitFor(function () { expect(rpcCall("pet_stay_billing")).toBeTruthy(); });
+    expect(rpcCall("pet_stay_billing")[1]).toEqual({ p_stay_id: "s1" });
+  });
+
   it("tells staff when a checkout is early", async function () {
     setup();
     fireEvent.click(await screen.findByLabelText("Check out Simba"));
     expect(await screen.findByText(/Leaving 2 nights before the planned check-out/)).toBeTruthy();
+    expect(screen.getByText(/full booked stay is still charged/)).toBeTruthy();
   });
 
   it("warns, but still lets the database decide, when a kennel looks taken", async function () {

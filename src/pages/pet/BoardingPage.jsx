@@ -21,6 +21,8 @@ import {
   upcomingArrivals, timelineDays, timelineCell, findStayConflict, validateStay, validateKennel, isDuplicateKennel,
   boardingErrorMessage, validateCareDetails, overdueDays, overdueLabel, earlyNights, earlyLabel, stayLengthLabel, estimatedCost, formatDay, todayKey, addDaysKey, KENNEL_STATUSES,
 } from "./boardingData";
+import StayInvoiceModal from "./StayInvoiceModal";
+import { stayNeedsInvoice } from "./stayBillingData";
 import { PageHeader, Card, Button, Field, Badge, Modal, ErrorLine, EmptyState, inputStyle } from "./ui";
 
 function emptyStay(today, kennelId, checkInNow) {
@@ -46,7 +48,9 @@ async function fetchAll() {
   for (var i = 0; i < res.length; i++) if (!Array.isArray(res[i])) return null;
   // Customer-profile emergency contacts only PREFILL the stay form; if they can't be loaded, boarding still works.
   var profiles = await db("GET", "pet_customer_profiles", null, "?select=customer_id,emergency_contact_name,emergency_contact_phone&limit=5000");
-  return { kennels: res[0], stays: res[1], customers: res[2], pets: res[3], vaccs: res[4], services: res[5], profiles: Array.isArray(profiles) ? profiles : [] };
+  // Which stays already have a live invoice. Null until migration 105 is applied: then billing is simply hidden.
+  var stayInvoices = await db("GET", "pet_invoices", null, "?select=stay_id&stay_id=not.is.null&status=neq.void&limit=5000");
+  return { stayInvoices: Array.isArray(stayInvoices) ? stayInvoices : null, kennels: res[0], stays: res[1], customers: res[2], pets: res[3], vaccs: res[4], services: res[5], profiles: Array.isArray(profiles) ? profiles : [] };
 }
 
 export default function BoardingPage({ canEdit }) {
@@ -56,6 +60,7 @@ export default function BoardingPage({ canEdit }) {
   var stayFormState = useState(null); var stayForm = stayFormState[0]; var setStayForm = stayFormState[1]; // {mode, id, draft}
   var kennelFormState = useState(null); var kennelForm = kennelFormState[0]; var setKennelForm = kennelFormState[1]; // {id, draft}
   var confirmState = useState(null); var confirm = confirmState[0]; var setConfirm = confirmState[1]; // {kind, stay?, kennel?}
+  var billState = useState(null); var billStay = billState[0]; var setBillStay = billState[1];
   var busyState = useState(false); var busy = busyState[0]; var setBusy = busyState[1];
   var errState = useState(""); var err = errState[0]; var setErr = errState[1];
 
@@ -93,6 +98,10 @@ export default function BoardingPage({ canEdit }) {
   var boardingServices = data.services.filter(function (s) { return s.category === "Boarding" && s.active; });
   var counts = kennelCounts(kennels, stays, today);
   var arrivals = upcomingArrivals(stays, today);
+  var billingReady = !!data.stayInvoices;
+  var invoicedIds = {}; (data.stayInvoices || []).forEach(function (r) { invoicedIds[r.stay_id] = true; });
+  var toInvoice = billingReady ? stays.filter(function (x) { return stayNeedsInvoice(x, invoicedIds); })
+    .sort(function (a, b) { return a.check_out_on < b.check_out_on ? 1 : a.check_out_on > b.check_out_on ? -1 : 0; }).slice(0, 10) : [];
   var days = timelineDays(today, 14);
   var petName = function (id) { return petsById[id] ? petsById[id].name : "Unknown pet"; };
   var ownerName = function (id) { return customersById[id] ? customersById[id].name : "Unknown owner"; };
@@ -153,7 +162,11 @@ export default function BoardingPage({ canEdit }) {
   }
   async function changeStatus(stay, status) {
     var ok = await run("pet_set_stay_status", { p_id: stay.id, p_status: status });
-    if (ok) setConfirm(null);
+    if (ok) {
+      setConfirm(null);
+      // Offer to bill straight away (only once billing is set up and the stay has a rate to bill).
+      if (status === "checked-out" && billingReady && stay.service_id && Number(stay.nightly_rate) > 0) setBillStay(stay);
+    }
   }
 
   // ---- kennels ----
@@ -270,6 +283,25 @@ export default function BoardingPage({ canEdit }) {
         </div>
       )}
 
+      {toInvoice.length > 0 ? (
+        <>
+          <h2 style={{ fontSize: 15, margin: "0 0 8px", color: FOREGROUND }}>Stays to invoice</h2>
+          <Card style={{ marginBottom: 24 }}>
+            {toInvoice.map(function (x, i) {
+              return (
+                <div key={x.id} style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderTop: i === 0 ? "none" : "1px solid " + BORDER }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{petName(x.pet_id)} <span style={{ fontWeight: 400, color: MUTED_FG }}>· {ownerName(x.customer_id)}</span></div>
+                    <div style={{ color: MUTED_FG, fontSize: 12 }}>{formatDay(x.check_in_on)} → {formatDay(x.check_out_on)} · {stayLengthLabel(x)}</div>
+                  </div>
+                  <Button size="sm" variant="outline" ariaLabel={"Bill the stay of " + petName(x.pet_id)} onClick={function () { setErr(""); setBillStay(x); }}>Bill stay</Button>
+                </div>
+              );
+            })}
+          </Card>
+        </>
+      ) : null}
+
       <h2 style={{ fontSize: 15, margin: "0 0 8px", color: FOREGROUND }}>Arrivals</h2>
       {arrivals.length === 0 ? (
         <Card style={{ padding: 16, marginBottom: 24, color: MUTED_FG, fontSize: 13 }}>No reserved stays.</Card>
@@ -383,6 +415,9 @@ export default function BoardingPage({ canEdit }) {
         ) : null}
       </Modal>
 
+      {billStay ? <StayInvoiceModal stay={billStay} petName={petName(billStay.pet_id)} ownerName={ownerName(billStay.customer_id)}
+        onClose={function () { setBillStay(null); }} onCreated={reload} /> : null}
+
       <Modal open={!!kennelForm} onClose={closeKennel} title={kennelForm && kennelForm.id ? "Edit kennel" : "Add kennel"}
         footer={<>
           <Button variant="ghost" onClick={closeKennel} disabled={busy}>Cancel</Button>
@@ -415,7 +450,7 @@ export default function BoardingPage({ canEdit }) {
           ) : null}
         </>}>
         <p style={{ margin: 0, fontSize: 13, color: FOREGROUND, lineHeight: 1.5 }}>
-          {!confirm ? "" : confirm.kind === "checkout" ? ((earlyNights(confirm.stay, today) > 0 ? earlyLabel(earlyNights(confirm.stay, today)) + " " : overdueDays(confirm.stay, today) > 0 ? overdueLabel(overdueDays(confirm.stay, today)) + ". " : "") + "This frees the kennel straight away, even if the planned check-out date is later.")
+          {!confirm ? "" : confirm.kind === "checkout" ? ((earlyNights(confirm.stay, today) > 0 ? earlyLabel(earlyNights(confirm.stay, today)) + " The full booked stay is still charged. " : overdueDays(confirm.stay, today) > 0 ? overdueLabel(overdueDays(confirm.stay, today)) + ". Each late day is charged as an extra night. " : "") + "This frees the kennel straight away, even if the planned check-out date is later.")
             : confirm.kind === "checkin" ? "The kennel will show as occupied from now."
             : confirm.kind === "cancel" ? "This frees the kennel for those dates. A cancelled stay can't be restored."
             : "Only kennels with no stay history can be deleted. Otherwise put it in maintenance."}
