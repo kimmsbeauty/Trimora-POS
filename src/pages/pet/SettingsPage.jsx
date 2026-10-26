@@ -11,6 +11,7 @@ import { useSalon } from "../../lib/SalonContext";
 import { MUTED_FG, BORDER, FOREGROUND } from "./theme";
 import { validateSettings, settingsRow } from "./settingsData";
 import ReminderSettings from "./ReminderSettings";
+import PublicBookingSettings from "./PublicBookingSettings";
 import { PageHeader, Card, Button, Field, ErrorLine, inputStyle } from "./ui";
 
 function defaultReload() { try { window.location.reload(); } catch (e) { /* ignore */ } }
@@ -83,6 +84,7 @@ export default function SettingsPage({ onSaved }) {
         <div><Button onClick={save} disabled={saving}>{saving ? "Saving…" : "Save settings"}</Button></div>
       </Card>
       <ReminderSettings />
+      <PublicBookingSettings />
     </div>
   );
 }

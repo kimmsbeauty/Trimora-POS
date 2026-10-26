@@ -11,6 +11,7 @@ export var PET_NAV = [
   { key: "overview", label: "Overview", icon: "overview", adminOnly: false },
   { key: "checkout", label: "Checkout", icon: "checkout", adminOnly: false },
   { key: "calendar", label: "Calendar & Bookings", icon: "calendar", adminOnly: false },
+  { key: "requests", label: "Online Requests", icon: "requests", adminOnly: false },
   { key: "customers", label: "Customers", icon: "customers", adminOnly: false },
   { key: "pets", label: "Pets", icon: "pets", adminOnly: false },
   { key: "grooming", label: "Grooming", icon: "grooming", adminOnly: false },
