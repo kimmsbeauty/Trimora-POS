@@ -141,6 +141,7 @@ describe("boardingData validation and errors", function () {
   it("maps database error codes to friendly text and never leaks raw messages", function () {
     expect(boardingErrorMessage("STAY_CONFLICT_KENNEL")).toMatch(/already taken/);
     expect(boardingErrorMessage("STAY_CONFLICT_PET")).toMatch(/pet already has a stay/);
+    expect(boardingErrorMessage("SERVICE_SPECIES_MISMATCH")).toMatch(/isn't offered for this pet's species/);
     expect(boardingErrorMessage("KENNEL_HAS_STAYS")).toMatch(/maintenance/);
     expect(boardingErrorMessage("KENNEL_OCCUPIED")).toMatch(/Check them out/);
     expect(boardingErrorMessage("Network error")).toMatch(/connection/);
