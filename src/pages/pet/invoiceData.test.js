@@ -1,6 +1,6 @@
 import {
   computeTotals, validateCheckout, paymentsSum, paymentRows, outstanding, isOverdue, displayStatus, filterInvoices, summarize,
-  invoiceErrorMessage, newIdempotencyKey,
+  invoiceErrorMessage, newIdempotencyKey, refundable, netPaid, hasProductLines, validateRefund, STATUS_LABELS, REFUND_PIN_REFUSED,
 } from "./invoiceData";
 
 describe("computeTotals", function () {
@@ -113,7 +113,7 @@ describe("filterInvoices", function () {
 describe("messages and keys", function () {
   it("maps database codes and never leaks raw text", function () {
     expect(invoiceErrorMessage("OVERPAYMENT")).toMatch(/more than the amount/);
-    expect(invoiceErrorMessage("INVOICE_HAS_PAYMENTS")).toMatch(/Refunds/);
+    expect(invoiceErrorMessage("INVOICE_HAS_PAYMENTS")).toMatch(/Refund it instead/);
     expect(invoiceErrorMessage("INSUFFICIENT_STOCK")).toMatch(/enough stock/);
     expect(invoiceErrorMessage("ITEM_NOT_FOUND")).toMatch(/product/);
     expect(invoiceErrorMessage("duplicate key value violates unique constraint")).toMatch(/Something went wrong/);
@@ -122,5 +122,64 @@ describe("messages and keys", function () {
   it("creates distinct uuid-shaped keys", function () {
     var a = newIdempotencyKey(); var b = newIdempotencyKey();
     expect(a).toMatch(/^[0-9a-f-]{36}$/); expect(a).not.toBe(b);
+  });
+});
+
+describe("refunds (migration 105)", function () {
+  var paid = { status: "paid", total: 2000, amount_paid: 2000, amount_refunded: 0 };
+  var part = { status: "partial", total: 2000, amount_paid: 800, amount_refunded: 0 };
+
+  it("labels the refunded status and owes nothing on it, even when it was only part paid", function () {
+    expect(STATUS_LABELS.refunded).toBe("Refunded");
+    expect(outstanding({ status: "refunded", total: 2000, amount_paid: 800, amount_refunded: 800 })).toBe(0);
+    expect(outstanding({ status: "refunded", total: 2000, amount_paid: 2000, amount_refunded: 2000 })).toBe(0);
+  });
+
+  it("refundable is what was paid minus what was paid back, only for paid or part-paid invoices", function () {
+    expect(refundable(paid)).toBe(2000);
+    expect(refundable(Object.assign({}, paid, { amount_refunded: 500 }))).toBe(1500);
+    expect(refundable(part)).toBe(800);
+    ["issued", "void", "refunded"].forEach(function (st) { expect(refundable({ status: st, amount_paid: 800, amount_refunded: 0 })).toBe(0); });
+    expect(refundable(null)).toBe(0);
+  });
+
+  it("netPaid is the money kept", function () {
+    expect(netPaid({ amount_paid: 2000, amount_refunded: 500 })).toBe(1500);
+    expect(netPaid({ amount_paid: 2000 })).toBe(2000);
+  });
+
+  it("detects product lines", function () {
+    expect(hasProductLines({ pet_invoice_lines: [{ service_id: "a" }] })).toBe(false);
+    expect(hasProductLines({ pet_invoice_lines: [{ service_id: "a" }, { item_id: "x" }] })).toBe(true);
+    expect(hasProductLines({})).toBe(false);
+  });
+
+  it("validates a refund the way the database will", function () {
+    var ok = { amount: "500", method: "cash", reason: "Returned" };
+    expect(validateRefund(paid, ok)).toBe("");
+    expect(validateRefund(paid, Object.assign({}, ok, { amount: "2000" }))).toBe("");
+    expect(validateRefund(paid, Object.assign({}, ok, { amount: "" }))).toMatch(/positive whole/);
+    expect(validateRefund(paid, Object.assign({}, ok, { amount: "0" }))).toMatch(/positive whole/);
+    expect(validateRefund(paid, Object.assign({}, ok, { amount: "12.5" }))).toMatch(/positive whole/);
+    expect(validateRefund(paid, Object.assign({}, ok, { amount: "2001" }))).toMatch(/more than can still be refunded/);
+    expect(validateRefund(paid, Object.assign({}, ok, { method: "bitcoin" }))).toMatch(/how the money/);
+    expect(validateRefund(paid, Object.assign({}, ok, { reason: "   " }))).toMatch(/reason/);
+    expect(validateRefund(Object.assign({}, paid, { amount_refunded: 2000, status: "refunded" }), ok)).toMatch(/nothing left/);
+  });
+
+  it("a part-paid invoice can only be refunded in full", function () {
+    expect(validateRefund(part, { amount: "300", method: "cash", reason: "x" })).toMatch(/only be refunded in full/);
+    expect(validateRefund(part, { amount: "800", method: "cash", reason: "x" })).toBe("");
+  });
+
+  it("explains each refund error in plain words and replaces the old 'refunds are not available' text", function () {
+    ["INVALID_REFUND", "INVOICE_NOT_REFUNDABLE", "REFUND_EXCEEDS_PAID", "PARTIAL_INVOICE_FULL_REFUND_ONLY", "RETURN_STOCK_NEEDS_FULL_REFUND", "DUPLICATE_REFUND_REFERENCE", "IDEMPOTENCY_CONFLICT"].forEach(function (c) {
+      var m = invoiceErrorMessage("Error: " + c);
+      expect(m).not.toMatch(/Something went wrong/);
+      expect(m.length).toBeGreaterThan(20);
+    });
+    expect(invoiceErrorMessage("INVOICE_HAS_PAYMENTS")).toMatch(/Refund it instead/);
+    expect(invoiceErrorMessage("INVOICE_HAS_PAYMENTS")).not.toMatch(/not available/);
+    expect(REFUND_PIN_REFUSED).toMatch(/admin PIN/);
   });
 });

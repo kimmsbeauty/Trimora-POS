@@ -3,8 +3,14 @@
 -- Trimora Pet -- refunds on paid invoices (the case pet_void_invoice cannot cover: it refuses any
 -- invoice that has payments, INVOICE_HAS_PAYMENTS).
 --
--- STATUS: written for owner review. NOT applied anywhere. Apply only after the owner says
--- "apply 105", after 090, 094, 095 and 101 (all applied) -- it extends their tables.
+-- STATUS: APPLIED to production 2026-10-26 on the owner's instruction ("apply 105"). Checked first
+-- (read-only): 090, 094, 095, 101 present; the four constraints this replaces had the expected names;
+-- no invoices existed. Verified afterwards from the catalog: pet_refund_invoice is SECURITY DEFINER with
+-- search_path pinned, EXECUTE for authenticated only; pet_refunds has RLS on, a select-only policy, no
+-- write privilege for authenticated, none at all for anon, and the append-only and audit triggers; the
+-- status check allows 'refunded'. Tested before applying on a local Postgres copy built from the real
+-- 090/094/095/101 migrations (supabase/tests/105_pet_refunds.sql, 51 assertions). NOT exercised end to end
+-- against production (no staging project, and no invoices yet).
 --
 -- WHAT CHANGES
 --   * New table pet_refunds: one row per refund, APPEND-ONLY (no update/delete, as pet_payments and

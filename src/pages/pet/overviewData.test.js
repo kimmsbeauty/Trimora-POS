@@ -39,8 +39,19 @@ describe("summary numbers", function () {
 
   it("sums only payments recorded today", function () {
     var r = revenueToday([{ amount: 1500, paid_at: at(0, 9) }, { amount: 500, paid_at: at(0, 9, 30) }, { amount: 9999, paid_at: at(-1, 15) }], NOW);
-    expect(r).toEqual({ total: 2000, count: 2 });
-    expect(revenueToday([], NOW)).toEqual({ total: 0, count: 0 });
+    expect(r).toEqual({ total: 2000, count: 2, refunded: 0, refundCount: 0 });
+    expect(revenueToday([], NOW)).toEqual({ total: 0, count: 0, refunded: 0, refundCount: 0 });
+  });
+
+  it("subtracts refunds paid back today and ignores refunds from other days", function () {
+    var pays = [{ amount: 3000, paid_at: at(0, 9) }];
+    var refunds = [{ amount: 500, refunded_at: at(0, 11) }, { amount: 700, refunded_at: at(0, 12) }, { amount: 9999, refunded_at: at(-1, 12) }];
+    var r = revenueToday(pays, NOW, refunds);
+    expect(r).toEqual({ total: 1800, count: 1, refunded: 1200, refundCount: 2 });
+  });
+
+  it("can go below zero when more is refunded today than was collected today", function () {
+    expect(revenueToday([{ amount: 100, paid_at: at(0, 9) }], NOW, [{ amount: 400, refunded_at: at(0, 10) }]).total).toBe(-300);
   });
 
   it("totals the unpaid balance and counts invoices that still owe", function () {

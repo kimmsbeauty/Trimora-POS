@@ -53,10 +53,15 @@ export function petsBoarding(stays) {
 
 // Money actually recorded today: pet_payments rows whose paid_at falls on today's
 // local date. Voided invoices cannot hold payments, so nothing needs excluding.
-export function revenueToday(payments, now) {
+//
+// Refunds paid back today (pet_refunds by refunded_at) are subtracted, so the figure is net money in
+// today. "count" stays the number of payments; "refunded" is shown separately.
+export function revenueToday(payments, now, refunds) {
   var key = dateKey(now || new Date());
   var rows = (payments || []).filter(function (p) { return dateKey(new Date(p.paid_at)) === key; });
-  return { total: sum(rows, function (p) { return p.amount; }), count: rows.length };
+  var back = (refunds || []).filter(function (r) { return dateKey(new Date(r.refunded_at)) === key; });
+  var refunded = sum(back, function (r) { return r.amount; });
+  return { total: sum(rows, function (p) { return p.amount; }) - refunded, count: rows.length, refunded: refunded, refundCount: back.length };
 }
 
 // Unpaid balance across live invoices, and how many invoices still owe something.
