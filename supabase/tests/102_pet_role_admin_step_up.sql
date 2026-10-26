@@ -43,9 +43,9 @@ begin
   c1 := jsonb_build_object('sub',d1,'role','authenticated');
   c2 := jsonb_build_object('sub',d2,'role','authenticated');
 
-  -- ---- baseline: the hole this part-1 migration does NOT yet close (closed by 103)
+  -- ---- baseline (informational): is the open direct-write path still there? True before 103, false after.
   n := pg_temp.as_claims(c1,'authenticated','insert into pet_roles(salon_id,name,permissions) values ('''||s1||''',''Sneaky'','''||full_perms||'''::jsonb) returning id::text');
-  insert into t_res select 'KNOWN HOLE (until 103): a staff-PIN device can still write pet_roles directly', n not like 'ERR:%', n;
+  insert into t_res select 'baseline: direct write path is ' || case when n like 'ERR:%' then 'CLOSED (103 applied)' else 'OPEN (until 103)' end, true, n;
   delete from pet_roles where salon_id = s1;
 
   -- ---- grants
