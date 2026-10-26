@@ -4,13 +4,10 @@
 -- and role assignments. After this, the ONLY way to create, edit or delete a role, or to assign /
 -- change / clear a staff member's role, is through the admin-PIN functions from migration 102.
 --
--- STATUS: NOT APPLIED. Apply ONLY when ALL of these hold, then only on the owner's "apply 103":
---   1. 102 is applied (this file refuses to run without it).
---   2. The client that uses pet_save_role / pet_delete_role / pet_set_staff_role (Staff &
---      Permissions screen, PR #42) is deployed to every device. An older cached client still
---      writes the tables directly and would get "permission denied" until it reloads.
---   3. The owner has created or edited one role and assigned one staff member on the live screen
---      and confirmed it works (the admin-PIN prompt appears and the change sticks).
+-- STATUS: APPLIED to production 2026-10-26 on the owner's instruction ("apply 103"), after 102
+-- (2026-10-25) and the client PR #42 were live. Verified from the catalog afterwards: only the two
+-- SELECT policies remain; `authenticated` holds SELECT but no INSERT/UPDATE/DELETE on either table;
+-- anon holds nothing. NOT exercised end to end against production (no staging project).
 --
 -- THE PROBLEM (verified against the live project, 2026-10-25)
 --   pet_roles and pet_staff_roles still carry INSERT/UPDATE/DELETE policies keyed only on
