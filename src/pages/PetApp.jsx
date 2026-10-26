@@ -41,6 +41,10 @@ import ReportsPage from "./pet/ReportsPage";
 import LoyaltyPage from "./pet/LoyaltyPage";
 import OverviewPage from "./pet/OverviewPage";
 import WorkingAs from "./pet/WorkingAs";
+import InstallAppButton from "./pet/InstallAppButton";
+import { setPetPwaManifest } from "../lib/pwaManifest";
+import { registerServiceWorker } from "../lib/registerServiceWorker";
+import { startInstallListeners } from "../lib/installPrompt";
 import { clearPetActor } from "../lib/petActor";
 import { visiblePetNav } from "./pet/petNav";
 import "./pet/fonts";
@@ -135,6 +139,17 @@ function PetStaffRoute() {
   function selectTab(key) { setIntent(null); setTab(key); }
   function goFromOverview(key, opts) { setIntent(opts || null); setTab(key); }
 
+  // Make the app installable on a phone: listen for the browser's install offer FIRST (it only
+  // fires once the manifest exists), then publish this business's manifest and register the
+  // service worker. Runs on the login screen too, so the offer is never missed.
+  var salonSlug = salon && salon.slug; var salonName = salon && salon.name;
+  useEffect(function () {
+    if (!salon) return;
+    startInstallListeners();
+    setPetPwaManifest(salon);
+    registerServiceWorker();
+  }, [salonSlug, salonName]);
+
   if (!loggedIn) {
     return <LoginPage isPet={true} onLogin={function (role) { setIsAdmin(role === "admin"); setLoggedIn(true); }} />;
   }
@@ -150,7 +165,7 @@ function PetStaffRoute() {
       onSelect={selectTab}
       businessName={salon && salon.name}
       roleLabel={isAdmin ? "Admin" : "Staff"}
-      footerSlot={<WorkingAs />}
+      footerSlot={<><InstallAppButton /><WorkingAs /></>}
       onLogout={function () { clearPetActor(); setLoggedIn(false); setIsAdmin(false); setIntent(null); setTab("overview"); }}
     >
       {activeItem.key === "overview"
