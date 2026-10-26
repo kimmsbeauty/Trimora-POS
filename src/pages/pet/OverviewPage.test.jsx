@@ -46,7 +46,7 @@ function setup(opts) {
     if (table === "pet_boarding_stays") return Promise.resolve(qs.indexOf("status=in.") !== -1 ? d.stays : d.recentStays);
     if (table === "pet_invoices") return Promise.resolve(qs.indexOf("status=in.") !== -1 ? d.invoices : d.recentInvoices);
     var map = { pet_payments: d.payments, customers: CUSTOMERS, pet_pets: opts.pets || PETS, staff: STAFF, pet_kennels: KENNELS,
-      pet_customer_profiles: d.recentProfiles, pet_vaccinations: d.vaccinations, pet_items: d.items };
+      pet_customer_profiles: d.recentProfiles, pet_vaccinations: d.vaccinations, pet_items: d.items, pet_refunds: d.refunds || [] };
     return Promise.resolve(map[table] || []);
   });
   mockRpc.mockImplementation(function () { return Promise.resolve(opts.rpcError ? { error: opts.rpcError } : { data: null }); });
@@ -82,6 +82,22 @@ describe("OverviewPage", function () {
     expect(within(card("Revenue Collected Today")).getByText("2 payments")).toBeTruthy();
     expect(within(card("Outstanding Invoices")).getByText("KES 4,500")).toBeTruthy();
     expect(within(card("Outstanding Invoices")).getByText("2 invoices unpaid")).toBeTruthy();
+  });
+
+  it("takes refunds paid back today off today's revenue and says how much", async function () {
+    setup({ data: {
+      payments: [{ id: "pm1", invoice_id: "i2", amount: 3000, method: "cash", paid_at: todayAt(9) }],
+      refunds: [{ id: "r1", invoice_id: "i2", amount: 500, method: "cash", refunded_at: todayAt(11) }, { id: "r2", invoice_id: "i2", amount: 9000, method: "cash", refunded_at: new Date(2000, 0, 1).toISOString() }],
+    } });
+    await screen.findByText("Today's Appointments");
+    expect(within(card("Revenue Collected Today")).getByText("KES 2,500")).toBeTruthy();
+    expect(within(card("Revenue Collected Today")).getByText("1 payment · KES 500 refunded")).toBeTruthy();
+  });
+
+  it("still opens, and says so, when refunds cannot be read", async function () {
+    setup({ failTable: "pet_refunds", data: { payments: [{ id: "pm1", invoice_id: "i2", amount: 3000, method: "cash", paid_at: todayAt(9) }] } });
+    await screen.findByText("Today's Appointments");
+    expect(within(card("Revenue Collected Today")).getByText("1 payment · refunds unavailable")).toBeTruthy();
   });
 
   it("shows honest empty states instead of invented data", async function () {

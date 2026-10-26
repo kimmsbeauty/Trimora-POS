@@ -44,6 +44,7 @@ var ERROR_TEXT = {
   PET_NOT_FOUND: "That pet doesn't belong to the chosen customer.",
   STAFF_NOT_FOUND: "That staff member isn't available.",
   SERVICE_NOT_FOUND: "One of the chosen services is no longer available.",
+  SERVICE_SPECIES_MISMATCH: "One of the chosen services isn't offered for this pet's species. Pick a different service or pet.",
   BOOKING_CONFLICT_STAFF: "That staff member already has a booking at that time.",
   BOOKING_CONFLICT_PET: "This pet already has a booking at that time.",
   BOOKING_NOT_FOUND: "That booking could not be found. Refresh and try again.",
