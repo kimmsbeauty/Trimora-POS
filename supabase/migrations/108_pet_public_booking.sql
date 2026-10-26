@@ -2,8 +2,7 @@
 --
 -- Trimora Pet -- public online booking REQUESTS.
 --
--- STATUS: written for owner review. NOT applied anywhere. Apply only after the
--- owner says "apply 108".
+-- STATUS: APPLIED to production 2026-10-26.
 --
 -- WHAT THIS IS: a public page (/<slug>/pet/book) where a pet owner picks grooming
 -- services and a free time and sends a REQUEST. It is NOT an instant booking: staff
