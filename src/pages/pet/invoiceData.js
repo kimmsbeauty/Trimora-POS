@@ -10,8 +10,8 @@
 
 export var METHODS = ["cash", "mpesa", "card", "other"];
 export var METHOD_LABELS = { cash: "Cash", mpesa: "M-Pesa", card: "Card", other: "Other" };
-export var STATUS_LABELS = { issued: "Unpaid", partial: "Part paid", paid: "Paid", void: "Void", overdue: "Overdue" };
-export var STATUS_TONES = { issued: "warning", partial: "info", paid: "success", void: "neutral", overdue: "danger" };
+export var STATUS_LABELS = { issued: "Unpaid", partial: "Part paid", paid: "Paid", void: "Void", overdue: "Overdue", refunded: "Refunded" };
+export var STATUS_TONES = { issued: "warning", partial: "info", paid: "success", void: "neutral", overdue: "danger", refunded: "neutral" };
 
 var ERROR_TEXT = {
   NOT_AUTHENTICATED: "Please sign in again.",
@@ -37,9 +37,17 @@ var ERROR_TEXT = {
   INVOICE_NOT_FOUND: "That invoice could not be found. Refresh and try again.",
   INVOICE_NOT_PAYABLE: "This invoice can't take more payments.",
   INVOICE_NOT_VOIDABLE: "This invoice is already void.",
-  INVOICE_HAS_PAYMENTS: "An invoice with payments can't be voided yet. Refunds are not available.",
-  REASON_REQUIRED: "Enter a reason for voiding this invoice.",
+  INVOICE_HAS_PAYMENTS: "An invoice with payments can't be voided. Refund it instead.",
+  REASON_REQUIRED: "Enter a reason.",
+  INVALID_REFUND: "Check the refund: choose a method and enter a positive whole amount.",
+  INVOICE_NOT_REFUNDABLE: "This invoice can't be refunded. Only invoices with payments can, and not ones already fully refunded or void.",
+  REFUND_EXCEEDS_PAID: "That is more than can still be refunded on this invoice.",
+  PARTIAL_INVOICE_FULL_REFUND_ONLY: "This invoice is only part paid, so it can only be refunded in full.",
+  RETURN_STOCK_NEEDS_FULL_REFUND: "Products can only be put back into stock on the refund that completes the invoice.",
+  DUPLICATE_REFUND_REFERENCE: "A refund with that reference has already been recorded.",
+  IDEMPOTENCY_CONFLICT: "This refund request doesn't match an earlier one. Close this window and start again.",
 };
+export var REFUND_PIN_REFUSED = "That admin PIN wasn't accepted. After 5 wrong tries it is locked for 15 minutes.";
 export function invoiceErrorMessage(raw) {
   var text = String(raw || "");
   var codes = Object.keys(ERROR_TEXT);
@@ -104,7 +112,30 @@ export function paymentRows(payments) {
   });
 }
 
-export function outstanding(inv) { return inv.status === "void" ? 0 : Math.max(0, inv.total - inv.amount_paid); }
+export function outstanding(inv) { return inv.status === "void" || inv.status === "refunded" ? 0 : Math.max(0, inv.total - inv.amount_paid); }
+
+// ---- refunds (migration 105). The database is the authority; these only preview its rules. ----
+// Money still refundable: what was paid minus what has been paid back. Only paid and part-paid invoices.
+export function refundable(inv) {
+  if (!inv || (inv.status !== "paid" && inv.status !== "partial")) return 0;
+  return Math.max(0, (inv.amount_paid || 0) - (inv.amount_refunded || 0));
+}
+// Money kept after refunds.
+export function netPaid(inv) { return Math.max(0, ((inv && inv.amount_paid) || 0) - ((inv && inv.amount_refunded) || 0)); }
+export function hasProductLines(inv) { return ((inv && inv.pet_invoice_lines) || []).some(function (l) { return !!l.item_id; }); }
+
+// draft: { amount, method, reason }. Returns "" when valid.
+export function validateRefund(inv, draft) {
+  var left = refundable(inv);
+  if (left <= 0) return "This invoice has nothing left to refund.";
+  var a = intOrNaN(draft.amount);
+  if (isNaN(a) || a <= 0) return "Enter a positive whole amount.";
+  if (a > left) return "That is more than can still be refunded (" + left + ").";
+  if (inv.status === "partial" && a !== left) return "A part-paid invoice can only be refunded in full.";
+  if (METHODS.indexOf(draft.method) === -1) return "Choose how the money was returned.";
+  if (!String(draft.reason || "").trim()) return "Enter a reason for the refund.";
+  return "";
+}
 
 function startOfToday(now) { var d = now || new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
 // Overdue is derived, never stored: unpaid or part-paid and past its due date.

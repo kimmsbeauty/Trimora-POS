@@ -58,6 +58,11 @@ function sum(list, pick) { return (list || []).reduce(function (n, x) { return n
 // ---- money ----
 export function collectedTotal(payments) { return sum(payments, function (p) { return p.amount; }); }
 
+// Money paid back to customers in the period (pet_refunds, by refunded_at). Collected stays the gross
+// payments received; Net = Collected - Refunded can be negative on a day or period with big refunds.
+export function refundedTotal(refunds) { return sum(refunds, function (r) { return r.amount; }); }
+export function netCollected(payments, refunds) { return collectedTotal(payments) - refundedTotal(refunds); }
+
 export function revenueByDay(payments, fromKey, toKey) {
   var totals = {};
   (payments || []).forEach(function (p) {
@@ -85,10 +90,12 @@ export function collectedByMethod(payments) {
 }
 
 export function invoiceTotals(invoices) {
-  var live = (invoices || []).filter(function (i) { return i.status !== "void"; });
+  // A fully refunded invoice is not a sale that stood, so it is left out of "invoiced" like a void one.
+  var live = (invoices || []).filter(function (i) { return i.status !== "void" && i.status !== "refunded"; });
   var invoiced = sum(live, function (i) { return i.total; });
   return {
-    count: live.length, voidCount: (invoices || []).length - live.length, invoiced: invoiced,
+    count: live.length, voidCount: (invoices || []).filter(function (i) { return i.status === "void"; }).length,
+    refundedCount: (invoices || []).filter(function (i) { return i.status === "refunded"; }).length, invoiced: invoiced,
     discounts: sum(live, function (i) { return i.discount_amount; }), tax: sum(live, function (i) { return i.tax_amount; }),
     average: live.length ? Math.round(invoiced / live.length) : 0,
   };
@@ -108,12 +115,12 @@ export function openInvoiceSummary(open, now) {
   return { count: list.length, owed: owed, overdueCount: overdueList.length, overdueOwed: sum(overdueList, function (i) { return outstanding(i); }), list: sorted };
 }
 
-// Revenue by service, from invoice lines of invoices in the period (void invoices excluded).
+// Revenue by service, from invoice lines of invoices in the period (void and fully refunded invoices excluded).
 export function topServices(lines, invoicesById, limit) {
   var groups = {};
   (lines || []).forEach(function (l) {
     var inv = invoicesById[l.invoice_id];
-    if (!inv || inv.status === "void") return;
+    if (!inv || inv.status === "void" || inv.status === "refunded") return;
     var key = l.service_id || l.description;
     var g = groups[key] || (groups[key] = { key: key, name: l.description, quantity: 0, revenue: 0 });
     g.quantity += Number(l.quantity) || 0; g.revenue += Number(l.line_total) || 0;

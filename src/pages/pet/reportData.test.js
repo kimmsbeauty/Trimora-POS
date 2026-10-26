@@ -1,5 +1,5 @@
 import {
-  periodBounds, validateCustomRange, collectedTotal, revenueByDay, collectedByMethod, invoiceTotals, openInvoiceSummary,
+  periodBounds, validateCustomRange, collectedTotal, refundedTotal, netCollected, revenueByDay, collectedByMethod, invoiceTotals, openInvoiceSummary,
   topServices, bookingStats, boardingStats, hasAnyData,
 } from "./reportData";
 
@@ -144,5 +144,35 @@ describe("hasAnyData", function () {
   it("is false only when every dataset is empty", function () {
     expect(hasAnyData({ payments: [], invoices: [], bookings: [], stays: [] })).toBe(false);
     expect(hasAnyData({ payments: [], invoices: [], bookings: [{}], stays: [] })).toBe(true);
+  });
+});
+
+describe("refunds in reports (migration 105)", function () {
+  it("adds up refunds and nets them off collected", function () {
+    var pays = [{ amount: 3000 }, { amount: 1000 }]; var refunds = [{ amount: 500 }, { amount: 250 }];
+    expect(refundedTotal(refunds)).toBe(750);
+    expect(netCollected(pays, refunds)).toBe(3250);
+    expect(refundedTotal(undefined)).toBe(0);
+    expect(netCollected(pays, undefined)).toBe(4000);
+  });
+  it("can be negative when more went back than came in", function () {
+    expect(netCollected([{ amount: 100 }], [{ amount: 400 }])).toBe(-300);
+  });
+  it("leaves fully refunded invoices out of invoiced and counts them separately; void stays separate", function () {
+    var inv = [
+      { id: "a", status: "paid", total: 2000, discount_amount: 0, tax_amount: 0 },
+      { id: "b", status: "refunded", total: 5000, discount_amount: 0, tax_amount: 0 },
+      { id: "c", status: "void", total: 700, discount_amount: 0, tax_amount: 0 },
+    ];
+    var t = invoiceTotals(inv);
+    expect(t.invoiced).toBe(2000); expect(t.count).toBe(1); expect(t.voidCount).toBe(1); expect(t.refundedCount).toBe(1);
+  });
+  it("keeps a partly refunded paid invoice in invoiced (its cash effect is in Refunded)", function () {
+    expect(invoiceTotals([{ id: "a", status: "paid", total: 2000, amount_refunded: 500, discount_amount: 0, tax_amount: 0 }]).invoiced).toBe(2000);
+  });
+  it("leaves lines of fully refunded invoices out of top services", function () {
+    var lines = [{ invoice_id: "a", service_id: "s1", description: "Bath", quantity: 1, line_total: 1000 }, { invoice_id: "b", service_id: "s2", description: "Cut", quantity: 1, line_total: 9000 }];
+    var rows = topServices(lines, { a: { status: "paid" }, b: { status: "refunded" } }, 8);
+    expect(rows.map(function (r) { return r.name; })).toEqual(["Bath"]);
   });
 });
