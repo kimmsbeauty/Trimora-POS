@@ -157,7 +157,7 @@ export default function OverviewPage({ businessName, isAdmin, onNavigate }) {
   var feed = activityFeed({ now: now, maps: maps, fmt: fmt, recentBookings: data.recentBookings, recentStays: data.recentStays, recentInvoices: data.recentInvoices,
     payments: data.payments, recentPets: data.pets, recentProfiles: data.recentProfiles });
   var owed = outstandingInvoices(data.invoices);
-  var earned = revenueToday(data.payments, now);
+  var earned = revenueToday(data.payments, now, data.refunds);
   var attentionPartial = data.failed.vaccinations || data.failed.items;
   var feedPartial = data.failed.recentBookings || data.failed.recentStays || data.failed.recentInvoices || data.failed.recentProfiles;
 
@@ -198,7 +198,7 @@ export default function OverviewPage({ businessName, isAdmin, onNavigate }) {
         <SummaryCard label="Pets Boarding" value={petsBoarding(data.stays)}
           hint={petsBoarding(data.stays) === 0 ? "No pets checked in" : "Checked in right now"} onClick={allowed.boarding ? function () { go("boarding"); } : null} />
         <SummaryCard label="Revenue Collected Today" value={fmt(earned.total)}
-          hint={earned.count === 0 ? "No payments recorded yet" : earned.count + (earned.count === 1 ? " payment" : " payments")} onClick={allowed.invoices ? function () { go("invoices"); } : null} />
+          hint={(earned.count === 0 ? "No payments recorded yet" : earned.count + (earned.count === 1 ? " payment" : " payments")) + (earned.refunded > 0 ? " · " + fmt(earned.refunded) + " refunded" : "") + (data.failed.refunds ? " · refunds unavailable" : "")} onClick={allowed.invoices ? function () { go("invoices"); } : null} />
         <SummaryCard label="Outstanding Invoices" value={fmt(owed.total)}
           hint={owed.count === 0 ? "Nothing owing" : owed.count + (owed.count === 1 ? " invoice unpaid" : " invoices unpaid")} onClick={allowed.invoices ? function () { go("invoices", { status: "outstanding" }); } : null} />
       </div>

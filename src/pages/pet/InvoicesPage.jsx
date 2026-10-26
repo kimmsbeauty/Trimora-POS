@@ -6,18 +6,24 @@
 // pet_* database functions. Overdue is derived from the due date, not stored.
 //
 // M-Pesa: "Send M-Pesa request" starts an STK push (migration 099); recording by M-Pesa
-// code stays available as a fallback. Not built yet: refunds (so a paid invoice cannot be voided).
-import React, { useEffect, useMemo, useState } from "react";
+// code stays available as a fallback.
+//
+// Refunds (migration 105): a paid or part-paid invoice cannot be voided, so it is refunded instead.
+// A refund needs the ADMIN PIN (checked by the database) and records money returned; it does not
+// send any money. Each refund has its own printable refund receipt (RFD-...).
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { db, dbRpcAuth } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
 import { fmt } from "../../lib/utils";
 import { MUTED_FG, MUTED, BORDER, FOREGROUND } from "./theme";
 import {
   METHODS, METHOD_LABELS, STATUS_LABELS, STATUS_TONES, invoiceErrorMessage, outstanding, displayStatus, filterInvoices, summarize,
+  refundable, netPaid, hasProductLines, validateRefund, newIdempotencyKey, REFUND_PIN_REFUSED,
 } from "./invoiceData";
 import InvoiceDocument from "./InvoiceDocument";
 import ReceiptDocument from "./ReceiptDocument";
-import { sortedPayments, latestPaymentId, receiptFor } from "./receiptData";
+import RefundDocument from "./RefundDocument";
+import { sortedPayments, latestPaymentId, receiptFor, sortedRefunds, refundReceiptFor } from "./receiptData";
 import MpesaStkPush from "./MpesaStkPush";
 import { PageHeader, Card, Button, Field, Badge, Modal, ErrorLine, EmptyState, inputStyle } from "./ui";
 
@@ -37,6 +43,14 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
   var errState = useState(""); var err = errState[0]; var setErr = errState[1];
   var receiptState = useState(null); var receiptId = receiptState[0]; var setReceiptId = receiptState[1];
   var paidState = useState(false); var justPaid = paidState[0]; var setJustPaid = paidState[1];
+  var refundState = useState(null); var refunding = refundState[0]; var setRefunding = refundState[1]; // {amount, method, reason, reference, restock, key}
+  var refundReceiptState = useState(null); var refundReceiptId = refundReceiptState[0]; var setRefundReceiptId = refundReceiptState[1];
+  var justRefundedState = useState(null); var justRefunded = justRefundedState[0]; var setJustRefunded = justRefundedState[1];
+  // Admin-PIN step-up for refunds (the database checks the PIN; it is held only for the one call).
+  var pinAskState = useState(false); var pinAsk = pinAskState[0]; var setPinAsk = pinAskState[1];
+  var pinValState = useState(""); var pinVal = pinValState[0]; var setPinVal = pinValState[1];
+  var pinErrState = useState(""); var pinErr = pinErrState[0]; var setPinErr = pinErrState[1];
+  var pinResolver = useRef(null);
 
   useEffect(function () { if (openInvoiceId) setDetailId(openInvoiceId); }, [openInvoiceId]);
 
@@ -44,7 +58,7 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
     var cancelled = false;
     setLoadStatus("loading");
     Promise.all([
-      db("GET", "pet_invoices", null, "?select=*,pet_invoice_lines(*),pet_payments(*)&order=issued_at.desc&limit=500"),
+      db("GET", "pet_invoices", null, "?select=*,pet_invoice_lines(*),pet_payments(*),pet_refunds(*)&order=issued_at.desc&limit=500"),
       db("GET", "customers", null, "?select=id,name,phone&order=name.asc&limit=2000"),
       db("GET", "pet_pets", null, "?select=id,name,species&limit=5000"),
     ]).then(function (res) {
@@ -86,7 +100,7 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
   var totals = summarize(all);
   var detail = detailId ? all.filter(function (i) { return i.id === detailId; })[0] : null;
   function setF(k, v) { var o = {}; o[k] = v; setFilters(Object.assign({}, filters, o)); setShown(PAGE); }
-  function closeDetail() { if (!saving) { setDetailId(null); setReceiptId(null); setJustPaid(false); setErr(""); setPay({ method: "cash", amount: "", reference: "" }); if (onDetailClosed) onDetailClosed(); } }
+  function closeDetail() { if (!saving && !refunding && !pinAsk) { setDetailId(null); setReceiptId(null); setRefundReceiptId(null); setJustRefunded(null); setJustPaid(false); setErr(""); setPay({ method: "cash", amount: "", reference: "" }); if (onDetailClosed) onDetailClosed(); } }
 
   async function recordPayment() {
     if (saving || !detail) return;
@@ -113,6 +127,50 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
     setTick(tick + 1);
   }
 
+  function askPin() {
+    return new Promise(function (resolve) { pinResolver.current = resolve; setPinVal(""); setPinErr(""); setPinAsk(true); });
+  }
+  function answerPin(value) {
+    var r = pinResolver.current; pinResolver.current = null;
+    setPinAsk(false); setPinVal(""); setPinErr("");
+    if (r) r(value);
+  }
+  function submitPin() {
+    if (!/^[0-9]{4,6}$/.test(pinVal)) { setPinErr("Enter the admin PIN (4 to 6 digits)."); return; }
+    answerPin(pinVal);
+  }
+
+  function openRefund() {
+    if (!detail) return;
+    setErr("");
+    setRefunding({ amount: String(refundable(detail)), method: "cash", reason: "", reference: "", restock: false, key: newIdempotencyKey() });
+  }
+
+  async function confirmRefund() {
+    if (saving || !refunding || !detail) return;
+    var msg = validateRefund(detail, refunding);
+    if (msg) { setErr(msg); return; }
+    var amount = Number(refunding.amount);
+    var completes = amount === refundable(detail);
+    var restock = !!refunding.restock && completes && hasProductLines(detail);
+    setErr("");
+    var pin = await askPin();
+    if (pin === null) return;
+    setSaving(true);
+    var res = await dbRpcAuth("pet_refund_invoice", {
+      p_admin_pin: pin, p_idempotency_key: refunding.key, p_invoice_id: detail.id, p_method: refunding.method, p_amount: amount,
+      p_reason: refunding.reason.trim(), p_reference: refunding.reference.trim() || null, p_return_stock: restock,
+    });
+    pin = null;
+    setSaving(false);
+    if (res.error) { setErr(invoiceErrorMessage(res.error)); return; }
+    // The database answers null for a wrong or locked-out admin PIN: nothing was refunded.
+    if (res.data === null || res.data === undefined || res.data === false) { setErr(REFUND_PIN_REFUSED); return; }
+    setRefunding(null);
+    setJustRefunded(res.data);
+    setTick(tick + 1);
+  }
+
   return (
     <div>
       <PageHeader title="Invoices & Payments" subtitle="Every invoice, what is owed, and payments received" />
@@ -130,7 +188,7 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
         <select aria-label="Filter by status" value={filters.status} onChange={function (e) { setF("status", e.target.value); }} style={Object.assign({}, inputStyle, { width: 160 })}>
           <option value="all">All statuses</option>
           <option value="outstanding">Outstanding (unpaid or part paid)</option>
-          {["issued", "partial", "paid", "overdue", "void"].map(function (s) { return <option key={s} value={s}>{STATUS_LABELS[s]}</option>; })}
+          {["issued", "partial", "paid", "overdue", "void", "refunded"].map(function (s) { return <option key={s} value={s}>{STATUS_LABELS[s]}</option>; })}
         </select>
       </Card>
 
@@ -162,10 +220,11 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
         </div>
       )}
 
-      <Modal open={!!detail && !receiptId} onClose={closeDetail} title={detail ? "Invoice " + detail.invoice_number : ""} width={720}
+      <Modal open={!!detail && !receiptId && !refundReceiptId} onClose={closeDetail} title={detail ? "Invoice " + detail.invoice_number : ""} width={720}
         footer={detail ? <>
           <Button variant="ghost" onClick={closeDetail}>Close</Button>
           {detail.status === "issued" ? <Button variant="ghost-danger" onClick={function () { setErr(""); setVoiding({ id: detail.id, reason: "" }); }}>Void invoice</Button> : null}
+          {refundable(detail) > 0 ? <Button variant="ghost-danger" onClick={openRefund}>Refund</Button> : null}
           <Button onClick={function () { window.print(); }}>Print</Button>
         </> : null}>
         {detail ? (
@@ -217,7 +276,27 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
                 })}
               </div>
             ) : null}
-            {!voiding ? <ErrorLine>{err}</ErrorLine> : null}
+            {justRefunded && refundReceiptFor(detail, justRefunded) ? (
+              <div role="status" style={{ marginTop: 14, padding: 12, border: "1px solid " + BORDER, borderRadius: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13, flex: "1 1 200px" }}>Refund recorded.</span>
+                <Button size="sm" onClick={function () { setRefundReceiptId(justRefunded); }}>Print refund receipt</Button>
+              </div>
+            ) : null}
+            {sortedRefunds(detail).length ? (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: MUTED_FG, marginBottom: 6 }}>Refunds · {fmt(detail.amount_refunded)} returned · {fmt(netPaid(detail))} kept</div>
+                {sortedRefunds(detail).map(function (f) {
+                  var r = refundReceiptFor(detail, f.id);
+                  return (
+                    <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 13 }}>
+                      <span>{r.number} · {fmt(f.amount)} · {METHOD_LABELS[f.method] || f.method}</span>
+                      <Button size="sm" variant="outline" onClick={function () { setRefundReceiptId(f.id); }} ariaLabel={"View refund receipt " + r.number}>Refund receipt</Button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+            {!voiding && !refunding ? <ErrorLine>{err}</ErrorLine> : null}
           </div>
         ) : null}
       </Modal>
@@ -244,6 +323,69 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
           <input id="void-reason" style={inputStyle} value={voiding ? voiding.reason : ""} onChange={function (e) { setVoiding(Object.assign({}, voiding, { reason: e.target.value })); }} />
         </Field>
         <ErrorLine>{err}</ErrorLine>
+      </Modal>
+      <Modal open={!!detail && !!refundReceiptId} onClose={function () { setRefundReceiptId(null); }} title={detail && refundReceiptId && refundReceiptFor(detail, refundReceiptId) ? "Refund receipt " + refundReceiptFor(detail, refundReceiptId).number : "Refund receipt"} width={560}
+        footer={<>
+          <Button variant="ghost" onClick={function () { setRefundReceiptId(null); }}>Back to invoice</Button>
+          <Button onClick={function () { window.print(); }}>Print</Button>
+        </>}>
+        {detail && refundReceiptId ? (
+          <RefundDocument invoice={detail} refundId={refundReceiptId} customer={maps.customers[detail.customer_id]} pet={detail.pet_id ? maps.pets[detail.pet_id] : null} salon={salon} />
+        ) : null}
+      </Modal>
+
+      <Modal open={!!refunding} onClose={function () { if (!saving && !pinAsk) { setRefunding(null); setErr(""); } }} title={detail ? "Refund " + detail.invoice_number : "Refund"}
+        footer={<>
+          <Button variant="ghost" onClick={function () { setRefunding(null); setErr(""); }} disabled={saving}>Cancel</Button>
+          <Button variant="danger" onClick={confirmRefund} disabled={saving}>{saving ? "Refunding…" : "Refund…"}</Button>
+        </>}>
+        {detail && refunding ? (
+          <div>
+            <p style={{ margin: "0 0 10px", fontSize: 13, lineHeight: 1.5, color: FOREGROUND }}>
+              {fmt(refundable(detail))} can still be refunded on this invoice. This records money you have returned to the customer. It does not send any money:
+              pay an M-Pesa or card refund in that system, then record it here. The admin PIN is asked next.
+              {detail.status === "partial" ? " This invoice is only part paid, so it can only be refunded in full." : ""}
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <Field label="Amount (KES)" htmlFor="refund-amount">
+                <input id="refund-amount" inputMode="numeric" style={inputStyle} value={refunding.amount} disabled={detail.status === "partial"}
+                  onChange={function (e) { setRefunding(Object.assign({}, refunding, { amount: e.target.value })); }} />
+              </Field>
+              <Field label="Returned by" htmlFor="refund-method">
+                <select id="refund-method" style={inputStyle} value={refunding.method} onChange={function (e) { setRefunding(Object.assign({}, refunding, { method: e.target.value })); }}>
+                  {METHODS.map(function (m) { return <option key={m} value={m}>{METHOD_LABELS[m]}</option>; })}
+                </select>
+              </Field>
+            </div>
+            <Field label="Reason" htmlFor="refund-reason">
+              <input id="refund-reason" style={inputStyle} value={refunding.reason} onChange={function (e) { setRefunding(Object.assign({}, refunding, { reason: e.target.value })); }} />
+            </Field>
+            <Field label={refunding.method === "mpesa" ? "M-Pesa reference (optional)" : "Reference (optional)"} htmlFor="refund-ref">
+              <input id="refund-ref" style={inputStyle} value={refunding.reference} onChange={function (e) { setRefunding(Object.assign({}, refunding, { reference: e.target.value })); }} />
+            </Field>
+            {hasProductLines(detail) && Number(refunding.amount) === refundable(detail) ? (
+              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, marginTop: 4 }}>
+                <input type="checkbox" checked={!!refunding.restock} onChange={function (e) { setRefunding(Object.assign({}, refunding, { restock: e.target.checked })); }} />
+                Put the products on this invoice back into stock
+              </label>
+            ) : null}
+            <ErrorLine>{err}</ErrorLine>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal open={pinAsk} onClose={function () { answerPin(null); }} title="Confirm with admin PIN"
+        description="Enter the admin PIN to record this refund."
+        footer={<>
+          <Button variant="ghost" onClick={function () { answerPin(null); }}>Cancel</Button>
+          <Button onClick={submitPin}>Confirm</Button>
+        </>}>
+        <Field label="Admin PIN" htmlFor="refund-admin-pin">
+          <input id="refund-admin-pin" type="password" inputMode="numeric" autoComplete="off" maxLength={6} style={inputStyle} value={pinVal}
+            onChange={function (e) { setPinVal(e.target.value.replace(/[^0-9]/g, "")); setPinErr(""); }}
+            onKeyDown={function (e) { if (e.key === "Enter") submitPin(); }} autoFocus />
+        </Field>
+        <ErrorLine>{pinErr}</ErrorLine>
       </Modal>
     </div>
   );
