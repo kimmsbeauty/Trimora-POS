@@ -38,7 +38,15 @@ export default function BookingPage() {
   const primaryLt  = lighten(primary, 14);
   const primaryDim = darken(primary, 18);
   const bgStop3    = lighten(secondary, 3.5);
-  const salonName  = (salon && salon.name) || "your salon";
+  // Trimora Pet businesses share this booking page with salons, so any
+  // salon-specific wording (stylist, "the salon", scissors/💕) is switched
+  // by business_type rather than hardcoded.
+  const isPet      = !!(salon && salon.business_type === "pet");
+  const staffWord  = isPet ? "groomer" : "stylist";
+  const staffTitle = isPet ? "Groomer" : "Stylist";
+  const placeWord  = isPet ? "in person" : "at the salon";
+  const brandIcon  = isPet ? "🐾" : "✂";
+  const salonName  = (salon && salon.name) || (isPet ? "us" : "your salon");
   const mpesaTill        = (salon && salon.mpesa_till)               || null;
   const mpesaName        = (salon && salon.mpesa_name)               || salonName;
   const mpesaPaybill     = (salon && salon.mpesa_paybill)            || null;
@@ -190,12 +198,12 @@ export default function BookingPage() {
 
   if (done) {
     const waMessage = encodeURIComponent(
-      `✂ ${salonName}\n\nHi ${sel.name}! Your booking is confirmed 💕\n\nService: ${sel.service?.name}\nStylist: ${sel.stylist || "Any available"}\nDate: ${sel.date}\nTime: ${sel.time}\nPrice: KES ${sel.service?.price?.toLocaleString()}\nPayment: ${paymentStatus === "awaiting_confirmation" ? "🕓 Confirming your M-Pesa payment" : "Pay at salon"}\n\nWe look forward to seeing you!`
+      `${brandIcon} ${salonName}\n\nHi ${sel.name}! Your booking is confirmed ${isPet ? "🐾" : "💕"}\n\nService: ${sel.service?.name}\n${staffTitle}: ${sel.stylist || "Any available"}\nDate: ${sel.date}\nTime: ${sel.time}\nPrice: KES ${sel.service?.price?.toLocaleString()}\nPayment: ${paymentStatus === "awaiting_confirmation" ? "🕓 Confirming your M-Pesa payment" : (isPet ? "Pay in person" : "Pay at salon")}\n\nWe look forward to seeing you!`
     );
 
     // Owner notification message — sent TO the salon
     const ownerMessage = encodeURIComponent(
-      `📅 New Booking — ${salonName}\n\nClient: ${sel.name}${sel.phone ? " (" + sel.phone + ")" : ""}\nService: ${sel.service?.name}\nStylist: ${sel.stylist || "Any available"}\nDate: ${sel.date} at ${sel.time}\nPrice: KES ${sel.service?.price?.toLocaleString()}\nPayment: ${paymentStatus === "awaiting_confirmation" ? "🕓 Customer claims paid via M-Pesa — please confirm and mark it in the app" : "Pay at salon"}`
+      `📅 New Booking — ${salonName}\n\nClient: ${sel.name}${sel.phone ? " (" + sel.phone + ")" : ""}\nService: ${sel.service?.name}\n${staffTitle}: ${sel.stylist || "Any available"}\nDate: ${sel.date} at ${sel.time}\nPrice: KES ${sel.service?.price?.toLocaleString()}\nPayment: ${paymentStatus === "awaiting_confirmation" ? "🕓 Customer claims paid via M-Pesa — please confirm and mark it in the app" : (isPet ? "Pay in person" : "Pay at salon")}`
     );
 
     return (
@@ -206,10 +214,10 @@ export default function BookingPage() {
             {paymentStatus === "awaiting_confirmation" ? "You're booked — confirming payment" : "You're booked!"}
           </div>
           <div style={{ display: "inline-block", padding: "6px 16px", borderRadius: 20, fontSize: 12, fontWeight: 800, marginBottom: 16, background: paymentStatus === "awaiting_confirmation" ? "rgba(234,179,8,0.15)" : `rgba(201,168,76,0.15)`, color: paymentStatus === "awaiting_confirmation" ? "#CA8A04" : primaryLt }}>
-            {paymentStatus === "awaiting_confirmation" ? "🕓 Confirming your payment" : "🕐 Pay at Salon"}
+            {paymentStatus === "awaiting_confirmation" ? "🕓 Confirming your payment" : "🕐 " + (isPet ? "Pay in Person" : "Pay at Salon")}
           </div>
           <div style={{ fontSize: 14, color: "rgba(255,255,255,0.7)", lineHeight: 1.8, marginBottom: 20 }}>
-            <b style={{ color: WHITE }}>{sel.service?.name}</b> with <b style={{ color: WHITE }}>{sel.stylist || "any available stylist"}</b><br />
+            <b style={{ color: WHITE }}>{sel.service?.name}</b> with <b style={{ color: WHITE }}>{sel.stylist || "any available " + staffWord}</b><br />
             📅 {sel.date} at {sel.time}<br />
             💰 KES {sel.service?.price?.toLocaleString()}
           </div>
@@ -231,7 +239,7 @@ export default function BookingPage() {
           {contactPhone && (
             <a href={`https://wa.me/${contactPhone}?text=${ownerMessage}`} target="_blank" rel="noreferrer"
               style={{ display: "block", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", borderRadius: 10, padding: "9px 0", fontWeight: 700, fontSize: 11, textDecoration: "none", marginBottom: 14 }}>
-              📩 Send booking details to salon
+              📩 Send booking details to {isPet ? "us" : "salon"}
             </a>
           )}
 
@@ -253,7 +261,7 @@ export default function BookingPage() {
 
       {/* Progress steps */}
       <div style={{ display: "flex", justifyContent: "center", gap: 0, padding: "16px 20px 0" }}>
-        {["Service", "Stylist", "Date & Time", "Your Details"].map((s, i) => (
+        {["Service", staffTitle, "Date & Time", "Your Details"].map((s, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center" }}>
             <div style={{ width: 28, height: 28, borderRadius: "50%", background: step > i + 1 ? GREEN : step === i + 1 ? primary : "rgba(255,255,255,0.1)", color: step === i + 1 ? BLACK : WHITE, fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${step >= i + 1 ? primary : "rgba(255,255,255,0.2)"}` }}>
               {step > i + 1 ? "✓" : i + 1}
@@ -271,9 +279,9 @@ export default function BookingPage() {
             <div style={{ fontWeight: 800, fontSize: 16, color: WHITE, marginBottom: 14 }}>Choose a service</div>
             {bookingServices.length === 0 ? (
               <div style={{ textAlign: "center", padding: "32px 20px", background: "rgba(255,255,255,0.05)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.1)" }}>
-                <div style={{ fontSize: 32, marginBottom: 8 }}>✂️</div>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>{isPet ? "🐾" : "✂️"}</div>
                 <div style={{ fontSize: 14, fontWeight: 800, color: WHITE, marginBottom: 6 }}>Services coming soon</div>
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 16 }}>This salon is still setting up. Chat with us to book directly.</div>
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 16 }}>{isPet ? "We're still setting up our services. Chat with us to book your pet in directly." : "This salon is still setting up. Chat with us to book directly."}</div>
                 <a href={`https://wa.me/?text=${encodeURIComponent("I'd like to book at " + salonName)}`} target="_blank" rel="noreferrer"
                   style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#25D366", color: WHITE, borderRadius: 24, padding: "10px 20px", fontWeight: 800, fontSize: 14, textDecoration: "none" }}>
                   <span style={{ fontSize: 18 }}>💬</span> Chat on WhatsApp
@@ -305,7 +313,7 @@ export default function BookingPage() {
         {/* Step 2 — Stylist */}
         {step === 2 && (
           <div>
-            <div style={{ fontWeight: 800, fontSize: 16, color: WHITE, marginBottom: 14 }}>Choose your stylist</div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: WHITE, marginBottom: 14 }}>Choose your {staffWord}</div>
             {[...bookingStaff, { id: "any", name: "Any available", role: "We'll assign the best match" }].map(s => (
               <div key={s.id} onClick={() => { setSel(p => ({ ...p, stylist: s.name })); setStep(3); }}
                 style={{ background: "rgba(255,255,255,0.05)", borderRadius: 12, padding: "14px 16px", marginBottom: 10, cursor: "pointer", border: `1.5px solid ${sel.stylist === s.name ? primary : "rgba(255,255,255,0.1)"}`, display: "flex", alignItems: "center", gap: 12 }}>
@@ -380,12 +388,12 @@ export default function BookingPage() {
 
               {/* Cash */}
               {hasCash && (
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>💵 Cash — Pay at the salon</div>
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>💵 Cash — Pay {placeWord}</div>
               )}
 
               {/* Fallback if nothing configured */}
               {!hasTill && !hasPaybill && !hasSendMoney && !hasCash && (
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Pay at the salon</div>
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Pay {placeWord}</div>
               )}
             </div>
             <GoldBtn onClick={confirm} disabled={saving} style={{ width: "100%" }}>{saving ? "Saving..." : "Confirm Booking 👑"}</GoldBtn>
