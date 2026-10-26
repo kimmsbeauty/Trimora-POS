@@ -1,9 +1,9 @@
 // @vitest-environment node
 //
 // Behaviour test of migration 108 (public booking requests) on a REAL Postgres engine
-// (PGlite) with the repo's real pet migrations 083-097 and 104. The platform tables
+// (PGlite) with the repo's real pet migrations 083-097, 106 and 108. The platform tables
 // (salons, salon_enabled_modules, customers, staff) are stand-ins carrying only the
-// columns 104 uses; they are NOT the live schema. PGlite is one connection, so
+// columns 108 uses; they are NOT the live schema. PGlite is one connection, so
 // "concurrent" cases are sequential here; the unique/exclusion constraints are what
 // guarantee them in production.
 import fs from "fs";
@@ -63,7 +63,7 @@ beforeAll(async function () {
     grant usage on schema public to anon, authenticated;
   `);
   var files = ["083_pet_pets_vaccinations.sql", "084_pet_customer_profiles.sql", "085_pet_services.sql", "086_pet_roles.sql", "087_pet_audit_log.sql",
-    "088_pet_bookings.sql", "092_pet_booking_statuses.sql", "089_pet_boarding.sql", "096_pet_delete_kennel_fix.sql", "097_pet_archiving.sql", "108_pet_public_booking.sql"];
+    "088_pet_bookings.sql", "092_pet_booking_statuses.sql", "089_pet_boarding.sql", "096_pet_delete_kennel_fix.sql", "097_pet_archiving.sql", "106_pet_species_guard.sql", "108_pet_public_booking.sql"];
   for (var f of files) await db.exec(sql(f));
   await db.exec(`
     insert into public.salons values ('${A}','Paws','pet',false),('${B}','Bark','pet',false),('${AUTO}','Garage','auto',false),('${SUSP}','Gone','pet',true),('${NOMOD}','NoMod','pet',false);
