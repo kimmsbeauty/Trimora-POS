@@ -148,3 +148,33 @@ describe("boardingData validation and errors", function () {
     expect(boardingErrorMessage("something exploded in postgres")).not.toMatch(/postgres/);
   });
 });
+
+import { overdueDays, earlyNights, overdueLabel, earlyLabel, validateCareDetails } from "./boardingData";
+
+describe("care details, overdue and early departure", function () {
+  var stay = { status: "occupied", check_in_on: "2030-01-01", check_out_on: "2030-01-05" };
+  it("derives overdue days only for a checked-in stay past its planned check-out", function () {
+    expect(overdueDays(stay, "2030-01-05")).toBe(0);
+    expect(overdueDays(stay, "2030-01-08")).toBe(3);
+    expect(overdueDays(Object.assign({}, stay, { status: "reserved" }), "2030-01-08")).toBe(0);
+    expect(overdueDays(Object.assign({}, stay, { status: "checked-out" }), "2030-01-08")).toBe(0);
+    expect(overdueLabel(1)).toBe("Overdue by 1 day");
+    expect(overdueLabel(3)).toBe("Overdue by 3 days");
+    expect(overdueLabel(0)).toBe("");
+  });
+  it("derives early nights for a checked-in stay leaving before its planned check-out", function () {
+    expect(earlyNights(stay, "2030-01-03")).toBe(2);
+    expect(earlyNights(stay, "2030-01-05")).toBe(0);
+    expect(earlyNights(stay, "2030-01-09")).toBe(0);
+    expect(earlyLabel(1)).toBe("Leaving 1 night before the planned check-out.");
+    expect(earlyLabel(0)).toBe("");
+  });
+  it("validates the emergency contact and medication notes", function () {
+    expect(validateCareDetails({})).toBe("");
+    expect(validateCareDetails({ emergency_contact_name: "Mary", emergency_contact_phone: "+254 712 345 678" })).toBe("");
+    expect(validateCareDetails({ emergency_contact_name: "Mary" })).toMatch(/both/);
+    expect(validateCareDetails({ emergency_contact_phone: "0712345678" })).toMatch(/both/);
+    expect(validateCareDetails({ emergency_contact_name: "Mary", emergency_contact_phone: "abc" })).toMatch(/digits/);
+    expect(validateCareDetails({ medication_notes: "x".repeat(501) })).toMatch(/500/);
+  });
+});
