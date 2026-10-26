@@ -1,8 +1,8 @@
 // @vitest-environment node
 //
-// Behavioural test of migration 105 (species guard in pet_create_booking / pet_create_stay)
+// Behavioural test of migration 106 (species guard in pet_create_booking / pet_create_stay)
 // against a REAL Postgres engine (PGlite). Applies the repo's real pet migrations 083-089,
-// then 092 and 104 (the live definitions 105 replaces), then 105. Stand-in platform tables are
+// then 092 and 104 (the live definitions 106 replaces), then 106. Stand-in platform tables are
 // NOT the live schema. Checks: the species rule matches the screens (empty list = all species),
 // nothing else about the two functions changed, grants are unchanged, and the rollback file
 // restores the previous definitions exactly.
@@ -96,7 +96,7 @@ beforeAll(async function () {
   await as(A);
   K = (await db.query("select public.pet_save_kennel(null,'K1','Standard',null) as id")).rows[0].id;
   defsBefore = await defs();
-  await db.exec(mig("105_pet_species_guard.sql"));
+  await db.exec(mig("106_pet_species_guard.sql"));
   defsAfter = await defs();
 }, 90000);
 
@@ -105,7 +105,7 @@ beforeEach(async function () {
   await as(A);
 });
 
-describe("migration 105: pet_create_booking", function () {
+describe("migration 106: pet_create_booking", function () {
   it("refuses a service restricted to another species, and creates nothing", async function () {
     await expectCode(book(CAT, [SVC.dogOnly]), "SERVICE_SPECIES_MISMATCH");
     expect(await count("pet_bookings")).toBe(0);
@@ -149,7 +149,7 @@ describe("migration 105: pet_create_booking", function () {
   });
 });
 
-describe("migration 105: pet_create_stay", function () {
+describe("migration 106: pet_create_stay", function () {
   it("refuses a boarding service restricted to another species, and creates nothing", async function () {
     await expectCode(stay(DOG, SVC.boardCat), "SERVICE_SPECIES_MISMATCH");
     expect(await count("pet_boarding_stays")).toBe(0);
@@ -176,11 +176,11 @@ describe("migration 105: pet_create_stay", function () {
   });
 });
 
-describe("migration 105: scope, grants and rollback", function () {
+describe("migration 106: scope, grants and rollback", function () {
   it("replaces exactly two functions and touches nothing else", function () {
     function code(t) { return t.split("\n").filter(function (l) { return !/^\s*--/.test(l); }).join("\n").toLowerCase(); }
     function n(t, re) { return (t.match(re) || []).length; }
-    var text = code(mig("105_pet_species_guard.sql"));
+    var text = code(mig("106_pet_species_guard.sql"));
     expect(n(text, /create or replace function/g)).toBe(2);
     // no schema, policy, trigger, index or privilege change of any kind
     ["drop ", "alter table", "create table", "create policy", "create trigger", "create index", "grant ", "revoke "].forEach(function (w) {
@@ -216,17 +216,17 @@ describe("migration 105: scope, grants and rollback", function () {
   });
 
   it("is safe to apply twice", async function () {
-    await db.exec(mig("105_pet_species_guard.sql"));
+    await db.exec(mig("106_pet_species_guard.sql"));
     expect(await defs()).toEqual(defsAfter);
   });
 
   it("rolls back to the previous definitions exactly, and can be re-applied", async function () {
-    await db.exec(read("supabase/sql/105_rollback_pet_species_guard.sql"));
+    await db.exec(read("supabase/sql/106_rollback_pet_species_guard.sql"));
     expect(await defs()).toEqual(defsBefore);
     await book(CAT, [SVC.dogOnly]); // no database check any more (the screens still check)
     expect(await count("pet_bookings")).toBe(1);
     await db.exec("delete from public.pet_booking_services; delete from public.pet_bookings");
-    await db.exec(mig("105_pet_species_guard.sql"));
+    await db.exec(mig("106_pet_species_guard.sql"));
     expect(await defs()).toEqual(defsAfter);
     await expectCode(book(CAT, [SVC.dogOnly]), "SERVICE_SPECIES_MISMATCH");
   });

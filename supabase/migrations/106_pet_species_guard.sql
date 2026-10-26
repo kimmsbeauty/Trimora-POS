@@ -1,9 +1,9 @@
--- 105_pet_species_guard.sql
+-- 106_pet_species_guard.sql
 --
 -- Trimora Pet -- enforce "this service is not offered for this species" in the database.
 --
 -- STATUS: written for owner review. NOT applied anywhere. Apply by hand in the Supabase
--- SQL Editor only after the owner says "apply 105".
+-- SQL Editor only after the owner says "apply 106".
 --
 -- WHY: the booking and boarding forms already refuse a service whose species list excludes the
 -- pet, but the rule lived only in the browser. Anything calling the functions directly (a stale
@@ -21,10 +21,10 @@
 -- (The archived-pet refusal already exists as triggers from 097; it is not repeated here.)
 --
 -- ORDER: safe in either order with the app. The screens already check species first, so they never
--- send a mismatch; before 105 the database simply doesn't re-check. The app maps the new error to a
+-- send a mismatch; before 106 the database simply doesn't re-check. The app maps the new error to a
 -- plain sentence.
 --
--- ROLLBACK: supabase/sql/105_rollback_pet_species_guard.sql restores the 092 and 104 definitions exactly.
+-- ROLLBACK: supabase/sql/106_rollback_pet_species_guard.sql restores the 092 and 104 definitions exactly.
 
 create or replace function public.pet_create_booking(
   p_customer_id uuid,
@@ -70,7 +70,7 @@ begin
       where s.id = any (v_ids) and s.salon_id = v_salon and s.active) <> cardinality(v_ids) then
     raise exception 'SERVICE_NOT_FOUND';
   end if;
-  -- NEW in 105: a service with a species list is only for those species (empty list = all species).
+  -- NEW in 106: a service with a species list is only for those species (empty list = all species).
   if exists (select 1 from public.pet_services s
               where s.id = any (v_ids) and s.salon_id = v_salon
                 and cardinality(s.species) > 0 and not (v_species = any (s.species))) then
@@ -153,7 +153,7 @@ begin
       from public.pet_services s
      where s.id = p_service_id and s.salon_id = v_salon and s.active and s.category = 'Boarding';
     if not found then raise exception 'SERVICE_NOT_FOUND'; end if;
-    -- NEW in 105: a service with a species list is only for those species (empty list = all species).
+    -- NEW in 106: a service with a species list is only for those species (empty list = all species).
     if exists (select 1 from public.pet_services s
                 where s.id = p_service_id and cardinality(s.species) > 0 and not (v_species = any (s.species))) then
       raise exception 'SERVICE_SPECIES_MISMATCH';

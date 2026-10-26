@@ -1,6 +1,6 @@
--- 105_rollback_pet_species_guard.sql
+-- 106_rollback_pet_species_guard.sql
 --
--- Undoes migration 105: puts back pet_create_booking exactly as in 092 and pet_create_stay exactly
+-- Undoes migration 106: puts back pet_create_booking exactly as in 092 and pet_create_stay exactly
 -- as in 104 (no species check in the database; the screens still check). create or replace keeps
 -- the existing grants. Safe to run at any time; it changes no data.
 
