@@ -192,6 +192,18 @@ function DeviceGate({ children }) {
   return children;
 }
 
+// Shared booking link (/:slug/booking, QR codes, WhatsApp shares): Trimora Pet
+// businesses have their own booking page, so send them there instead of
+// showing the salon one (stylists, "pay at salon", salon services).
+function PublicBookingRoute() {
+  var salon = useSalon();
+  var params = useParams();
+  if (salon && salon.business_type === "pet") {
+    return <Navigate to={"/" + params.slug + "/pet/book"} replace />;
+  }
+  return <BookingPage />;
+}
+
 function StaffRoute() {
   var loggedInState = useState(false); var loggedIn = loggedInState[0]; var setLoggedIn = loggedInState[1];
   var userRoleState = useState("staff"); var userRole = userRoleState[0]; var setUserRole = userRoleState[1];
@@ -239,7 +251,7 @@ export default function App() {
         <Route path="/:slug/forgot-pin"       element={<ForgotPinPage />} />
         <Route path="/forgot-pin"             element={<ForgotPinPage />} />
 
-        <Route path="/:slug/booking" element={<SalonGate mode="public"><BookingPage /></SalonGate>} />
+        <Route path="/:slug/booking" element={<SalonGate mode="public"><PublicBookingRoute /></SalonGate>} />
         <Route path="/:slug/rate/:token" element={<SalonGate mode="public"><RatingPage /></SalonGate>} />
         <Route path="/:slug/auto/rate/:token" element={<SalonGate mode="public"><AutoRatingPage /></SalonGate>} />
         <Route path="/:slug/pos" element={<DeviceGate><SalonGate mode="authenticated"><StaffRoute /></SalonGate></DeviceGate>} />

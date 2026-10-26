@@ -117,6 +117,20 @@ describe("PetPublicBooking", function () {
     });
   });
 
+  it("offers the same WhatsApp messages as the salon booking page after a request is sent", async function () {
+    wire();
+    render(<PetPublicBooking />);
+    await fillAndPick();
+    fireEvent.click(screen.getByLabelText(/I agree/));
+    fireEvent.click(screen.getByRole("button", { name: "Send request" }));
+    await screen.findByText("Request sent");
+    var msg = screen.getByText(/Message us on WhatsApp/).closest("a");
+    var note = screen.getByText(/Send booking details to us/).closest("a");
+    expect(msg.getAttribute("href")).toMatch(/^https:\/\/wa\.me\/254700111222\?text=/);
+    expect(decodeURIComponent(msg.getAttribute("href"))).toMatch(/R-AB12CD34/);
+    expect(decodeURIComponent(note.getAttribute("href"))).toMatch(/New Booking Request[\s\S]*Grace Njeri[\s\S]*Milo/);
+  });
+
   it("sends only one request when the button is pressed twice", async function () {
     var release; var gate = new Promise(function (res) { release = res; });
     wire();
