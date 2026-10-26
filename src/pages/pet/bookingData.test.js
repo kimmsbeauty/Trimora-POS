@@ -270,3 +270,9 @@ describe("save-time conflict detail", function () {
     expect(conflictMessage(null)).toBe("");
   });
 });
+
+describe("message for the database species guard (migration 101)", function () {
+  it("explains a species mismatch in plain words", function () {
+    expect(bookingErrorMessage("SERVICE_SPECIES_MISMATCH")).toMatch(/isn't offered for this pet's species/);
+  });
+});
