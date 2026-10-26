@@ -66,6 +66,6 @@ describe("PublicBookingSettings", function () {
   it("says a database update is needed when the table is missing", async function () {
     mockDb.mockResolvedValue(null);
     render(<PublicBookingSettings />);
-    expect(await screen.findByText(/apply migration 104/)).toBeTruthy();
+    expect(await screen.findByText(/apply migration 108/)).toBeTruthy();
   });
 });

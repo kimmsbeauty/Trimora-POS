@@ -1,6 +1,6 @@
 // src/pages/pet/publicBookingData.js
 //
-// Pure logic for online booking requests (migration 104): the public page, the staff
+// Pure logic for online booking requests (migration 108): the public page, the staff
 // inbox and the settings card. Times are shown in the BUSINESS's time zone, not the
 // visitor's, because the opening hours are the business's.
 import { normalizePhone } from "./reminderData";

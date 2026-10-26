@@ -4,7 +4,7 @@
 // grooming services and a free time and sends a REQUEST. It is not an instant booking:
 // the business confirms it. Everything here goes through three anonymous database
 // functions that return only opening hours, the service list, free start times and a
-// reference code (migration 104); no customer, pet or staff data is ever read.
+// reference code (migration 108); no customer, pet or staff data is ever read.
 import React, { useEffect, useMemo, useState } from "react";
 import { dbRpc } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";

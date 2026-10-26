@@ -1,6 +1,6 @@
 // src/pages/pet/BookingRequestsPage.jsx
 //
-// Staff inbox for online booking requests (migration 104). Accepting creates the customer,
+// Staff inbox for online booking requests (migration 108). Accepting creates the customer,
 // pet and booking through the same database function as the Calendar, so every conflict
 // rule still applies; declining records a reason. Requests do not hold a time slot, so
 // two people may have asked for the same time: staff settle that here.
@@ -71,7 +71,7 @@ export default function BookingRequestsPage() {
 
   if (load === "loading") return <div><PageHeader title="Online Requests" /><p style={{ color: MUTED_FG, fontSize: 13 }}>Loading…</p></div>;
   if (load === "error") return <div><PageHeader title="Online Requests" /><Card><EmptyState title="Couldn't load requests" description="Check your connection and try again." action={<Button onClick={reload}>Try again</Button>} /></Card></div>;
-  if (load === "needs-db") return <div><PageHeader title="Online Requests" /><Card><EmptyState title="Online requests need a database update" description="Ask your administrator to apply migration 104, then refresh." action={<Button onClick={reload}>Refresh</Button>} /></Card></div>;
+  if (load === "needs-db") return <div><PageHeader title="Online Requests" /><Card><EmptyState title="Online requests need a database update" description="Ask your administrator to apply migration 108, then refresh." action={<Button onClick={reload}>Refresh</Button>} /></Card></div>;
 
   var newOnes = data.requests.filter(function (r) { return r.status === "new"; });
   var handled = data.requests.filter(function (r) { return r.status !== "new"; });

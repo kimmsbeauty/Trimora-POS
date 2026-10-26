@@ -1,6 +1,6 @@
 // src/pages/pet/PublicBookingSettings.jsx
 //
-// Settings card for the online booking page (migration 104): the on/off switch, opening
+// Settings card for the online booking page (migration 108): the on/off switch, opening
 // hours, slot length, minimum notice, how far ahead people can book, and how many
 // appointments the business can run at once. Online booking is OFF until switched on here.
 import React, { useEffect, useState } from "react";
@@ -66,7 +66,7 @@ export default function PublicBookingSettings() {
         Lets customers request a grooming appointment from a link you share. Requests do not book anything by themselves: you accept or decline each one under Online Requests. Boarding can't be booked online.
       </p>
       {load === "loading" ? <p style={{ margin: 0, color: MUTED_FG, fontSize: 13 }}>Loading…</p> : null}
-      {load === "needs-db" ? <ErrorLine>Online booking needs a database update. Ask your administrator to apply migration 104.</ErrorLine> : null}
+      {load === "needs-db" ? <ErrorLine>Online booking needs a database update. Ask your administrator to apply migration 108.</ErrorLine> : null}
       {load === "ready" ? (
         <div style={{ display: "grid", gap: 12 }}>
           <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 700 }}>
