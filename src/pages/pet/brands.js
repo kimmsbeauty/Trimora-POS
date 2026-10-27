@@ -4,7 +4,7 @@
 // A preset only fills in what the business has NOT set itself in Settings: a logo or
 // colour saved in salon_settings always wins. Businesses with no preset are unaffected.
 import pawpalsLogo from "./assets/pawpals-kenya-logo.png";
-import { PAWPALS_PURPLE, PAWPALS_BLUE, PAWPALS_NAVY } from "./brandColors";
+import { PAWPALS_PURPLE, PAWPALS_BLUE, PAWPALS_NAVY, PAWPALS_TINT } from "./brandColors";
 
 var PRESETS = [
   {
@@ -17,6 +17,8 @@ var PRESETS = [
       primary: PAWPALS_PURPLE,
       secondary: PAWPALS_BLUE,
       ink: PAWPALS_NAVY,
+      // Light page tint for the public booking page (the blue is an accent, too loud as a background).
+      page: PAWPALS_TINT,
       tagline: "Pet Grooming & Pet Care",
       location: "Nairobi, Kenya",
       email: "info@pawpalskenya.co.ke",
