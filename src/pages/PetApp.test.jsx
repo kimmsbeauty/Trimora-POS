@@ -7,6 +7,12 @@ vi.mock("../lib/SalonContext", function () {
   return { useSalon: function () { return { id: "salon-1", name: "Happy Paws", slug: "happy-paws" }; } };
 });
 vi.mock("../lib/db", function () { return { db: vi.fn() }; });
+vi.mock("../lib/pwaManifest", function () { return { setPetPwaManifest: vi.fn(), setPwaManifest: vi.fn(), setLegacyPwaManifest: vi.fn() }; });
+vi.mock("../lib/registerServiceWorker", function () { return { registerServiceWorker: vi.fn() }; });
+vi.mock("../lib/installPrompt", async function (importOriginal) {
+  var real = await importOriginal();
+  return Object.assign({}, real, { startInstallListeners: vi.fn() });
+});
 vi.mock("./LoginPage", function () {
   return {
     default: function FakeLogin(props) {
@@ -23,6 +29,9 @@ vi.mock("./LoginPage", function () {
 
 import PetApp from "./PetApp";
 import { db } from "../lib/db";
+import { setPetPwaManifest } from "../lib/pwaManifest";
+import { registerServiceWorker } from "../lib/registerServiceWorker";
+import { startInstallListeners } from "../lib/installPrompt";
 
 describe("PetApp module gate", function () {
   beforeEach(function () { db.mockReset(); });
@@ -130,5 +139,45 @@ describe("PetApp shell", function () {
     var dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("Simba · Wanjiru Kamau");
     expect(dialog).toHaveTextContent("Full groom");
+  });
+});
+
+describe("PetApp installability", function () {
+  beforeEach(function () {
+    db.mockReset();
+    db.mockImplementation(function (method, table) {
+      return Promise.resolve(table === "salon_enabled_modules" ? [{ module_key: "pet", enabled: true }] : []);
+    });
+    setPetPwaManifest.mockClear(); registerServiceWorker.mockClear(); startInstallListeners.mockClear();
+  });
+
+  it("publishes this business's manifest and registers the service worker, already on the login screen", async function () {
+    render(<PetApp />);
+    await screen.findByText("login-staff");
+    expect(setPetPwaManifest).toHaveBeenCalledWith({ id: "salon-1", name: "Happy Paws", slug: "happy-paws" });
+    expect(registerServiceWorker).toHaveBeenCalled();
+  });
+
+  it("starts listening for the browser's install offer before the manifest exists, so the one-time offer cannot be missed", async function () {
+    render(<PetApp />);
+    await screen.findByText("login-staff");
+    expect(startInstallListeners).toHaveBeenCalled();
+    expect(startInstallListeners.mock.invocationCallOrder[0]).toBeLessThan(setPetPwaManifest.mock.invocationCallOrder[0]);
+  });
+
+  it("does not republish the manifest on every screen change", async function () {
+    render(<PetApp />);
+    fireEvent.click(await screen.findByText("login-admin"));
+    await screen.findAllByText("Loyalty Programme");
+    fireEvent.click(screen.getAllByText("Loyalty Programme")[0]);
+    await screen.findByText("The programme is off.");
+    expect(setPetPwaManifest).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows no install button by default (the browser has not offered one), but keeps the Working-as picker area intact", async function () {
+    render(<PetApp />);
+    fireEvent.click(await screen.findByText("login-staff"));
+    await screen.findAllByText("Happy Paws");
+    expect(screen.queryByRole("button", { name: "Install app" })).not.toBeInTheDocument();
   });
 });

@@ -89,3 +89,48 @@ export function setLegacyPwaManifest() {
     document.head.appendChild(link);
   }
 }
+
+// Trimora Pet. Unlike the two functions above, the manifest is NOT a blob: URL. Chrome on
+// Android only offers a real "Install app" (WebAPK) for a manifest served from a normal
+// https URL, so Pet points at a static file, public/pet.webmanifest, served through a
+// per-business path (see vercel.json):
+//
+//     /happy-paws/pet.webmanifest  ->  public/pet.webmanifest
+//
+// The file uses RELATIVE urls ("start_url": "pet", "scope": "./"). A browser resolves them
+// against the URL it asked for (the rewrite is invisible to it), so each business gets its
+// own start page (/happy-paws/pet), its own scope (/happy-paws/) and therefore its own
+// install, from one shared file and with no server code.
+//
+// The business name can't be in a static file, so on Android the app is labelled
+// "Trimora Pet". iOS asks the user to confirm a name when adding to the home screen, and
+// we pre-fill it with the business name below.
+export function setPetPwaManifest(salon) {
+  if (typeof document === "undefined") return;
+  if (!salon || typeof salon.slug !== "string") return;
+  // slugs are lowercase kebab-case; anything else must never be put into a URL
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(salon.slug)) return;
+
+  var href = "/" + salon.slug + "/pet.webmanifest";
+  var link = document.querySelector('link[rel="manifest"]');
+  if (link) {
+    if (link.getAttribute("href") !== href) link.setAttribute("href", href);
+  } else {
+    link = document.createElement("link");
+    link.rel = "manifest";
+    link.href = href;
+    document.head.appendChild(link);
+  }
+
+  var label = (salon.name || "Trimora Pet").toString().slice(0, 60);
+  var apple = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+  if (apple) {
+    apple.setAttribute("content", label);
+  } else {
+    apple = document.createElement("meta");
+    apple.setAttribute("name", "apple-mobile-web-app-title");
+    apple.setAttribute("content", label);
+    document.head.appendChild(apple);
+  }
+  document.title = label + " \u2014 Pet";
+}

@@ -28,8 +28,9 @@ export function Card({ children, style }) {
   return <div style={Object.assign({ background: CARD, border: "1px solid " + BORDER, borderRadius: 16 }, style || {})}>{children}</div>;
 }
 
-export function Button({ children, onClick, variant, disabled, type, size, ariaLabel }) {
-  var bg = PRIMARY; var fg = PRIMARY_FG; var border = "none";
+// brand = optional {primary, onPrimary}: the public booking page passes the business's own colours.
+export function Button({ children, onClick, variant, disabled, type, size, ariaLabel, brand }) {
+  var bg = brand ? brand.primary : PRIMARY; var fg = brand ? brand.onPrimary : PRIMARY_FG; var border = "none";
   if (variant === "ghost") { bg = "transparent"; fg = FOREGROUND; }
   if (variant === "outline") { bg = CARD; fg = FOREGROUND; border = "1px solid " + BORDER; }
   if (variant === "danger") { bg = DESTRUCTIVE; fg = CARD; }

@@ -11,18 +11,23 @@ import { useSalon } from "../../lib/SalonContext";
 import { fmt } from "../../lib/utils";
 import { MUTED_FG, MUTED, BORDER, FOREGROUND, BACKGROUND, CARD } from "./theme";
 import PetLetterhead from "./PetLetterhead";
+import { publicBrand } from "./publicBrand";
 import { Card, Button, Field, ErrorLine, inputStyle } from "./ui";
 import { whatsappUrl } from "./reminderData";
+import { getValidAccessToken } from "../../lib/deviceAuth";
 import {
   SPECIES, publicErrorMessage, isSlotError, validateRequestForm, selectedTotals, groupByCategory, durationLabel,
   dateInZone, addDays, slotTime, slotDateTime, hoursSummary,
 } from "./publicBookingData";
 
 function Shell({ salon, children }) {
+  var brand = publicBrand(salon);
   return (
-    <div style={{ minHeight: "100vh", background: BACKGROUND, color: FOREGROUND, padding: "20px 12px 48px" }}>
+    <div style={{ minHeight: "100vh", background: brand.bg, color: brand.onBg, padding: "20px 12px 48px" }}>
       <div style={{ maxWidth: 560, margin: "0 auto" }}>
-        <div style={{ marginBottom: 16 }}><PetLetterhead salon={salon} /></div>
+        <div style={{ marginBottom: 16, paddingBottom: 14, borderBottom: brand.branded ? "2px solid " + brand.primary : "none" }}>
+          <PetLetterhead salon={salon} color={brand.accentOnBg} mutedColor={brand.onBgMuted} />
+        </div>
         {children}
       </div>
     </div>
@@ -31,6 +36,7 @@ function Shell({ salon, children }) {
 
 export default function PetPublicBooking() {
   var salon = useSalon() || {};
+  var brand = publicBrand(salon);
   var infoState = useState(null); var info = infoState[0]; var setInfo = infoState[1];
   var loadState = useState("loading"); var load = loadState[0]; var setLoad = loadState[1];
   var svcState = useState([]); var serviceIds = svcState[0]; var setServiceIds = svcState[1];
@@ -43,6 +49,7 @@ export default function PetPublicBooking() {
   var errState = useState(""); var err = errState[0]; var setErr = errState[1];
   var busyState = useState(false); var busy = busyState[0]; var setBusy = busyState[1];
   var doneState = useState(null); var done = doneState[0]; var setDone = doneState[1];
+  var staffState = useState(false); var staffHere = staffState[0]; var setStaffHere = staffState[1];
 
   useEffect(function () {
     if (!salon.id) return undefined;
@@ -56,6 +63,16 @@ export default function PetPublicBooking() {
     });
     return function () { cancelled = true; };
   }, [salon.id, salon.business_type]);
+
+  // When the page is closed, a signed-in device (staff) gets a pointer to the switch that opens it.
+  useEffect(function () {
+    if (load !== "closed") return undefined;
+    var cancelled = false;
+    try {
+      Promise.resolve(getValidAccessToken()).then(function (t) { if (!cancelled) setStaffHere(!!t); }, function () {});
+    } catch (e) { /* no device session: visitors see the normal closed page */ }
+    return function () { cancelled = true; };
+  }, [load]);
 
   var tz = info ? info.timezone : "Africa/Nairobi";
   var today = info ? dateInZone(new Date(), tz) : "";
@@ -101,7 +118,7 @@ export default function PetPublicBooking() {
     setDone({ reference: r.reference, when: slotDateTime(start, tz), services: info.services.filter(function (s) { return serviceIds.indexOf(s.id) !== -1; }).map(function (s) { return s.name; }).join(", ") });
   }
 
-  if (!salon.id || load === "loading") return <Shell salon={salon}><p style={{ color: MUTED_FG, fontSize: 14 }}>Loading…</p></Shell>;
+  if (!salon.id || load === "loading") return <Shell salon={salon}><p style={{ color: brand.onBgMuted, fontSize: 14 }}>Loading…</p></Shell>;
   if (load === "error") {
     return <Shell salon={salon}><Card style={{ padding: 20 }}><div style={{ fontWeight: 700, marginBottom: 6 }}>We couldn't load the booking page</div>
       <p style={{ margin: "0 0 12px", fontSize: 13, color: MUTED_FG }}>Please check your connection and try again.</p><Button onClick={function () { setLoad("loading"); window.location.reload(); }}>Try again</Button></Card></Shell>;
@@ -110,7 +127,9 @@ export default function PetPublicBooking() {
   if (load === "closed") {
     return <Shell salon={salon}><Card style={{ padding: 20 }}><div style={{ fontWeight: 700, marginBottom: 6 }}>Online booking isn't available right now</div>
       <p style={{ margin: 0, fontSize: 13, color: MUTED_FG, lineHeight: 1.5 }}>Please contact {salon.name || "us"} directly to book{salon.contact_phone ? ": " + salon.contact_phone : ""}.</p>
-      {phoneLink ? <p style={{ margin: "10px 0 0" }}><a href={phoneLink} style={{ color: FOREGROUND, fontWeight: 700 }}>Message us on WhatsApp</a></p> : null}</Card></Shell>;
+      {phoneLink ? <p style={{ margin: "10px 0 0" }}><a href={phoneLink} style={{ color: FOREGROUND, fontWeight: 700 }}>Message us on WhatsApp</a></p> : null}
+      {staffHere ? <p style={{ margin: "14px 0 0", paddingTop: 12, borderTop: "1px solid " + BORDER, fontSize: 12, color: MUTED_FG, lineHeight: 1.5 }}>
+        Staff: online booking isn't switched on yet. Open the <a href={"/" + (salon.slug || "") + "/pet"} style={{ color: FOREGROUND, fontWeight: 700 }}>Pet app</a>, go to Settings and tick "Accept online booking requests", and add the business phone number so customers can reach you.</p> : null}</Card></Shell>;
   }
   if (done) {
     // Same two WhatsApp hand-offs the salon booking page gives after booking:
@@ -146,12 +165,12 @@ export default function PetPublicBooking() {
 
   var maxDate = addDays(today, info.max_days_ahead);
   var groups = groupByCategory(info.services);
-  var section = { padding: 16, marginBottom: 14 };
+  var section = { padding: 16, marginBottom: 14, borderTop: brand.branded ? "3px solid " + brand.primary : undefined };
   var h = { fontSize: 13, fontWeight: 800, marginBottom: 10 };
   return (
     <Shell salon={salon}>
-      <h1 style={{ fontSize: 22, margin: "0 0 4px", fontWeight: 800 }}>Request a grooming appointment</h1>
-      <p style={{ margin: "0 0 16px", fontSize: 13, color: MUTED_FG, lineHeight: 1.5 }}>
+      <h1 style={{ fontSize: 22, margin: "0 0 4px", fontWeight: 800, color: brand.accentOnBg }}>Request a grooming appointment</h1>
+      <p style={{ margin: "0 0 16px", fontSize: 13, color: brand.onBgMuted, lineHeight: 1.5 }}>
         Choose a service and a time. {salon.name || "We"} will confirm your request.{info.hours.length ? " Open " + hoursSummary(info.hours) + "." : ""}
       </p>
 
@@ -164,8 +183,8 @@ export default function PetPublicBooking() {
               {g.services.map(function (s) {
                 var on = serviceIds.indexOf(s.id) !== -1;
                 return (
-                  <label key={s.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 10px", border: "1px solid " + (on ? FOREGROUND : BORDER), borderRadius: 10, marginBottom: 6, cursor: "pointer", background: CARD }}>
-                    <input type="checkbox" checked={on} onChange={function () { toggleService(s.id); }} style={{ marginTop: 3 }} />
+                  <label key={s.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 10px", border: "1px solid " + (on ? brand.primary : BORDER), boxShadow: on ? "0 0 0 1px " + brand.primary : "none", borderRadius: 10, marginBottom: 6, cursor: "pointer", background: CARD }}>
+                    <input type="checkbox" checked={on} onChange={function () { toggleService(s.id); }} style={{ marginTop: 3, accentColor: brand.primary }} />
                     <span style={{ flex: 1 }}>
                       <span style={{ fontWeight: 700, fontSize: 14 }}>{s.name}</span>
                       <span style={{ display: "block", fontSize: 12, color: MUTED_FG }}>{durationLabel(s.duration_minutes)}{s.description ? " · " + s.description : ""}</span>
@@ -196,7 +215,7 @@ export default function PetPublicBooking() {
               var on = s === start;
               return (
                 <button key={s} type="button" aria-pressed={on} onClick={function () { setStart(s); setErr(""); }}
-                  style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid " + (on ? FOREGROUND : BORDER), background: on ? FOREGROUND : CARD, color: on ? CARD : FOREGROUND, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                  style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid " + (on ? brand.primary : BORDER), background: on ? brand.primary : CARD, color: on ? brand.onPrimary : FOREGROUND, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
                   {slotTime(s, tz)}
                 </button>
               );
@@ -222,11 +241,11 @@ export default function PetPublicBooking() {
           <label>Website<input tabIndex={-1} autoComplete="off" name="website" value={form.website} onChange={function (e) { setF("website", e.target.value); }} /></label>
         </div>
         <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, color: MUTED_FG, lineHeight: 1.5, margin: "6px 0 12px" }}>
-          <input type="checkbox" checked={form.consent} onChange={function (e) { setF("consent", e.target.checked); }} style={{ marginTop: 3 }} />
+          <input type="checkbox" checked={form.consent} onChange={function (e) { setF("consent", e.target.checked); }} style={{ marginTop: 3, accentColor: brand.primary }} />
           <span>I agree that {salon.name || "the business"} may contact me about this request on the phone number I gave. My details are used only to arrange this appointment.</span>
         </label>
         <ErrorLine>{err}</ErrorLine>
-        <Button onClick={submit} disabled={busy}>{busy ? "Sending…" : "Send request"}</Button>
+        <Button brand={brand} onClick={submit} disabled={busy}>{busy ? "Sending…" : "Send request"}</Button>
         {start ? <p style={{ margin: "10px 0 0", fontSize: 12, color: MUTED_FG }}>Requested: {slotDateTime(start, tz)}</p> : null}
       </Card>
     </Shell>
