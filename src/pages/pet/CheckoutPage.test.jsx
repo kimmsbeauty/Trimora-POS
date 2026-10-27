@@ -157,4 +157,12 @@ describe("CheckoutPage", function () {
     fireEvent.click(screen.getByRole("button", { name: "Complete sale" }));
     expect(await screen.findByText(/There isn't enough stock of a product on this sale/)).toBeTruthy();
   });
+
+  it("only counts a booking as already invoiced while its invoice is live: void and fully refunded invoices free it", async function () {
+    setup();
+    await screen.findByText("Checkout");
+    var q = mockDb.mock.calls.filter(function (c) { return c[1] === "pet_invoices"; })[0][3];
+    expect(q).toContain("status=not.in.(void,refunded)");
+    expect(q).not.toContain("status=neq.void");
+  });
 });
