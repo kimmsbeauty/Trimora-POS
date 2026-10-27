@@ -157,7 +157,7 @@ function PetStaffRoute() {
       {activeItem.key === "overview"
         ? <OverviewPage businessName={salon && salon.name} isAdmin={isAdmin} onNavigate={goFromOverview} />
         : activeItem.key === "pets"
-        ? <PetsPage startNew={!!(intent && intent.startNew)} />
+        ? <PetsPage startNew={!!(intent && intent.startNew)} isAdmin={isAdmin} />
         : activeItem.key === "customers"
         ? <CustomersPage />
         : activeItem.key === "grooming"
