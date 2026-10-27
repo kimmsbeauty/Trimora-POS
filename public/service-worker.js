@@ -8,7 +8,7 @@
 // opens fast even on a weak connection, while all real data still
 // goes straight to the network exactly as before.
 
-const CACHE_NAME = "trimora-pos-shell-v1";
+const CACHE_NAME = "trimora-pos-shell-v2";
 const SHELL_ASSETS = [
   "/icon-192.png",
   "/icon-512.png",
@@ -47,6 +47,10 @@ self.addEventListener("fetch", function (event) {
   // queue and auth flow behave exactly as they do today.
   if (url.origin !== self.location.origin) return;
   if (event.request.method !== "GET") return;
+
+  // Web app manifests (e.g. /happy-paws/pet.webmanifest) always come from the network, so an
+  // updated manifest is never hidden behind a stale cached copy.
+  if (url.pathname.endsWith(".webmanifest")) return;
 
   // Network-first for navigation (so a fresh deploy is picked up
   // quickly), falling back to the cached app shell only if the
