@@ -9,6 +9,9 @@ vi.mock("../../lib/db", () => ({
 }));
 vi.mock("../../lib/SalonContext", () => ({ useSalon: function () { return { id: "s1", name: "Paws & Co", logo_url: "https://example.com/logo.png" }; } }));
 
+vi.mock("../../lib/deviceAuth", () => ({ getValidAccessToken: function () { return Promise.resolve("tok"); } }));
+vi.mock("../../lib/constants", () => ({ SUPABASE_URL: "https://x.supabase.co", SUPABASE_KEY: "anon" }));
+
 import InvoicesPage from "./InvoicesPage";
 
 function inv(extra) {
@@ -26,6 +29,7 @@ function setup(opts) {
     if (table === "pet_invoices") return Promise.resolve(opts.invoices || [inv()]);
     if (table === "customers") return Promise.resolve([{ id: "c1", name: "Wanjiru Kamau", phone: "0712345678" }]);
     if (table === "pet_pets") return Promise.resolve([{ id: "p1", name: "Simba", species: "Dog" }]);
+    if (table === "pet_invoice_messages") return Promise.resolve(opts.messages || []);
     if (table === "pet_customer_profiles") return Promise.resolve(opts.profiles || [{ customer_id: "c1", email: "wanjiru@example.com" }]);
     return Promise.resolve(null);
   });
@@ -323,29 +327,81 @@ describe("InvoicesPage", function () {
     });
   });
 
-  describe("sharing", function () {
+  describe("sending the invoice", function () {
     var openSpy;
+    function reply(ok, body) { global.fetch = vi.fn().mockResolvedValue({ ok: ok, json: function () { return Promise.resolve(body); } }); }
     beforeEach(function () { openSpy = vi.spyOn(window, "open").mockImplementation(function () { return null; }); });
     afterEach(function () { openSpy.mockRestore(); });
 
-    it("opens WhatsApp to the customer's number with the invoice summary", async function () {
-      setup({ open: "i1" });
-      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
-      expect(openSpy).toHaveBeenCalledTimes(1);
-      var url = openSpy.mock.calls[0][0];
-      expect(url.indexOf("https://wa.me/254712345678?text=")).toBe(0);
-      var text = decodeURIComponent(url.split("?text=")[1]);
-      expect(text).toContain("INV-0001");
-      expect(text).toContain("Balance due: KES 3,000");
-      expect(openSpy.mock.calls[0][2]).toContain("noopener");
-    });
-
-
-    it("shows the Email and WhatsApp buttons next to Print", async function () {
+    it("shows Email and WhatsApp next to Print", async function () {
       setup({ open: "i1" });
       expect(await screen.findByRole("button", { name: "Email" })).toBeTruthy();
       expect(screen.getByRole("button", { name: "WhatsApp" })).toBeTruthy();
       expect(screen.getByRole("button", { name: "Print" })).toBeTruthy();
+    });
+
+    it("sends by WhatsApp through the server, to the customer's number, after a confirm step", async function () {
+      reply(true, { success: true, recipient: "254712345678" });
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      var input = await screen.findByLabelText("Send to this WhatsApp number");
+      expect(input.value).toBe("0712345678");
+      expect(global.fetch).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: "Send WhatsApp" }));
+      await waitFor(function () { expect(global.fetch).toHaveBeenCalledTimes(1); });
+      expect(global.fetch.mock.calls[0][0]).toBe("https://x.supabase.co/functions/v1/pet-send-invoice");
+      expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toEqual({ salon_id: "s1", invoice_id: "i1", channel: "whatsapp", to: "0712345678" });
+      expect(await screen.findByText(/Sent to 0712345678/)).toBeTruthy();
+      expect(openSpy).not.toHaveBeenCalled();
+    });
+
+    it("sends by email to the address on the customer's profile and lets staff correct it", async function () {
+      reply(true, { success: true, recipient: "new@example.com" });
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "Email" }));
+      var input = await screen.findByLabelText("Send to this email address");
+      expect(input.value).toBe("wanjiru@example.com");
+      fireEvent.change(input, { target: { value: "new@example.com" } });
+      fireEvent.click(screen.getByRole("button", { name: "Send email" }));
+      await waitFor(function () { expect(global.fetch).toHaveBeenCalledTimes(1); });
+      expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toMatchObject({ channel: "email", to: "new@example.com" });
+    });
+
+    it("cannot send with no address, and says why", async function () {
+      reply(true, { success: true });
+      setup({ open: "i1", profiles: [] });
+      fireEvent.click(await screen.findByRole("button", { name: "Email" }));
+      expect(await screen.findByText(/no email on file/)).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Send email" }).disabled).toBe(true);
+    });
+
+    it("shows a plain-language error and sends nothing more when the server refuses", async function () {
+      reply(false, { error: "WHATSAPP_WINDOW_CLOSED" });
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Send WhatsApp" }));
+      expect(await screen.findByText(/only lets us message this customer after they have written/)).toBeTruthy();
+      expect(screen.queryByText(/Sent to/)).toBeNull();
+    });
+
+    it("when server sending isn't set up, offers to open the customer's own app instead", async function () {
+      reply(false, { error: "NOT_CONFIGURED" });
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Send WhatsApp" }));
+      expect(await screen.findByText(/isn't switched on yet/)).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Send WhatsApp" }).disabled).toBe(true);
+      fireEvent.click(screen.getByRole("button", { name: "Open in my WhatsApp" }));
+      expect(openSpy).toHaveBeenCalledTimes(1);
+      expect(openSpy.mock.calls[0][0].indexOf("https://wa.me/254712345678?text=")).toBe(0);
+    });
+
+    it("warns when the invoice was already sent and relabels the button", async function () {
+      reply(true, { success: true });
+      setup({ open: "i1", messages: [{ channel: "email", recipient: "wanjiru@example.com", status: "sent", created_at: "2026-10-26T08:00:00Z" }] });
+      fireEvent.click(await screen.findByRole("button", { name: "Email" }));
+      expect(await screen.findByText(/Already sent by email to wanjiru@example.com/)).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Send again" })).toBeTruthy();
     });
 
     it("still loads invoices when customer emails can't be fetched", async function () {
