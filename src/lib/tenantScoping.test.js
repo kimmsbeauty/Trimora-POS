@@ -128,6 +128,8 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
               // salon_id column, standard select/insert/update/delete
               // policies via auth_salon_id(); queried from PetsPage.jsx.
   "pet_vaccinations", // ditto -- salon_id denormalized on the row.
+  "pet_photos", // added alongside migration 111 -- pet photo records; salon_id +
+                // standard select/insert/delete policies; PetPhotos.jsx.
   "pet_customer_profiles", // added 2026-10-24 alongside migration 084 -- owner
                            // contact details; salon_id + standard policies.
   "pet_services", // added 2026-10-24 alongside migration 085 -- service

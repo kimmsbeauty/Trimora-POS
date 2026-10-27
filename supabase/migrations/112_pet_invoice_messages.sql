@@ -1,9 +1,9 @@
--- 109_pet_invoice_messages.sql
+-- 112_pet_invoice_messages.sql
 --
 -- Trimora Pet -- delivery log for invoices sent straight from the server (email / WhatsApp).
 --
 -- STATUS: NOT APPLIED. Written for review. Per the standing Pet rule it is applied to production
--- only after an explicit "apply 109". The pet-send-invoice edge function needs it (it logs every
+-- only after an explicit "apply 112". The pet-send-invoice edge function needs it (it logs every
 -- attempt and uses the log for its sending limits), so deploy the function AFTER applying this.
 --
 -- WHAT THIS IS: one row per send attempt made by the pet-send-invoice edge function. The function

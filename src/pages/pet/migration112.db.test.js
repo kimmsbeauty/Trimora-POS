@@ -1,7 +1,7 @@
 // @vitest-environment node
 //
-// Behavioural test of migration 109 (invoice delivery log) against a REAL Postgres engine (PGlite).
-// The platform stand-in (salons, pet_invoices, auth_salon_id) is minimal, not the live schema: 109 only
+// Behavioural test of migration 112 (invoice delivery log) against a REAL Postgres engine (PGlite).
+// The platform stand-in (salons, pet_invoices, auth_salon_id) is minimal, not the live schema: 112 only
 // needs the two tables to reference and the tenant helper. The edge function writes with the service
 // role (here: the superuser); the app role may only read its own business's rows.
 import fs from "fs";
@@ -32,11 +32,11 @@ beforeAll(async function () {
     insert into public.salons values ('${A}', 'A'), ('${B}', 'B');
     insert into public.pet_invoices values ('${INV_A}', '${A}'), ('${INV_B}', '${B}');
   `);
-  await db.exec(fs.readFileSync(path.join(process.cwd(), "supabase/migrations/109_pet_invoice_messages.sql"), "utf8"));
+  await db.exec(fs.readFileSync(path.join(process.cwd(), "supabase/migrations/112_pet_invoice_messages.sql"), "utf8"));
 });
 afterAll(async function () { await db.close(); });
 
-describe("migration 109: pet_invoice_messages", function () {
+describe("migration 112: pet_invoice_messages", function () {
   it("records a sent and a failed attempt", async function () {
     await log(A, INV_A);
     await log(A, INV_A, { channel: "whatsapp", recipient: "254712345678", status: "failed", provider_message_id: null, error: "WHATSAPP_WINDOW_CLOSED" });

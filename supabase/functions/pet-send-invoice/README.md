@@ -3,7 +3,7 @@
 Sends one Trimora Pet invoice to the customer by **email** (Resend) or **WhatsApp** (Meta WhatsApp Cloud API).
 Called from Invoices & Payments > Email / WhatsApp, after staff confirm the recipient.
 
-Needs migration `109_pet_invoice_messages.sql` applied first (send log and limits).
+Needs migration `112_pet_invoice_messages.sql` applied first (send log and limits).
 
 ## Secrets (Supabase > Edge Functions > Secrets; Trimora's own, shared by all businesses)
 

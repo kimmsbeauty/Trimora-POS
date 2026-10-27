@@ -35,9 +35,11 @@ describe("InvoiceDocument", function () {
     expect(screen.getByText("INV-0007")).toBeTruthy();
     expect(screen.getByText("Full groom")).toBeTruthy();
     expect(screen.getByText("- KES 500")).toBeTruthy();
-    expect(screen.getByText("Includes VAT (16%)")).toBeTruthy();
+    expect(screen.getByText(/VAT \/ Tax \(included\)/)).toBeTruthy();
+    expect(screen.getByText("16%")).toBeTruthy();
     expect(screen.getByText("KES 414")).toBeTruthy();
-    expect(screen.getByText("Balance due").nextSibling.textContent).toBe("KES 2,000");
+    expect(screen.getByText("Balance Due").nextSibling.textContent).toBe("KES 2,000");
+    expect(screen.getByText("Amount Paid").nextSibling.textContent).toBe("KES 1,000");
     expect(screen.getByText(/QWE123/)).toBeTruthy();
     expect(screen.getByText("KRA PIN: P0123")).toBeTruthy();
     expect(screen.getByText("PART PAID")).toBeTruthy();
@@ -47,6 +49,25 @@ describe("InvoiceDocument", function () {
     render(<InvoiceDocument invoice={v} customer={customer} pet={null} salon={{ name: "Paws & Co" }} />);
     expect(screen.getByText("VOID")).toBeTruthy();
     expect(screen.getByText(/Entered in error/)).toBeTruthy();
-    expect(screen.queryByText("Balance due")).toBeNull();
+    expect(screen.queryByText("Balance Due")).toBeNull();
+  });
+  it("uses the built-in PawPals Kenya brand: logo, contact details and thank-you line", function () {
+    render(<InvoiceDocument invoice={Object.assign({}, invoice, { status: "paid", amount_paid: 3000 })} customer={customer} pet={pet} salon={{ name: "PawPals Kenya", slug: "pawpals-kenya" }} />);
+    expect(screen.getByAltText("PawPals Kenya logo")).toBeTruthy();
+    expect(screen.getAllByText("info@pawpalskenya.co.ke").length).toBeGreaterThan(0);
+    expect(screen.getByText("Thank you for trusting PawPals Kenya with your pet.")).toBeTruthy();
+    expect(screen.getByText("PAID")).toBeTruthy();
+    expect(screen.getByText("Balance Due").nextSibling.textContent).toBe("KES 0");
+  });
+  it("lets a saved logo override the PawPals preset and adds no preset contacts to other businesses", function () {
+    render(<InvoiceDocument invoice={invoice} customer={customer} pet={pet} salon={{ name: "PawPals Kenya", logo_url: "https://example.com/own.png" }} />);
+    expect(screen.getByAltText("PawPals Kenya logo").getAttribute("src")).toBe("https://example.com/own.png");
+  });
+  it("shows the payment details panel with the reference", function () {
+    render(<InvoiceDocument invoice={invoice} customer={customer} pet={pet} salon={{ name: "Paws & Co" }} />);
+    expect(screen.getByText("Payment Details")).toBeTruthy();
+    expect(screen.getByText("QWE123")).toBeTruthy();
+    expect(screen.getByText("M-Pesa")).toBeTruthy();
+    expect(screen.queryByText("info@pawpalskenya.co.ke")).toBeNull();
   });
 });
