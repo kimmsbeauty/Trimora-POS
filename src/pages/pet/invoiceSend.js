@@ -6,6 +6,12 @@
 import { SUPABASE_URL, SUPABASE_KEY } from "../../lib/constants";
 import { getValidAccessToken } from "../../lib/deviceAuth";
 
+// Server sending (the pet-send-invoice edge function) is OFF. By default staff open the invoice in
+// their OWN email / WhatsApp app and press send there, so it goes from their own account and needs
+// no provider account or verified domain. Set serverSend to true only after deploying the function
+// and setting its secrets (see supabase/functions/pet-send-invoice/README.md).
+export var invoiceSendConfig = { serverSend: false };
+
 var TEXT = {
   NOT_CONFIGURED: "Sending straight from Trimora isn't switched on yet.",
   INVALID_EMAIL: "That email address doesn't look right. Check it and try again.",
