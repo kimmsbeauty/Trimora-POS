@@ -25,6 +25,7 @@ import ReceiptDocument from "./ReceiptDocument";
 import RefundDocument from "./RefundDocument";
 import { sortedPayments, latestPaymentId, receiptFor, sortedRefunds, refundReceiptFor } from "./receiptData";
 import MpesaStkPush from "./MpesaStkPush";
+import { buildInvoiceMessage, invoiceSubject, whatsappUrl, mailtoUrl } from "./invoiceShare";
 import { PageHeader, Card, Button, Field, Badge, Modal, ErrorLine, EmptyState, inputStyle } from "./ui";
 
 var PAGE = 50;
@@ -61,18 +62,24 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
       db("GET", "pet_invoices", null, "?select=*,pet_invoice_lines(*),pet_payments(*),pet_refunds(*)&order=issued_at.desc&limit=500"),
       db("GET", "customers", null, "?select=id,name,phone&order=name.asc&limit=2000"),
       db("GET", "pet_pets", null, "?select=id,name,species&limit=5000"),
+      // Customer emails (for "Email invoice"). Optional: if this fails, sharing by email just opens a blank "To".
+      db("GET", "pet_customer_profiles", null, "?select=customer_id,email&limit=2000"),
     ]).then(function (res) {
       if (cancelled) return;
       // db() returns null when a request failed -- an error, not "no invoices".
-      if (!res.every(Array.isArray)) { setLoadStatus("error"); return; }
-      setData({ invoices: res[0], customers: res[1], pets: res[2] }); setLoadStatus("ready");
+      if (!res.slice(0, 3).every(Array.isArray)) { setLoadStatus("error"); return; }
+      setData({ invoices: res[0], customers: res[1], pets: res[2], profiles: Array.isArray(res[3]) ? res[3] : [] }); setLoadStatus("ready");
     });
     return function () { cancelled = true; };
   }, [tick]);
 
   var maps = useMemo(function () {
-    var m = { customers: {}, pets: {} };
-    if (data) { data.customers.forEach(function (c) { m.customers[c.id] = c; }); data.pets.forEach(function (p) { m.pets[p.id] = p; }); }
+    var m = { customers: {}, pets: {}, emails: {} };
+    if (data) {
+      data.customers.forEach(function (c) { m.customers[c.id] = c; });
+      data.pets.forEach(function (p) { m.pets[p.id] = p; });
+      (data.profiles || []).forEach(function (r) { if (r && r.customer_id && r.email) m.emails[r.customer_id] = r.email; });
+    }
     return m;
   }, [data]);
 
@@ -100,6 +107,17 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
   var totals = summarize(all);
   var detail = detailId ? all.filter(function (i) { return i.id === detailId; })[0] : null;
   function setF(k, v) { var o = {}; o[k] = v; setFilters(Object.assign({}, filters, o)); setShown(PAGE); }
+  // Share the invoice by WhatsApp or email: opens the staff member's own app with the text filled in.
+  function shareInvoice(kind) {
+    if (!detail) return;
+    var customer = maps.customers[detail.customer_id];
+    var message = buildInvoiceMessage(detail, customer, detail.pet_id ? maps.pets[detail.pet_id] : null, salon);
+    var url = kind === "whatsapp"
+      ? whatsappUrl(customer && customer.phone, message)
+      : mailtoUrl(maps.emails[detail.customer_id], invoiceSubject(detail, salon), message);
+    if (kind === "whatsapp") window.open(url, "_blank", "noopener,noreferrer");
+    else window.location.href = url;
+  }
   function closeDetail() { if (!saving && !refunding && !pinAsk) { setDetailId(null); setReceiptId(null); setRefundReceiptId(null); setJustRefunded(null); setJustPaid(false); setErr(""); setPay({ method: "cash", amount: "", reference: "" }); if (onDetailClosed) onDetailClosed(); } }
 
   async function recordPayment() {
@@ -225,6 +243,8 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
           <Button variant="ghost" onClick={closeDetail}>Close</Button>
           {detail.status === "issued" ? <Button variant="ghost-danger" onClick={function () { setErr(""); setVoiding({ id: detail.id, reason: "" }); }}>Void invoice</Button> : null}
           {refundable(detail) > 0 ? <Button variant="ghost-danger" onClick={openRefund}>Refund</Button> : null}
+          <Button variant="outline" onClick={function () { shareInvoice("email"); }}>Email</Button>
+          <Button variant="outline" onClick={function () { shareInvoice("whatsapp"); }}>WhatsApp</Button>
           <Button onClick={function () { window.print(); }}>Print</Button>
         </> : null}>
         {detail ? (

@@ -26,6 +26,7 @@ function setup(opts) {
     if (table === "pet_invoices") return Promise.resolve(opts.invoices || [inv()]);
     if (table === "customers") return Promise.resolve([{ id: "c1", name: "Wanjiru Kamau", phone: "0712345678" }]);
     if (table === "pet_pets") return Promise.resolve([{ id: "p1", name: "Simba", species: "Dog" }]);
+    if (table === "pet_customer_profiles") return Promise.resolve(opts.profiles || [{ customer_id: "c1", email: "wanjiru@example.com" }]);
     return Promise.resolve(null);
   });
   mockRpc.mockImplementation(function (fn, args) {
@@ -319,6 +320,43 @@ describe("InvoicesPage", function () {
       fireEvent.click(await screen.findByLabelText("Open invoice INV-0009"));
       expect(await screen.findByText("REFUNDS")).toBeTruthy();
       expect(screen.getByText("Kept after refunds")).toBeTruthy();
+    });
+  });
+
+  describe("sharing", function () {
+    var openSpy;
+    beforeEach(function () { openSpy = vi.spyOn(window, "open").mockImplementation(function () { return null; }); });
+    afterEach(function () { openSpy.mockRestore(); });
+
+    it("opens WhatsApp to the customer's number with the invoice summary", async function () {
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      expect(openSpy).toHaveBeenCalledTimes(1);
+      var url = openSpy.mock.calls[0][0];
+      expect(url.indexOf("https://wa.me/254712345678?text=")).toBe(0);
+      var text = decodeURIComponent(url.split("?text=")[1]);
+      expect(text).toContain("INV-0001");
+      expect(text).toContain("Balance due: KES 3,000");
+      expect(openSpy.mock.calls[0][2]).toContain("noopener");
+    });
+
+
+    it("shows the Email and WhatsApp buttons next to Print", async function () {
+      setup({ open: "i1" });
+      expect(await screen.findByRole("button", { name: "Email" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "WhatsApp" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Print" })).toBeTruthy();
+    });
+
+    it("still loads invoices when customer emails can't be fetched", async function () {
+      mockDb.mockImplementation(function (method, table) {
+        if (table === "pet_invoices") return Promise.resolve([inv()]);
+        if (table === "customers") return Promise.resolve([{ id: "c1", name: "Wanjiru Kamau", phone: "0712345678" }]);
+        if (table === "pet_pets") return Promise.resolve([{ id: "p1", name: "Simba", species: "Dog" }]);
+        return Promise.resolve(null);
+      });
+      render(<InvoicesPage openInvoiceId="i1" />);
+      expect(await screen.findByRole("button", { name: "Email" })).toBeTruthy();
     });
   });
 });
