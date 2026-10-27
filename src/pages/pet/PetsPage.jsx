@@ -35,7 +35,7 @@ function draftFromPet(p) {
 }
 
 // startNew (optional, from the Overview): open the add-pet form once, when the list is ready. The form can also create the owner.
-export default function PetsPage({ startNew }) {
+export default function PetsPage({ startNew, isAdmin }) {
   var petsState = useState(null); var pets = petsState[0]; var setPets = petsState[1];
   var ownersState = useState([]); var owners = ownersState[0]; var setOwners = ownersState[1];
   var vaccState = useState([]); var vaccs = vaccState[0]; var setVaccs = vaccState[1];
@@ -375,7 +375,7 @@ export default function PetsPage({ startNew }) {
       </Modal>
 
       {profilePet ? (
-        <PetProfile pet={profilePet} windows={windows} owner={ownersById[profilePet.customer_id]} vaccinations={vaccsByPet[profilePet.id] || []}
+        <PetProfile pet={profilePet} canDeletePhotos={!!isAdmin} windows={windows} owner={ownersById[profilePet.customer_id]} vaccinations={vaccsByPet[profilePet.id] || []}
           onVaccinationsChange={function (list) {
             setVaccs(vaccs.filter(function (v) { return v.pet_id !== profilePet.id; }).concat(list));
           }}
