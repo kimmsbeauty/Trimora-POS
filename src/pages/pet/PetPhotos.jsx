@@ -1,6 +1,6 @@
 // src/pages/pet/PetPhotos.jsx
 //
-// Photo gallery on a pet's profile (migration 109): add from the camera or gallery, tap to enlarge,
+// Photo gallery on a pet's profile (migration 111): add from the camera or gallery, tap to enlarge,
 // delete (admin only, a UI rule like the rest of Pet). Photos are optional and never block anything.
 import React, { useEffect, useState } from "react";
 import { MUTED_FG, MUTED, BORDER, FOREGROUND } from "./theme";
@@ -56,7 +56,7 @@ export default function PetPhotos({ petId, canDelete }) {
         ) : null}
       </div>
       {photos === null ? <p style={{ margin: 0, fontSize: 13, color: MUTED_FG }}>Loading photos…</p> : null}
-      {unavailable ? <p style={{ margin: 0, fontSize: 13, color: MUTED_FG }}>Photos aren't available yet. Ask your administrator to apply migration 109.</p> : null}
+      {unavailable ? <p style={{ margin: 0, fontSize: 13, color: MUTED_FG }}>Photos aren't available yet. Ask your administrator to apply migration 111.</p> : null}
       {photos !== null && !unavailable && list.length === 0 ? <p style={{ margin: 0, fontSize: 13, color: MUTED_FG }}>No photos yet.</p> : null}
       {list.length > 0 ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))", gap: 8 }}>

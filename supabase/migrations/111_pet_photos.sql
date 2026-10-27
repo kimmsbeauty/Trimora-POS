@@ -1,10 +1,12 @@
--- 109_pet_photos.sql
+-- 111_pet_photos.sql
 --
 -- Trimora Pet: photos of a pet, kept on the pet's profile.
 --
--- STATUS: NOT YET APPLIED to production. Apply only after the client PR that uses it is merged
--- (the app does nothing with this table until then, and the client tolerates it being absent).
---
+-- STATUS: APPLIED to production 2026-10-27 as "111_pet_photos" (it was first drafted as 109, but 109 and
+-- 110 were already taken by other migrations, so it was renumbered). Verified afterwards against the
+-- catalog: same columns, CHECK constraint, six policies (3 table, 3 storage) and bucket settings as below.
+-- NOT yet exercised with a real photo upload from the app.
+
 -- WHAT IT ADDS (additive only; nothing existing is changed)
 --   * public.pet_photos: one row per photo (salon_id, pet_id, storage_path, created_at).
 --   * A PRIVATE storage bucket 'pet-photos'. Object keys are  {salon_id}/{pet_id}/{timestamp}-{name}.

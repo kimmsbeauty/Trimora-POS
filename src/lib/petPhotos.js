@@ -1,6 +1,6 @@
 // src/lib/petPhotos.js
 //
-// Pet photos (migration 109): a private 'pet-photos' storage bucket plus a pet_photos row per
+// Pet photos (migration 111): a private 'pet-photos' storage bucket plus a pet_photos row per
 // photo. Same approach as lib/vehiclePhotos.js (raw fetch against the Storage REST API, signed
 // URLs because the bucket is private). Object keys are {salon_id}/{pet_id}/{timestamp}-{name}.
 import { SUPABASE_URL, SUPABASE_KEY } from "./constants";

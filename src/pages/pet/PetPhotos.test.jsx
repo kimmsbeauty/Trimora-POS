@@ -58,7 +58,7 @@ describe("PetPhotos", function () {
   it("explains when the photos table is not available", async function () {
     mockList.mockResolvedValue(null);
     render(<PetPhotos petId="pet1" canDelete={false} />);
-    expect(await screen.findByText(/migration 109/)).toBeTruthy();
+    expect(await screen.findByText(/migration 111/)).toBeTruthy();
     expect(screen.queryByLabelText("Add photo")).toBeNull();
   });
 });
