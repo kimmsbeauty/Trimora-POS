@@ -111,6 +111,7 @@ export default function PublicBookingSettings() {
             </div>
             {!s.enabled ? <p style={{ margin: "6px 0 0", fontSize: 12, color: MUTED_FG }}>The link shows "not available" until you switch online booking on and save.</p> : null}
           </div>
+          {!salon.contact_phone ? <p style={{ margin: 0, fontSize: 12, color: MUTED_FG }}>No business WhatsApp number is set, so customers won't see the WhatsApp buttons after booking. Add one under Settings → Business WhatsApp number.</p> : null}
           <ErrorLine>{err}</ErrorLine>
           {saved ? <div role="status" style={{ fontSize: 13 }}>Online booking settings saved.</div> : null}
           <div><Button onClick={save} disabled={saving}>{saving ? "Saving…" : "Save online booking settings"}</Button></div>

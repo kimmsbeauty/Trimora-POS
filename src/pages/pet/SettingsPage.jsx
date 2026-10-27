@@ -60,7 +60,8 @@ export default function SettingsPage({ onSaved }) {
           </div>
         ) : <p style={{ margin: 0, fontSize: 12, color: MUTED_FG }}>No logo yet: invoices will show your business name instead.</p>}
         <Field label="Tagline (optional)" htmlFor="set-tagline"><input id="set-tagline" style={inputStyle} value={d.tagline} onChange={function (e) { set("tagline", e.target.value); }} /></Field>
-        <Field label="Business phone (optional)" htmlFor="set-phone"><input id="set-phone" inputMode="tel" style={inputStyle} value={d.contact_phone} onChange={function (e) { set("contact_phone", e.target.value); }} /></Field>
+        <Field label="Business WhatsApp number" htmlFor="set-phone"><input id="set-phone" inputMode="tel" style={inputStyle} value={d.contact_phone} onChange={function (e) { set("contact_phone", e.target.value); }} /></Field>
+        <p style={{ margin: "-6px 0 0", fontSize: 12, color: MUTED_FG }}>Customers who send an online booking request are offered WhatsApp buttons that message this number (e.g. 0712345678). Leave blank to hide them.</p>
 
         <div style={{ fontWeight: 700, fontSize: 14, marginTop: 6 }}>Tax</div>
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: FOREGROUND }}>
