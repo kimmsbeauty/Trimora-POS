@@ -146,6 +146,21 @@ describe("PetPublicBooking", function () {
     expect(decodeURIComponent(note.getAttribute("href"))).toMatch(/New Booking Request[\s\S]*Grace Njeri[\s\S]*Milo/);
   });
 
+  it("uses the business brand colours", async function () {
+    mockSalon = Object.assign({}, mockSalon, { primary_color: "#C9A84C", secondary_color: "#1A1A1A" });
+    try {
+      wire();
+      var view = render(<PetPublicBooking />);
+      await screen.findByText("Request a grooming appointment");
+      expect(view.container.firstChild.style.background).toMatch(/rgb\(26, 26, 26\)|#1a1a1a/i);
+      fireEvent.click(screen.getByLabelText(/Full groom/));
+      var btn = screen.getByRole("button", { name: "Send request" });
+      expect(btn.style.background).toMatch(/rgb\(201, 168, 76\)|#c9a84c/i);
+    } finally {
+      mockSalon = { id: "s1", slug: "paws", name: "Paws & Co", business_type: "pet", contact_phone: "0700111222", logo_url: "https://example.com/logo.png" };
+    }
+  });
+
   it("sends only one request when the button is pressed twice", async function () {
     var release; var gate = new Promise(function (res) { release = res; });
     wire();
