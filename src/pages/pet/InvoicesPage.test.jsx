@@ -1,4 +1,5 @@
 import React from "react";
+import { invoiceSendConfig } from "./invoiceSend";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 var mockDb = vi.fn();
@@ -331,8 +332,47 @@ describe("InvoicesPage", function () {
     var openSpy;
     function reply(ok, body) { global.fetch = vi.fn().mockResolvedValue({ ok: ok, json: function () { return Promise.resolve(body); } }); }
     beforeEach(function () { openSpy = vi.spyOn(window, "open").mockImplementation(function () { return null; }); });
-    afterEach(function () { openSpy.mockRestore(); });
+    afterEach(function () { openSpy.mockRestore(); invoiceSendConfig.serverSend = false; });
 
+    it("by default opens the customer's WhatsApp with the invoice, sending nothing from the server", async function () {
+      global.fetch = vi.fn();
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      var input = await screen.findByLabelText("Send to this WhatsApp number");
+      expect(input.value).toBe("0712345678");
+      expect(screen.queryByRole("button", { name: "Send WhatsApp" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Open in my WhatsApp" }));
+      expect(openSpy).toHaveBeenCalledTimes(1);
+      expect(openSpy.mock.calls[0][0].indexOf("https://wa.me/254712345678?text=")).toBe(0);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it("by default opens the staff member's own email app, addressed to the customer", async function () {
+      global.fetch = vi.fn();
+      var hrefSet = null;
+      var realLocation = window.location;
+      delete window.location;
+      window.location = { get href() { return "http://localhost/"; }, set href(v) { hrefSet = v; } };
+      try {
+        setup({ open: "i1" });
+        fireEvent.click(await screen.findByRole("button", { name: "Email" }));
+        expect((await screen.findByLabelText("Send to this email address")).value).toBe("wanjiru@example.com");
+        fireEvent.click(screen.getByRole("button", { name: "Open in my email app" }));
+        expect(hrefSet.indexOf("mailto:wanjiru@example.com?subject=")).toBe(0);
+        expect(global.fetch).not.toHaveBeenCalled();
+      } finally { window.location = realLocation; }
+    });
+
+    it("by default cannot open the email app with no address, and loads no send history", async function () {
+      setup({ open: "i1", profiles: [] });
+      fireEvent.click(await screen.findByRole("button", { name: "Email" }));
+      expect(await screen.findByText(/no email on file/)).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Open in my email app" }).disabled).toBe(true);
+      expect(mockDb.mock.calls.some(function (c) { return c[1] === "pet_invoice_messages"; })).toBe(false);
+    });
+
+    describe("with server sending switched on", function () {
+    beforeEach(function () { invoiceSendConfig.serverSend = true; });
     it("shows Email and WhatsApp next to Print", async function () {
       setup({ open: "i1" });
       expect(await screen.findByRole("button", { name: "Email" })).toBeTruthy();
@@ -402,6 +442,8 @@ describe("InvoicesPage", function () {
       fireEvent.click(await screen.findByRole("button", { name: "Email" }));
       expect(await screen.findByText(/Already sent by email to wanjiru@example.com/)).toBeTruthy();
       expect(screen.getByRole("button", { name: "Send again" })).toBeTruthy();
+    });
+
     });
 
     it("still loads invoices when customer emails can't be fetched", async function () {
