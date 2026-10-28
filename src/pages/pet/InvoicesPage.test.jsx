@@ -460,6 +460,24 @@ describe("InvoicesPage", function () {
       expect(screen.queryByText(/Sent to/)).toBeNull();
     });
 
+    it("when the send function isn't deployed (platform 404), offers the customer's own app straight away", async function () {
+      global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404, json: function () { return Promise.resolve({ code: "NOT_FOUND", message: "Requested function was not found" }); } });
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Send WhatsApp" }));
+      expect(await screen.findByText(/isn't switched on yet/)).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Open in my WhatsApp" })).toBeTruthy();
+    });
+
+    it("still reports INVOICE_NOT_FOUND from the function as an invoice problem, not a missing function", async function () {
+      global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404, json: function () { return Promise.resolve({ error: "INVOICE_NOT_FOUND" }); } });
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Send WhatsApp" }));
+      expect(await screen.findByText(/invoice could not be found/)).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Open in my WhatsApp" })).toBeNull();
+    });
+
     it("when server sending isn't set up, offers to open the customer's own app instead", async function () {
       reply(false, { error: "NOT_CONFIGURED" });
       setup({ open: "i1" });
