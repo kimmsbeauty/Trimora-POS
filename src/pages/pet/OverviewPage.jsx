@@ -18,6 +18,7 @@ import { bookingErrorMessage } from "./bookingData";
 import { STAY_LABELS, STAY_TONES, formatDay, boardingErrorMessage } from "./boardingData";
 import { PageHeader, Card, Button, Badge, EmptyState, ErrorLine } from "./ui";
 import { loadOverview } from "./overviewLoader";
+import OnlineBookingChecklist from "./OnlineBookingChecklist";
 import {
   greetingFor, longDate, appointmentsToday, petsBoarding, revenueToday, outstandingInvoices, scheduleRows, boardingRows,
   attentionItems, activityFeed, relativeTime, BOARDING_LIMIT,
@@ -205,6 +206,8 @@ export default function OverviewPage({ businessName, isAdmin, onNavigate }) {
 
       {err ? <ErrorLine>{err}</ErrorLine> : null}
       {notice ? <p role="status" style={{ margin: "0 0 12px", color: ACCENT_FG, fontSize: 12, fontWeight: 700 }}>{notice}</p> : null}
+
+      <OnlineBookingChecklist allowed={allowed} onGo={go} />
 
       {tiles.length > 0 ? (
         <div className="pet-ov-tiles" role="group" aria-label="Quick actions">
