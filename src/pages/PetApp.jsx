@@ -25,6 +25,7 @@
 import { useState, useEffect } from "react";
 import LoginPage from "./LoginPage";
 import PetShell from "./pet/PetShell";
+import useNewRequestCount from "./pet/useNewRequestCount";
 import PlaceholderPage from "./pet/PlaceholderPage";
 import RemindersPage from "./pet/RemindersPage";
 import BookingRequestsPage from "./pet/BookingRequestsPage";
@@ -137,6 +138,8 @@ function PetStaffRoute() {
   // Where an Overview shortcut should land (e.g. the calendar's day view). Cleared by any other navigation.
   var intentState = useState(null);
   var intent = intentState[0]; var setIntent = intentState[1];
+  // Badge on "Online Requests": hook must run before the login early-return below.
+  var newRequests = useNewRequestCount(loggedIn, tab);
   function selectTab(key) { setIntent(null); setTab(key); }
   function goFromOverview(key, opts) { setIntent(opts || null); setTab(key); }
 
@@ -164,6 +167,7 @@ function PetStaffRoute() {
       nav={nav}
       active={activeItem.key}
       onSelect={selectTab}
+      badges={{ requests: newRequests }}
       businessName={salon && salon.name}
       roleLabel={isAdmin ? "Admin" : "Staff"}
       footerSlot={<><InstallAppButton /><WorkingAs /></>}
