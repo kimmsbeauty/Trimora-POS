@@ -15,6 +15,7 @@ import { SPECIES } from "./petData";
 import { MUTED_FG, MUTED, BORDER, FOREGROUND } from "./theme";
 import {
   CATEGORIES, validateService, serviceRow, isDuplicateService, durationLabel, speciesLabel, filterServices,
+  missingFromOnlineBooking, countMissingFromOnlineBooking,
 } from "./serviceData";
 import { PageHeader, Card, Button, Field, Badge, Modal, ErrorLine, EmptyState, inputStyle } from "./ui";
 
@@ -77,6 +78,7 @@ export default function GroomingPage({ canEdit }) {
   }
 
   var visible = filterServices(services, q, category, showInactive);
+  var missingCount = countMissingFromOnlineBooking(services);
   var draft = form ? form.draft : null;
 
   function openAdd() { setForm({ mode: "add", id: null, draft: Object.assign({}, EMPTY_DRAFT, { species: [] }) }); setErr(""); }
@@ -168,6 +170,11 @@ export default function GroomingPage({ canEdit }) {
         </label>
       </Card>
       {!form && !deleting ? <ErrorLine>{err}</ErrorLine> : null}
+      {missingCount > 0 ? (
+        <div role="note" style={{ marginBottom: 16, fontSize: 13, color: MUTED_FG }}>
+          {missingCount === 1 ? "1 service isn't" : missingCount + " services aren't"} on the online booking page because {missingCount === 1 ? "it has" : "they have"} no duration. Add a duration to show {missingCount === 1 ? "it" : "them"}.
+        </div>
+      ) : null}
 
       {services.length === 0 ? (
         <Card><EmptyState title="No services yet"
@@ -192,6 +199,7 @@ export default function GroomingPage({ canEdit }) {
                 <div style={{ padding: "12px 16px", minHeight: 48 }}>
                   <p style={{ margin: 0, color: MUTED_FG, fontSize: 12, lineHeight: 1.5 }}>{s.description || "No description."}</p>
                   {!s.active ? <div style={{ marginTop: 8 }}><Badge tone="neutral">Inactive</Badge></div> : null}
+                  {missingFromOnlineBooking(s) ? <div style={{ marginTop: 8 }}><Badge tone="warning">Not on online booking: add a duration</Badge></div> : null}
                 </div>
                 {canEdit ? (
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", borderTop: "1px solid " + BORDER }}>
@@ -225,7 +233,7 @@ export default function GroomingPage({ canEdit }) {
                 </select>
               </Field>
               <Field label="Price (KES)" htmlFor="svc-price"><input id="svc-price" inputMode="numeric" style={inputStyle} value={draft.price} onChange={function (e) { setField("price", e.target.value); }} /></Field>
-              <Field label="Duration in minutes (optional)" htmlFor="svc-duration"><input id="svc-duration" inputMode="numeric" style={inputStyle} value={draft.duration_minutes} onChange={function (e) { setField("duration_minutes", e.target.value); }} /></Field>
+              <Field label="Duration in minutes (needed to show on online booking)" htmlFor="svc-duration"><input id="svc-duration" inputMode="numeric" style={inputStyle} value={draft.duration_minutes} onChange={function (e) { setField("duration_minutes", e.target.value); }} /></Field>
             </div>
             <fieldset style={{ border: "1px solid " + BORDER, borderRadius: 12, padding: "8px 12px", margin: 0 }}>
               <legend style={{ fontSize: 12, fontWeight: 600, color: MUTED_FG, padding: "0 4px" }}>Applies to (none ticked = all species)</legend>
