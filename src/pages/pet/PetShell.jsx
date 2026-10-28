@@ -3,9 +3,9 @@
 // Trimora Pet app shell: fixed 256px sidebar on desktop, sticky 56px top bar
 // with a 288px slide-in drawer below 1024px. Layout, sizes and nav-item states
 // follow PET_MODULE_SPEC section 4. All colours come from ./theme.
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import PetIcon from "./PetIcon";
-import { petInitials } from "./petNav";
+import { petInitials, groupPetNav } from "./petNav";
 import { formatBadgeCount } from "./useNewRequestCount";
 import {
   PET_NAME, PET_BRAND_CAPTION, BACKGROUND, FOREGROUND, CARD, BORDER, PRIMARY, PRIMARY_FG,
@@ -23,7 +23,12 @@ var CSS = [
   ".pet-topbar { position: sticky; top: 0; z-index: 40; height: 56px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: rgba(255,255,255,0.95); border-bottom: 1px solid " + BORDER + "; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); color: " + FOREGROUND + "; }",
   ".pet-menubtn { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid " + BORDER + "; border-radius: 8px; background: " + CARD + "; color: " + FOREGROUND + "; cursor: pointer; padding: 0; }",
   ".pet-content { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }",
-  ".pet-nav { flex: 1; overflow-y: auto; padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }",
+  ".pet-brand { display: flex; align-items: center; gap: 12px; padding: 24px 20px 20px; flex-shrink: 0; }",
+  ".pet-nav { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }",
+  ".pet-nav-group { display: flex; flex-direction: column; gap: 4px; }",
+  ".pet-nav-group + .pet-nav-group { margin-top: 4px; }",
+  ".pet-nav-label { padding: 6px 12px 2px; font: 600 10px " + FONT_BODY + "; letter-spacing: 0.14em; text-transform: uppercase; color: " + SIDEBAR_MUTED + "; }",
+  ".pet-side-foot { flex-shrink: 0; border-top: 1px solid rgba(255,255,255,0.08); padding: 16px; }",
   ".pet-nav-item { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; box-sizing: border-box; padding: 8px 12px; border: 0; border-radius: 8px; background: transparent; color: " + SIDEBAR_MUTED + "; font: 500 13px " + FONT_BODY + "; text-align: left; cursor: pointer; transition: background-color .15s, color .15s; }",
   ".pet-nav-item:hover { background: rgba(255,255,255,0.042); color: " + SIDEBAR_FG + "; }",
   ".pet-nav-item.active { background: rgba(255,255,255,0.07); color: " + SIDEBAR_FG + "; }",
@@ -36,12 +41,13 @@ var CSS = [
   ".pet-drawer-close { position: absolute; right: -44px; top: 16px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: " + CARD + "; color: " + FOREGROUND + "; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }",
   "@media (min-width: 640px) { .pet-content { padding: 24px 24px; } }",
   "@media (min-width: 1024px) { .pet-side { display: flex; } .pet-main { margin-left: 256px; } .pet-topbar { display: none; } .pet-content { padding: 32px; } .pet-drawer, .pet-drawer-backdrop { display: none; } }",
+  "@media (max-height: 640px) { .pet-brand { padding: 14px 20px 8px; } .pet-side-foot { padding: 10px 16px; } .pet-signed-in { display: none; } }",
   "@media print { body { background: white; } .pet-side, .pet-topbar, .pet-drawer, .pet-drawer-backdrop, .no-print { display: none !important; } .pet-main { margin-left: 0 !important; } .pet-content { max-width: none; padding: 0; } }",
 ].join("\n");
 
 function Brand() {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "24px 20px 20px" }}>
+    <div className="pet-brand">
       <div style={{ width: 40, height: 40, borderRadius: 12, background: PRIMARY, color: PRIMARY_FG, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 4px 6px -1px rgba(0,0,0,0.2)" }}>
         <PetIcon name="paw" size={20} />
       </div>
@@ -64,19 +70,26 @@ function SideContents({ nav, active, onSelect, businessName, roleLabel, onLogout
     <>
       <Brand />
       <nav aria-label="Main navigation" className="pet-nav">
-        {nav.map(function (item) {
-          var isActive = item.key === active;
+        {groupPetNav(nav).map(function (group) {
           return (
-            <button key={item.key} type="button" className={"pet-nav-item" + (isActive ? " active" : "")}
-              aria-current={isActive ? "page" : undefined} onClick={function () { onSelect(item.key); }}>
-              <span className="pet-nav-icon" style={{ display: "inline-flex" }}><PetIcon name={item.icon} /></span>
-              <span>{item.label}</span>
-              {badges && badges[item.key] > 0 ? <CountPill n={badges[item.key]} label="new" /> : null}
-            </button>
+            <div key={group.section || "other"} className="pet-nav-group" role={group.label ? "group" : undefined} aria-label={group.label || undefined}>
+              {group.label ? <div className="pet-nav-label" aria-hidden="true">{group.label}</div> : null}
+              {group.items.map(function (item) {
+                var isActive = item.key === active;
+                return (
+                  <button key={item.key} type="button" className={"pet-nav-item" + (isActive ? " active" : "")}
+                    aria-current={isActive ? "page" : undefined} onClick={function () { onSelect(item.key); }}>
+                    <span className="pet-nav-icon" style={{ display: "inline-flex" }}><PetIcon name={item.icon} /></span>
+                    <span>{item.label}</span>
+                    {badges && badges[item.key] > 0 ? <CountPill n={badges[item.key]} label="new" /> : null}
+                  </button>
+                );
+              })}
+            </div>
           );
         })}
       </nav>
-      <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", padding: 16 }}>
+      <div className="pet-side-foot">
         <div style={{ display: "flex", alignItems: "center", gap: 12, borderRadius: 8, background: "rgba(255,255,255,0.042)", padding: "10px 12px", marginBottom: 12 }}>
           <div style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(225,172,65,0.25)", color: PRIMARY, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT_HEADING, fontWeight: 600, fontSize: 14, flexShrink: 0 }}>
             {petInitials(businessName)}
@@ -90,7 +103,7 @@ function SideContents({ nav, active, onSelect, businessName, roleLabel, onLogout
           </button>
         </div>
         {footerSlot}
-        <p style={{ margin: "0 4px", fontSize: 10, fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: PRIMARY, opacity: 0.9 }}>
+        <p className="pet-signed-in" style={{ margin: "0 4px", fontSize: 10, fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: PRIMARY, opacity: 0.9 }}>
           Signed in on this device
         </p>
       </div>
@@ -101,6 +114,14 @@ function SideContents({ nav, active, onSelect, businessName, roleLabel, onLogout
 export default function PetShell({ nav, active, onSelect, businessName, roleLabel, onLogout, footerSlot, badges, children }) {
   var drawerState = useState(false);
   var drawerOpen = drawerState[0]; var setDrawerOpen = drawerState[1];
+
+  // Escape closes the mobile drawer (keyboard users and tablets with a keyboard).
+  useEffect(function () {
+    if (!drawerOpen) return undefined;
+    function onKey(e) { if (e.key === "Escape") setDrawerOpen(false); }
+    document.addEventListener("keydown", onKey);
+    return function () { document.removeEventListener("keydown", onKey); };
+  }, [drawerOpen]);
 
   var badgeTotal = badges ? Object.keys(badges).reduce(function (t, k) { return t + (badges[k] > 0 ? badges[k] : 0); }, 0) : 0;
   function select(key) { setDrawerOpen(false); onSelect(key); }
@@ -125,7 +146,7 @@ export default function PetShell({ nav, active, onSelect, businessName, roleLabe
       {drawerOpen && (
         <>
           <div className="pet-drawer-backdrop" onClick={function () { setDrawerOpen(false); }} />
-          <aside className="pet-drawer" role="dialog" aria-label="Navigation menu">
+          <aside className="pet-drawer" role="dialog" aria-modal="true" aria-label="Navigation menu">
             <button type="button" className="pet-drawer-close" aria-label="Close menu" onClick={function () { setDrawerOpen(false); }}>
               <PetIcon name="close" size={20} />
             </button>
