@@ -281,11 +281,13 @@ export default function BookingPage() {
               <div style={{ textAlign: "center", padding: "32px 20px", background: "rgba(255,255,255,0.05)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.1)" }}>
                 <div style={{ fontSize: 32, marginBottom: 8 }}>{isPet ? "🐾" : "✂️"}</div>
                 <div style={{ fontSize: 14, fontWeight: 800, color: WHITE, marginBottom: 6 }}>Services coming soon</div>
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 16 }}>{isPet ? "We're still setting up our services. Chat with us to book your pet in directly." : "This salon is still setting up. Chat with us to book directly."}</div>
-                <a href={`https://wa.me/?text=${encodeURIComponent("I'd like to book at " + salonName)}`} target="_blank" rel="noreferrer"
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: contactPhone ? 16 : 0 }}>{contactPhone
+                  ? (isPet ? "We're still setting up our services. Chat with us to book your pet in directly." : "This salon is still setting up. Chat with us to book directly.")
+                  : (isPet ? "We're still setting up our services. Please check back soon." : "This salon is still setting up. Please check back soon.")}</div>
+                {contactPhone && <a href={`https://wa.me/${contactPhone}?text=${encodeURIComponent("I'd like to book at " + salonName)}`} target="_blank" rel="noreferrer"
                   style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#25D366", color: WHITE, borderRadius: 24, padding: "10px 20px", fontWeight: 800, fontSize: 14, textDecoration: "none" }}>
                   <span style={{ fontSize: 18 }}>💬</span> Chat on WhatsApp
-                </a>
+                </a>}
               </div>
             ) : categories.map(cat => (
               <div key={cat} style={{ marginBottom: 16 }}>

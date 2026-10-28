@@ -6,6 +6,7 @@
 import React, { useState } from "react";
 import PetIcon from "./PetIcon";
 import { petInitials } from "./petNav";
+import { formatBadgeCount } from "./useNewRequestCount";
 import {
   PET_NAME, PET_BRAND_CAPTION, BACKGROUND, FOREGROUND, CARD, BORDER, PRIMARY, PRIMARY_FG,
   SIDEBAR, SIDEBAR_FG, SIDEBAR_MUTED, FONT_BODY, FONT_HEADING,
@@ -52,7 +53,13 @@ function Brand() {
   );
 }
 
-function SideContents({ nav, active, onSelect, businessName, roleLabel, onLogout, footerSlot }) {
+function CountPill({ n, label }) {
+  return (
+    <span aria-label={n + " " + label} style={{ marginLeft: "auto", minWidth: 20, height: 20, boxSizing: "border-box", padding: "0 6px", borderRadius: 999, background: PRIMARY, color: PRIMARY_FG, fontSize: 11, fontWeight: 700, lineHeight: "20px", textAlign: "center" }}>{formatBadgeCount(n)}</span>
+  );
+}
+
+function SideContents({ nav, active, onSelect, businessName, roleLabel, onLogout, footerSlot, badges }) {
   return (
     <>
       <Brand />
@@ -64,6 +71,7 @@ function SideContents({ nav, active, onSelect, businessName, roleLabel, onLogout
               aria-current={isActive ? "page" : undefined} onClick={function () { onSelect(item.key); }}>
               <span className="pet-nav-icon" style={{ display: "inline-flex" }}><PetIcon name={item.icon} /></span>
               <span>{item.label}</span>
+              {badges && badges[item.key] > 0 ? <CountPill n={badges[item.key]} label="new" /> : null}
             </button>
           );
         })}
@@ -90,20 +98,22 @@ function SideContents({ nav, active, onSelect, businessName, roleLabel, onLogout
   );
 }
 
-export default function PetShell({ nav, active, onSelect, businessName, roleLabel, onLogout, footerSlot, children }) {
+export default function PetShell({ nav, active, onSelect, businessName, roleLabel, onLogout, footerSlot, badges, children }) {
   var drawerState = useState(false);
   var drawerOpen = drawerState[0]; var setDrawerOpen = drawerState[1];
 
+  var badgeTotal = badges ? Object.keys(badges).reduce(function (t, k) { return t + (badges[k] > 0 ? badges[k] : 0); }, 0) : 0;
   function select(key) { setDrawerOpen(false); onSelect(key); }
-  var shared = { nav: nav, active: active, onSelect: select, businessName: businessName, roleLabel: roleLabel, onLogout: onLogout, footerSlot: footerSlot };
+  var shared = { nav: nav, active: active, onSelect: select, businessName: businessName, roleLabel: roleLabel, onLogout: onLogout, footerSlot: footerSlot, badges: badges };
 
   return (
     <div className="pet-shell">
       <style>{CSS}</style>
       <aside className="pet-side"><SideContents {...shared} /></aside>
       <header className="pet-topbar">
-        <button type="button" className="pet-menubtn" aria-label="Open menu" onClick={function () { setDrawerOpen(true); }}>
+        <button type="button" className="pet-menubtn" aria-label={badgeTotal > 0 ? "Open menu, " + badgeTotal + " new" : "Open menu"} style={{ position: "relative" }} onClick={function () { setDrawerOpen(true); }}>
           <PetIcon name="menu" size={20} />
+          {badgeTotal > 0 ? <span aria-hidden="true" style={{ position: "absolute", top: -5, right: -5, minWidth: 16, height: 16, boxSizing: "border-box", padding: "0 4px", borderRadius: 999, background: PRIMARY, color: PRIMARY_FG, fontSize: 10, fontWeight: 700, lineHeight: "16px", textAlign: "center" }}>{formatBadgeCount(badgeTotal)}</span> : null}
         </button>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ width: 28, height: 28, borderRadius: 8, background: PRIMARY, color: PRIMARY_FG, display: "flex", alignItems: "center", justifyContent: "center" }}>

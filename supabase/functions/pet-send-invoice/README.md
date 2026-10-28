@@ -40,4 +40,4 @@ itemised invoice**. Attaching a PDF is not done.
 
 `supabase functions deploy pet-send-invoice` (default JWT verification on). Not deployed.
 
-**The app does not call this function by default.** `invoiceSendConfig.serverSend` in `src/pages/pet/invoiceSend.js` is `false`, so Email / WhatsApp open the staff member's own app with the invoice filled in. To use this function instead (needs a verified Resend domain and/or a WhatsApp Business account), deploy it, set its secrets, then set `serverSend` to `true`.
+**The app does not call this function by default.** `invoiceSendConfig.serverSend` in `src/pages/pet/invoiceSend.js` is `false`, so Email / WhatsApp share the invoice as a PDF through the phone's share sheet (or open the staff member's own app with the text filled in). To use this function instead (needs a verified Resend domain and/or a WhatsApp Business account), deploy it, set its secrets, then set `serverSend` to `true`.

@@ -56,6 +56,16 @@ export function durationLabel(minutes) {
   return m ? h + " h " + m + " min" : h + " h";
 }
 
+// The public booking page (migration 108) only lists services that are active, not Boarding and
+// have a duration, so a service without one is quietly left off. These let the Grooming page say so.
+export function missingFromOnlineBooking(s) {
+  return !!s && s.active !== false && s.category !== "Boarding" && !s.duration_minutes;
+}
+
+export function countMissingFromOnlineBooking(services) {
+  return (services || []).filter(missingFromOnlineBooking).length;
+}
+
 export function speciesLabel(species) {
   return !species || species.length === 0 ? "All species" : species.join(", ");
 }

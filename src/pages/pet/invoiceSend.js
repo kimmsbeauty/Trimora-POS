@@ -43,7 +43,11 @@ export async function sendInvoice(args) {
     });
     var data = await res.json().catch(function () { return {}; });
     if (res.ok && data.success) return { ok: true, recipient: data.recipient };
-    var code = data && data.error ? data.error : "SEND_FAILED";
+    // A function that isn't deployed answers 404 from the platform with no `error` field of ours
+    // (our own 404 is always { error: "INVOICE_NOT_FOUND" }). Treat it like missing secrets so
+    // staff get the "open in my own app" fallback straight away instead of a generic failure.
+    var missing = res.status === 404 && !(data && data.error);
+    var code = missing ? "NOT_CONFIGURED" : (data && data.error ? data.error : "SEND_FAILED");
     return { ok: false, code: code, message: sendErrorMessage(code) };
   } catch (e) {
     return { ok: false, code: "Network error", message: sendErrorMessage("Network error") };

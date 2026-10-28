@@ -151,4 +151,22 @@ describe("GroomingPage (service catalogue)", function () {
     expect(await screen.findByText(/nothing was deleted/)).toBeTruthy();
     expect(mockDb.mock.calls.filter(function (c) { return c[0] === "DELETE"; }).length).toBe(0);
   });
+
+  it("says which services are left off the online booking page for having no duration", async function () {
+    setup({ services: [
+      SERVICES[0],
+      { id: "s4", name: "Puppy bath", category: "Grooming", price: 700, duration_minutes: null, species: [], description: null, active: true },
+      { id: "s5", name: "Nightly stay", category: "Boarding", price: 1200, duration_minutes: null, species: [], description: null, active: true },
+    ] });
+    await screen.findByText("Puppy bath");
+    expect(screen.getByRole("note").textContent).toMatch(/1 service isn't on the online booking page/);
+    expect(screen.getAllByText("Not on online booking: add a duration").length).toBe(1);
+  });
+
+  it("shows no booking hint when every bookable service has a duration", async function () {
+    setup();
+    await screen.findByText("Full groom");
+    expect(screen.queryByRole("note")).toBeNull();
+    expect(screen.queryByText(/Not on online booking/)).toBeNull();
+  });
 });

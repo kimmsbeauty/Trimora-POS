@@ -1,4 +1,4 @@
-import { validateService, serviceRow, isDuplicateService, durationLabel, speciesLabel, filterServices } from "./serviceData";
+import { validateService, serviceRow, isDuplicateService, durationLabel, speciesLabel, filterServices, missingFromOnlineBooking, countMissingFromOnlineBooking } from "./serviceData";
 
 var ok = { name: "Full groom", category: "Grooming", price: "1500", duration_minutes: "90", species: [], description: "", active: true };
 
@@ -58,5 +58,22 @@ describe("labels and filters", function () {
     expect(filterServices(list, "", "all", true).length).toBe(3);
     expect(filterServices(list, "", "Add-on", false).map(function (s) { return s.id; })).toEqual(["2"]);
     expect(filterServices(list, "paws", "all", false).map(function (s) { return s.id; })).toEqual(["2"]);
+  });
+});
+
+describe("missingFromOnlineBooking", function () {
+  it("flags active non-boarding services with no duration", function () {
+    expect(missingFromOnlineBooking({ active: true, category: "Grooming", duration_minutes: null })).toBe(true);
+    expect(missingFromOnlineBooking({ active: true, category: "Add-on", duration_minutes: 0 })).toBe(true);
+  });
+  it("does not flag services that are listed, inactive or boarding", function () {
+    expect(missingFromOnlineBooking({ active: true, category: "Grooming", duration_minutes: 30 })).toBe(false);
+    expect(missingFromOnlineBooking({ active: false, category: "Grooming", duration_minutes: null })).toBe(false);
+    expect(missingFromOnlineBooking({ active: true, category: "Boarding", duration_minutes: null })).toBe(false);
+    expect(missingFromOnlineBooking(null)).toBe(false);
+  });
+  it("counts them", function () {
+    expect(countMissingFromOnlineBooking([{ active: true, category: "Grooming" }, { active: true, category: "Boarding" }, { active: true, category: "Add-on", duration_minutes: 10 }])).toBe(1);
+    expect(countMissingFromOnlineBooking(undefined)).toBe(0);
   });
 });
