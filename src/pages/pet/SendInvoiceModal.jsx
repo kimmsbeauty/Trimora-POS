@@ -12,6 +12,7 @@ import { fmt } from "../../lib/utils";
 import { MUTED_FG, FOREGROUND } from "./theme";
 import { outstanding } from "./invoiceData";
 import { sendInvoice, invoiceSendConfig } from "./invoiceSend";
+import { makeInvoicePdf, canSharePdf, sharePdf, downloadPdf, pdfFileName } from "./invoicePdf";
 import { buildInvoiceMessage, invoiceSubject, whatsappUrl, mailtoUrl } from "./invoiceShare";
 import { Button, Field, ErrorLine, Modal, Badge, inputStyle } from "./ui";
 
@@ -24,10 +25,19 @@ export default function SendInvoiceModal({ invoice, customer, pet, salon, email,
   var errS = useState(""); var err = errS[0]; var setErr = errS[1];
   var histS = useState([]); var history = histS[0]; var setHistory = histS[1];
   var tickS = useState(0); var tick = tickS[0]; var setTick = tickS[1];
+  var pdfS = useState(null); var pdf = pdfS[0]; var setPdf = pdfS[1]; // null = preparing | File | "failed"
   var alive = useRef(true);
 
   useEffect(function () { alive.current = true; return function () { alive.current = false; }; }, []);
   var serverSend = invoiceSendConfig.serverSend;
+  // Build the PDF as soon as the dialog opens, so the share button can be used straight away (phones
+  // only allow the share sheet to open right after a tap). The invoice is already on screen behind.
+  useEffect(function () {
+    if (serverSend) return;
+    makeInvoicePdf(document.querySelector(".invoice-print"), pdfFileName(invoice))
+      .then(function (f) { if (alive.current) setPdf(f); })
+      .catch(function () { if (alive.current) setPdf("failed"); });
+  }, [invoice.id]);
   useEffect(function () {
     if (!serverSend) return;
     db("GET", "pet_invoice_messages", null, "?select=channel,recipient,status,created_at&invoice_id=eq." + encodeURIComponent(invoice.id) + "&order=created_at.desc&limit=3")
@@ -53,11 +63,22 @@ export default function SendInvoiceModal({ invoice, customer, pet, salon, email,
     else window.open(whatsappUrl(to, message), "_blank", "noopener,noreferrer");
   }
 
+  var pdfReady = pdf && pdf !== "failed";
+  var canShare = pdfReady && canSharePdf(pdf);
+  async function shareWithPdf() {
+    var message = buildInvoiceMessage(invoice, customer, pet, salon);
+    var r = await sharePdf(pdf, invoiceSubject(invoice, salon), message);
+    if (r === "failed" && alive.current) setErr("Could not open the share menu. Use the download button instead.");
+  }
+  var ownAppLabel = isEmail ? "Open in my email app" : "Open in my WhatsApp";
   var done = phase === "sent";
   var footer = !serverSend ? (
     <>
       <Button variant="ghost" onClick={onClose}>Cancel</Button>
-      <Button onClick={function () { openInMyApp(); }} disabled={!to.trim()}>{isEmail ? "Open in my email app" : "Open in my WhatsApp"}</Button>
+      <Button variant="outline" onClick={function () { openInMyApp(); }} disabled={!to.trim()}>{ownAppLabel + " (no PDF)"}</Button>
+      {pdf === null ? <Button disabled>Preparing PDF…</Button> : null}
+      {canShare ? <Button onClick={shareWithPdf}>Share invoice PDF</Button> : null}
+      {pdfReady && !canShare ? <Button onClick={function () { downloadPdf(pdf); }}>Download PDF</Button> : null}
     </>
   ) : done ? <Button onClick={onClose}>Done</Button> : (
     <>
@@ -84,7 +105,12 @@ export default function SendInvoiceModal({ invoice, customer, pet, salon, email,
           </Field>
           {!to.trim() ? <div style={{ fontSize: 12, color: MUTED_FG }}>{isEmail ? "This customer has no email on file. Type one to send." : "This customer has no phone number on file. Type one to send."}</div> : null}
           {serverSend && sentBefore ? <Badge tone="warning">Already sent by {sentBefore.channel === "email" ? "email" : "WhatsApp"} to {sentBefore.recipient} on {when(sentBefore.created_at)}</Badge> : null}
-          {!serverSend ? <div style={{ fontSize: 13, color: MUTED_FG }}>This opens your own {isEmail ? "email" : "WhatsApp"} app with the invoice already written. Press send there. {isEmail ? "No PDF is attached; print or save the invoice as a PDF first if you want to attach it." : ""}</div> : null}
+          {!serverSend ? <div style={{ fontSize: 13, color: MUTED_FG }}>
+            {canShare ? "Tap Share invoice PDF, then choose " + (isEmail ? "Gmail or your email app" : "WhatsApp") + ": the PDF is attached and the message is written. " + (to.trim() ? "Send it to " + to.trim() + "." : "")
+              : pdfReady ? "This device can't attach a PDF in one step. Download the PDF, then attach it in your " + (isEmail ? "email" : "WhatsApp") + " app (or use the no-PDF button for a message only)."
+              : pdf === "failed" ? "The PDF could not be made here. You can still send the message without it."
+              : "Getting the PDF ready…"}
+          </div> : null}
           {phase === "unavailable" ? <div style={{ fontSize: 13, color: MUTED_FG }}>You can still open the message in your own {isEmail ? "email" : "WhatsApp"} app and press send there.</div> : null}
           <ErrorLine>{err}</ErrorLine>
         </div>
