@@ -45,4 +45,15 @@ describe("publicBrand", function () {
   it("leaves other businesses on the standard look", function () {
     expect(publicBrand({ name: "Happy Tails", slug: "happy-tails" }).branded).toBe(false);
   });
+  it("ignores the platform's default gold and black for PawPals, so its brand colours show", function () {
+    var b = publicBrand({ name: "PawPals Kenya", primary_color: "#C9A84C", secondary_color: "#1A1400" });
+    expect(b.primary).toBe("#991B96");
+    expect(b.bg).toBe("#F4F6FD");
+    expect(b.onBg).toBe("#1B1F5E");
+  });
+  it("still honours gold and black for a business with no preset", function () {
+    var b = publicBrand({ name: "Happy Tails", primary_color: "#C9A84C", secondary_color: "#1A1400" });
+    expect(b.primary).toBe("#C9A84C");
+    expect(b.bg).toBe("#1A1400");
+  });
 });
