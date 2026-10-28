@@ -228,4 +228,35 @@ describe("BookingPage — full booking + payment-claim flow (mocked db)", () => 
     // Promise.resolve(null) locally without touching dbRpc at all.
     expect(dbRpc).not.toHaveBeenCalled();
   });
+  describe("empty-services state WhatsApp button", () => {
+    function noServices() {
+      dbRpc.mockImplementation((fn) => {
+        if (fn === "public_services_lookup") return Promise.resolve([]);
+        if (fn === "public_service_categories_lookup") return Promise.resolve([]);
+        if (fn === "staff_directory_lookup") return Promise.resolve([]);
+        return Promise.resolve(null);
+      });
+    }
+
+    test("links to the business number so WhatsApp opens the business, not the contact picker", async () => {
+      noServices();
+      useSalon.mockReturnValue({ ...FAKE_SALON, contact_phone: "0712345678" });
+      render(<BookingPage />);
+      await waitFor(() => expect(screen.getByText("Services coming soon")).toBeInTheDocument());
+      // The empty state shows two WhatsApp links (its own, plus the "can't find what you're
+      // looking for" block below); every one must point at the business number.
+      var links = screen.getAllByRole("link", { name: /Chat on WhatsApp/ });
+      links.forEach((l) => expect(l.getAttribute("href")).toMatch(/^https:\/\/wa\.me\/254712345678\?text=/));
+      expect(links[0].getAttribute("href")).toContain(encodeURIComponent("I'd like to book at Test Salon"));
+    });
+
+    test("shows no WhatsApp button when the business has no number", async () => {
+      noServices();
+      useSalon.mockReturnValue({ ...FAKE_SALON, contact_phone: null });
+      render(<BookingPage />);
+      await waitFor(() => expect(screen.getByText("Services coming soon")).toBeInTheDocument());
+      expect(screen.queryByRole("link", { name: /Chat on WhatsApp/ })).not.toBeInTheDocument();
+      expect(screen.getByText(/check back soon/)).toBeInTheDocument();
+    });
+  });
 });
