@@ -5,6 +5,7 @@ import React, { useState } from "react";
 import { db } from "../../lib/db";
 import { MUTED_FG, BORDER, FOREGROUND } from "./theme";
 import { ageLabel, vaccinationStatus, validateVaccination, warnDaysFor, RECORD_TYPES, recordTypeLabel, isArchived, archiveReasonLabel } from "./petData";
+import PetPhotos from "./PetPhotos";
 import { Modal, Button, Field, Badge, ErrorLine, inputStyle } from "./ui";
 
 var STATUS_BADGE = {
@@ -29,7 +30,7 @@ function Row({ label, value }) {
   );
 }
 
-export default function PetProfile({ pet, owner, vaccinations, windows, onVaccinationsChange, onClose, onEdit }) {
+export default function PetProfile({ pet, owner, vaccinations, windows, onVaccinationsChange, onClose, onEdit, canDeletePhotos }) {
   var draftState = useState({ record_type: "vaccination", vaccine: "", given_on: "", next_due_on: "" });
   var draft = draftState[0]; var setDraft = draftState[1];
   var errState = useState(""); var err = errState[0]; var setErr = errState[1];
@@ -76,6 +77,8 @@ export default function PetProfile({ pet, owner, vaccinations, windows, onVaccin
         <Row label="Care notes" value={pet.care_notes} />
         <Row label="Grooming notes" value={pet.grooming_notes} />
       </div>
+
+      <PetPhotos petId={pet.id} canDelete={!!canDeletePhotos} />
 
       <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8, color: FOREGROUND }}>Vaccinations and preventive care</div>
       {sorted.length === 0 ? (

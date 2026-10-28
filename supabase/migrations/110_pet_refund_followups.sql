@@ -1,41 +1,22 @@
 -- 110_pet_refund_followups.sql
 --
--- Trimora Pet -- two follow-ups to refunds (105), found when reviewing what a refund leaves behind.
+-- Trimora Pet: follow-ups to refunds (105) and boarding billing (107).
 --
--- STATUS: APPLIED to production 2026-10-27 on the owner's instruction ("fix the refund issues, and
--- proceed to apply the migrations"). Verified afterwards from the catalog: both indexes now exclude
--- 'void' and 'refunded'; pet_stay_billing and pet_invoice_stay carry the new rule; pet_loyalty_apply has
--- the refund_reversal case; EXECUTE grants unchanged (the booking and stay functions callable by
--- authenticated only; pet_loyalty_apply still internal). No invoices existed. Tested before applying on a
--- local Postgres copy built from the real migrations (supabase/tests/110_pet_refund_followups.sql). NOT
--- exercised end to end against production (no staging project, and no invoices yet).
+-- STATUS: APPLIED to production 2026-10-27 (recorded by Supabase as "110_pet_refund_followups",
+-- version 20261027022048). This file was committed afterwards from the statements Supabase recorded;
+-- the SQL below the header is byte-for-byte what ran (verified by hash).
 --
--- 1. A FULLY REFUNDED invoice no longer blocks billing the booking or the boarding stay again.
---    Before: pet_invoices_booking_live_uidx and pet_invoices_stay_live_uidx only freed a booking or
---    stay when the invoice was VOID. A void needs no payments, so once money was taken the only fix for
---    a wrong invoice (refund it in full) left the booking / stay stuck "already invoiced" with no way to
---    re-bill. Now status 'refunded' (every shilling paid has been paid back) frees it like void does.
---      * both partial unique indexes now exclude 'void' and 'refunded' (same names, so the
---        BOOKING_ALREADY_INVOICED mapping in pet_create_invoice keeps working);
---      * pet_invoice_stay (STAY_ALREADY_INVOICED check) and pet_stay_billing (the invoice it shows)
---        are re-created with the same rule. Nothing else in those functions changes.
---    A PARTLY refunded invoice (status still 'paid' or 'partial') still holds the booking / stay:
---    the customer has paid for it, so billing it again would be a double charge.
---    The app stops treating a refunded invoice as "already invoiced" in the same release.
+-- WHAT IT DOES
+--   * pet_invoices_booking_live_uidx and pet_invoices_stay_live_uidx now ignore both 'void' and
+--     'refunded' invoices, so a booking or boarding stay whose invoice was fully refunded can be
+--     invoiced again.
+--   * pet_stay_billing and pet_invoice_stay are replaced with versions that use the same
+--     "not void / not refunded" rule.
+--   * pet_loyalty_apply is replaced: earn/bonus points are only applied once per reference, and the
+--     lifetime counters are adjusted on refund_reversal and redeem_refund.
 --
--- 2. Loyalty: a refund reversal also lowers lifetime_earned (never below 0), like a manual adjustment.
---    Before, only the balance went down, so a customer who earned points on an invoice and had it
---    refunded kept the lifetime credit. pet_loyalty_apply is re-created with one added case
---    ('refund_reversal' next to 'adjustment'); nothing else in it changes.
---
--- NOT CHANGED: pet_create_invoice, pet_refund_invoice, pet_void_invoice and the table constraints.
--- (The live 107 functions carry Windows line endings from the SQL Editor; this re-creates them with
--- Unix ones. The logic is identical apart from the lines above.)
---
--- ROLLBACK:
---   re-create the two indexes with "status <> 'void'" and the three functions from 107 / 101 as written
---   there. (If any invoice has been fully refunded and a second live invoice now exists for the same
---   booking or stay, the old index cannot be recreated until one of them is voided.)
+-- ROLLBACK: re-run the previous definitions: the two indexes from 090 and 107, pet_stay_billing and
+-- pet_invoice_stay from 107, and pet_loyalty_apply from 101.
 
 drop index if exists public.pet_invoices_booking_live_uidx;
 create unique index pet_invoices_booking_live_uidx on public.pet_invoices (booking_id)

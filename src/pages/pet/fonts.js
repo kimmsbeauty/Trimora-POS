@@ -7,4 +7,6 @@ import "@fontsource/manrope/400.css";
 import "@fontsource/manrope/500.css";
 import "@fontsource/manrope/600.css";
 import "@fontsource/manrope/700.css";
+import "@fontsource/fraunces/400-italic.css";
 import "@fontsource/fraunces/600.css";
+import "@fontsource/dancing-script/600.css";

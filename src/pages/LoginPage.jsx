@@ -9,6 +9,7 @@ import { lighten, darken } from "../lib/colorUtils";
 import { useParams } from "react-router-dom";
 import { useSalon, fetchPublicSalonBranding } from "../lib/SalonContext";
 import { persistSession } from "../lib/deviceAuth";
+import PetLoginView from "./pet/PetLoginView";
 import { SIDEBAR as PET_BG, PRIMARY as PET_GOLD, PRIMARY_FG as PET_GOLD_FG, SIDEBAR_FG as PET_FG, SIDEBAR_MUTED as PET_MUTED, DESTRUCTIVE as PET_RED } from "./pet/theme";
 
 var MAX_ATTEMPTS  = 3;
@@ -211,6 +212,29 @@ export default function LoginPage({ onLogin, isAuto, isPet }) {
     setPin("");
     setError("");
     // Don't reset lockout when switching roles — lockout is per-session
+  }
+
+  // Trimora Pet renders its own sign-in layout (pet/PetLoginView.jsx). It is presentation only: every
+  // piece of state and every handler above is shared, so PIN checks, attempts, lockout and the session
+  // are exactly the same as the salon and Auto screens below, which are unchanged.
+  if (isPet) {
+    return (
+      <PetLoginView
+        salon={salon}
+        role={role}
+        onRoleChange={switchRole}
+        pin={pin}
+        onPinChange={function(v) { setPin(v); setError(""); }}
+        onSubmit={handleLogin}
+        error={error}
+        attempts={attempts}
+        locked={locked}
+        countdown={countdown}
+        loading={loading}
+        shake={shake}
+        forgotHref={(salon && salon.slug) ? "/" + salon.slug + "/forgot-pin" : "/forgot-pin"}
+      />
+    );
   }
 
   var lockIconStyle = {

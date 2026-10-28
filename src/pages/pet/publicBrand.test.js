@@ -28,4 +28,32 @@ describe("publicBrand", function () {
     expect(cleanHex("javascript:1")).toBe(null);
     expect(readableOn("#000000")).toBe("#FFFFFF");
   });
+  it("gives PawPals Kenya its invoice colours on a light page, with no settings colours needed", function () {
+    var b = publicBrand({ name: "PawPals Kenya", slug: "pawpals-ke" });
+    expect(b.primary).toBe("#991B96");
+    expect(b.bg).toBe("#F4F6FD");
+    expect(b.onBg).toBe("#1B1F5E");
+    expect(b.accentOnBg).toBe("#1B1F5E");
+    expect(b.onPrimary).toBe("#FFFFFF");
+    expect(b.branded).toBe(true);
+  });
+  it("lets colours saved in Settings win over the preset", function () {
+    var b = publicBrand({ name: "PawPals Kenya", primary_color: "#112233", secondary_color: "#F5F5F5" });
+    expect(b.primary).toBe("#112233");
+    expect(b.bg).toBe("#F5F5F5");
+  });
+  it("leaves other businesses on the standard look", function () {
+    expect(publicBrand({ name: "Happy Tails", slug: "happy-tails" }).branded).toBe(false);
+  });
+  it("ignores the platform's default gold and black for PawPals, so its brand colours show", function () {
+    var b = publicBrand({ name: "PawPals Kenya", primary_color: "#C9A84C", secondary_color: "#1A1400" });
+    expect(b.primary).toBe("#991B96");
+    expect(b.bg).toBe("#F4F6FD");
+    expect(b.onBg).toBe("#1B1F5E");
+  });
+  it("still honours gold and black for a business with no preset", function () {
+    var b = publicBrand({ name: "Happy Tails", primary_color: "#C9A84C", secondary_color: "#1A1400" });
+    expect(b.primary).toBe("#C9A84C");
+    expect(b.bg).toBe("#1A1400");
+  });
 });

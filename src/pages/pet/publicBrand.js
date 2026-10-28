@@ -4,6 +4,8 @@
 // colours in its settings (salon_settings.primary_color / secondary_color) and the salon
 // booking page already uses them; the pet booking page does the same. Anything that is not
 // a plain hex colour is ignored and the standard Trimora Pet look is used instead.
+import { brandFor } from "./brands";
+import { GOLD, DARK } from "../../lib/constants";
 import { BACKGROUND, FOREGROUND, MUTED_FG, PRIMARY } from "./theme";
 
 var DARK_TEXT = "#1B1E24";
@@ -32,20 +34,34 @@ export function readableOn(hex) {
   return luminance(hex) > 0.4 ? DARK_TEXT : LIGHT_TEXT;
 }
 
+// New businesses are saved with the platform's gold and black defaults, which nobody chose. For a
+// business with a shipped brand preset those defaults must not hide its real brand colours.
+function chosenColour(v, hasPreset) {
+  var c = cleanHex(v);
+  if (c && hasPreset && (c === cleanHex(GOLD) || c === cleanHex(DARK))) return null;
+  return c;
+}
+
 export function publicBrand(salon) {
-  var primary = cleanHex(salon && salon.primary_color) || PRIMARY;
-  var secondary = cleanHex(salon && salon.secondary_color);
-  var bg = secondary || BACKGROUND;
+  // Businesses with a shipped preset (e.g. PawPals Kenya) get the same colours here as on their
+  // invoices. Colours the business saved itself in Settings always win over the preset.
+  var preset = brandFor(salon);
+  var ownPrimary = chosenColour(salon && salon.primary_color, !!preset);
+  var primary = ownPrimary || (preset && cleanHex(preset.primary)) || PRIMARY;
+  var secondary = chosenColour(salon && salon.secondary_color, !!preset);
+  var presetPage = !secondary && preset ? cleanHex(preset.page) : null;
+  var presetInk = presetPage ? cleanHex(preset.ink) : null;
+  var bg = secondary || presetPage || BACKGROUND;
   var dark = luminance(bg) <= 0.4;
   return {
     primary: primary,
     onPrimary: readableOn(primary),
     bg: bg,
-    onBg: secondary ? (dark ? LIGHT_TEXT : FOREGROUND) : FOREGROUND,
+    onBg: secondary ? (dark ? LIGHT_TEXT : FOREGROUND) : (presetInk || FOREGROUND),
     onBgMuted: secondary ? (dark ? "#C4C4C4" : MUTED_FG) : MUTED_FG,
     // On a dark page the brand colour doubles as the heading colour; on a light page the
     // text stays dark so it never gets hard to read.
-    accentOnBg: dark ? primary : (secondary ? FOREGROUND : FOREGROUND),
-    branded: !!(cleanHex(salon && salon.primary_color) || secondary),
+    accentOnBg: dark ? primary : (presetInk || FOREGROUND),
+    branded: !!(ownPrimary || secondary || preset),
   };
 }

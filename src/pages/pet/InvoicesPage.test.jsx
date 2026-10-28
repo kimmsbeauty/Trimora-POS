@@ -1,13 +1,25 @@
 import React from "react";
+import { invoiceSendConfig } from "./invoiceSend";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 var mockDb = vi.fn();
 var mockRpc = vi.fn();
+var mockPdf = { canShare: true, make: null, shared: [], downloaded: [] };
+vi.mock("./invoicePdf", () => ({
+  pdfFileName: function (inv) { return inv.invoice_number + ".pdf"; },
+  makeInvoicePdf: function () { return mockPdf.make ? mockPdf.make() : Promise.resolve(new File(["x"], "INV.pdf", { type: "application/pdf" })); },
+  canSharePdf: function () { return mockPdf.canShare; },
+  sharePdf: function (file, title, text) { mockPdf.shared.push({ file: file, title: title, text: text }); return Promise.resolve("shared"); },
+  downloadPdf: function (file) { mockPdf.downloaded.push(file); },
+}));
 vi.mock("../../lib/db", () => ({
   db: function () { return mockDb.apply(null, arguments); },
   dbRpcAuth: function () { return mockRpc.apply(null, arguments); },
 }));
 vi.mock("../../lib/SalonContext", () => ({ useSalon: function () { return { id: "s1", name: "Paws & Co", logo_url: "https://example.com/logo.png" }; } }));
+
+vi.mock("../../lib/deviceAuth", () => ({ getValidAccessToken: function () { return Promise.resolve("tok"); } }));
+vi.mock("../../lib/constants", () => ({ SUPABASE_URL: "https://x.supabase.co", SUPABASE_KEY: "anon" }));
 
 import InvoicesPage from "./InvoicesPage";
 
@@ -26,6 +38,8 @@ function setup(opts) {
     if (table === "pet_invoices") return Promise.resolve(opts.invoices || [inv()]);
     if (table === "customers") return Promise.resolve([{ id: "c1", name: "Wanjiru Kamau", phone: "0712345678" }]);
     if (table === "pet_pets") return Promise.resolve([{ id: "p1", name: "Simba", species: "Dog" }]);
+    if (table === "pet_invoice_messages") return Promise.resolve(opts.messages || []);
+    if (table === "pet_customer_profiles") return Promise.resolve(opts.profiles || [{ customer_id: "c1", email: "wanjiru@example.com" }]);
     return Promise.resolve(null);
   });
   mockRpc.mockImplementation(function (fn, args) {
@@ -319,6 +333,182 @@ describe("InvoicesPage", function () {
       fireEvent.click(await screen.findByLabelText("Open invoice INV-0009"));
       expect(await screen.findByText("REFUNDS")).toBeTruthy();
       expect(screen.getByText("Kept after refunds")).toBeTruthy();
+    });
+  });
+
+  describe("sending the invoice", function () {
+    var openSpy;
+    function reply(ok, body) { global.fetch = vi.fn().mockResolvedValue({ ok: ok, json: function () { return Promise.resolve(body); } }); }
+    beforeEach(function () { openSpy = vi.spyOn(window, "open").mockImplementation(function () { return null; }); });
+    afterEach(function () { openSpy.mockRestore(); invoiceSendConfig.serverSend = false; mockPdf.canShare = true; mockPdf.make = null; mockPdf.shared = []; mockPdf.downloaded = []; });
+
+    it("attaches the invoice PDF through the phone's share sheet", async function () {
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "Email" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Share invoice PDF" }));
+      await waitFor(function () { expect(mockPdf.shared.length).toBe(1); });
+      expect(mockPdf.shared[0].file.type).toBe("application/pdf");
+      expect(mockPdf.shared[0].text).toMatch(/INV-0009|Simba|KES/);
+    });
+
+    it("offers a PDF download where files can't be shared (desktop)", async function () {
+      mockPdf.canShare = false;
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Download PDF" }));
+      expect(mockPdf.downloaded.length).toBe(1);
+      expect(screen.queryByRole("button", { name: "Share invoice PDF" })).toBeNull();
+    });
+
+    it("shows 'Preparing PDF' until it is ready, and still allows the text-only message if the PDF fails", async function () {
+      mockPdf.make = function () { return Promise.reject(new Error("nope")); };
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      expect(await screen.findByText(/PDF could not be made here/)).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Share invoice PDF" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Open in my WhatsApp (no PDF)" }));
+      expect(openSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("by default opens the customer's WhatsApp with the invoice, sending nothing from the server", async function () {
+      global.fetch = vi.fn();
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      var input = await screen.findByLabelText("Send to this WhatsApp number");
+      expect(input.value).toBe("0712345678");
+      expect(screen.queryByRole("button", { name: "Send WhatsApp" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Open in my WhatsApp (no PDF)" }));
+      expect(openSpy).toHaveBeenCalledTimes(1);
+      expect(openSpy.mock.calls[0][0].indexOf("https://wa.me/254712345678?text=")).toBe(0);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it("by default opens the staff member's own email app, addressed to the customer", async function () {
+      global.fetch = vi.fn();
+      var hrefSet = null;
+      var realLocation = window.location;
+      delete window.location;
+      window.location = { get href() { return "http://localhost/"; }, set href(v) { hrefSet = v; } };
+      try {
+        setup({ open: "i1" });
+        fireEvent.click(await screen.findByRole("button", { name: "Email" }));
+        expect((await screen.findByLabelText("Send to this email address")).value).toBe("wanjiru@example.com");
+        fireEvent.click(screen.getByRole("button", { name: "Open in my email app (no PDF)" }));
+        expect(hrefSet.indexOf("mailto:wanjiru@example.com?subject=")).toBe(0);
+        expect(global.fetch).not.toHaveBeenCalled();
+      } finally { window.location = realLocation; }
+    });
+
+    it("by default cannot open the email app with no address, and loads no send history", async function () {
+      setup({ open: "i1", profiles: [] });
+      fireEvent.click(await screen.findByRole("button", { name: "Email" }));
+      expect(await screen.findByText(/no email on file/)).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Open in my email app (no PDF)" }).disabled).toBe(true);
+      expect(mockDb.mock.calls.some(function (c) { return c[1] === "pet_invoice_messages"; })).toBe(false);
+    });
+
+    describe("with server sending switched on", function () {
+    beforeEach(function () { invoiceSendConfig.serverSend = true; });
+    it("shows Email and WhatsApp next to Print", async function () {
+      setup({ open: "i1" });
+      expect(await screen.findByRole("button", { name: "Email" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "WhatsApp" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Print" })).toBeTruthy();
+    });
+
+    it("sends by WhatsApp through the server, to the customer's number, after a confirm step", async function () {
+      reply(true, { success: true, recipient: "254712345678" });
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      var input = await screen.findByLabelText("Send to this WhatsApp number");
+      expect(input.value).toBe("0712345678");
+      expect(global.fetch).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: "Send WhatsApp" }));
+      await waitFor(function () { expect(global.fetch).toHaveBeenCalledTimes(1); });
+      expect(global.fetch.mock.calls[0][0]).toBe("https://x.supabase.co/functions/v1/pet-send-invoice");
+      expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toEqual({ salon_id: "s1", invoice_id: "i1", channel: "whatsapp", to: "0712345678" });
+      expect(await screen.findByText(/Sent to 0712345678/)).toBeTruthy();
+      expect(openSpy).not.toHaveBeenCalled();
+    });
+
+    it("sends by email to the address on the customer's profile and lets staff correct it", async function () {
+      reply(true, { success: true, recipient: "new@example.com" });
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "Email" }));
+      var input = await screen.findByLabelText("Send to this email address");
+      expect(input.value).toBe("wanjiru@example.com");
+      fireEvent.change(input, { target: { value: "new@example.com" } });
+      fireEvent.click(screen.getByRole("button", { name: "Send email" }));
+      await waitFor(function () { expect(global.fetch).toHaveBeenCalledTimes(1); });
+      expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toMatchObject({ channel: "email", to: "new@example.com" });
+    });
+
+    it("cannot send with no address, and says why", async function () {
+      reply(true, { success: true });
+      setup({ open: "i1", profiles: [] });
+      fireEvent.click(await screen.findByRole("button", { name: "Email" }));
+      expect(await screen.findByText(/no email on file/)).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Send email" }).disabled).toBe(true);
+    });
+
+    it("shows a plain-language error and sends nothing more when the server refuses", async function () {
+      reply(false, { error: "WHATSAPP_WINDOW_CLOSED" });
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Send WhatsApp" }));
+      expect(await screen.findByText(/only lets us message this customer after they have written/)).toBeTruthy();
+      expect(screen.queryByText(/Sent to/)).toBeNull();
+    });
+
+    it("when the send function isn't deployed (platform 404), offers the customer's own app straight away", async function () {
+      global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404, json: function () { return Promise.resolve({ code: "NOT_FOUND", message: "Requested function was not found" }); } });
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Send WhatsApp" }));
+      expect(await screen.findByText(/isn't switched on yet/)).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Open in my WhatsApp" })).toBeTruthy();
+    });
+
+    it("still reports INVOICE_NOT_FOUND from the function as an invoice problem, not a missing function", async function () {
+      global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404, json: function () { return Promise.resolve({ error: "INVOICE_NOT_FOUND" }); } });
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Send WhatsApp" }));
+      expect(await screen.findByText(/invoice could not be found/)).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Open in my WhatsApp" })).toBeNull();
+    });
+
+    it("when server sending isn't set up, offers to open the customer's own app instead", async function () {
+      reply(false, { error: "NOT_CONFIGURED" });
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Send WhatsApp" }));
+      expect(await screen.findByText(/isn't switched on yet/)).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Send WhatsApp" }).disabled).toBe(true);
+      fireEvent.click(screen.getByRole("button", { name: "Open in my WhatsApp" }));
+      expect(openSpy).toHaveBeenCalledTimes(1);
+      expect(openSpy.mock.calls[0][0].indexOf("https://wa.me/254712345678?text=")).toBe(0);
+    });
+
+    it("warns when the invoice was already sent and relabels the button", async function () {
+      reply(true, { success: true });
+      setup({ open: "i1", messages: [{ channel: "email", recipient: "wanjiru@example.com", status: "sent", created_at: "2026-10-26T08:00:00Z" }] });
+      fireEvent.click(await screen.findByRole("button", { name: "Email" }));
+      expect(await screen.findByText(/Already sent by email to wanjiru@example.com/)).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Send again" })).toBeTruthy();
+    });
+
+    });
+
+    it("still loads invoices when customer emails can't be fetched", async function () {
+      mockDb.mockImplementation(function (method, table) {
+        if (table === "pet_invoices") return Promise.resolve([inv()]);
+        if (table === "customers") return Promise.resolve([{ id: "c1", name: "Wanjiru Kamau", phone: "0712345678" }]);
+        if (table === "pet_pets") return Promise.resolve([{ id: "p1", name: "Simba", species: "Dog" }]);
+        return Promise.resolve(null);
+      });
+      render(<InvoicesPage openInvoiceId="i1" />);
+      expect(await screen.findByRole("button", { name: "Email" })).toBeTruthy();
     });
   });
 });
