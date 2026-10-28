@@ -12,6 +12,7 @@ import { MUTED_FG, BORDER, FOREGROUND } from "./theme";
 import { validateSettings, settingsRow } from "./settingsData";
 import ReminderSettings from "./ReminderSettings";
 import PublicBookingSettings from "./PublicBookingSettings";
+import GoogleCalendarSettings from "./GoogleCalendarSettings";
 import { PageHeader, Card, Button, Field, ErrorLine, inputStyle } from "./ui";
 
 function defaultReload() { try { window.location.reload(); } catch (e) { /* ignore */ } }
@@ -86,6 +87,7 @@ export default function SettingsPage({ onSaved }) {
       </Card>
       <ReminderSettings />
       <PublicBookingSettings />
+      <GoogleCalendarSettings />
     </div>
   );
 }
