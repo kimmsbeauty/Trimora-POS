@@ -355,8 +355,9 @@ describe("InvoicesPage", function () {
       mockPdf.canShare = false;
       setup({ open: "i1" });
       fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
-      fireEvent.click(await screen.findByRole("button", { name: "Download PDF" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Download PDF & open WhatsApp" }));
       expect(mockPdf.downloaded.length).toBe(1);
+      expect(openSpy).toHaveBeenCalledTimes(1); // the customer's chat opens in the same tap
       expect(screen.queryByRole("button", { name: "Share invoice PDF" })).toBeNull();
     });
 
