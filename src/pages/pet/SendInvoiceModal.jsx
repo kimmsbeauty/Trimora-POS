@@ -12,7 +12,7 @@ import { fmt } from "../../lib/utils";
 import { MUTED_FG, FOREGROUND } from "./theme";
 import { outstanding } from "./invoiceData";
 import { sendInvoice, invoiceSendConfig } from "./invoiceSend";
-import { makeInvoicePdf, canSharePdf, sharePdf, downloadPdf, pdfFileName } from "./invoicePdf";
+import { makeInvoicePdf, canSharePdf, isPhoneLike, sharePdf, downloadPdf, pdfFileName } from "./invoicePdf";
 import { buildInvoiceMessage, invoiceSubject, whatsappUrl, mailtoUrl } from "./invoiceShare";
 import { Button, Field, ErrorLine, Modal, Badge, inputStyle } from "./ui";
 
@@ -64,11 +64,17 @@ export default function SendInvoiceModal({ invoice, customer, pet, salon, email,
   }
 
   var pdfReady = pdf && pdf !== "failed";
-  var canShare = pdfReady && canSharePdf(pdf);
+  var canShare = pdfReady && isPhoneLike() && canSharePdf(pdf);
   async function shareWithPdf() {
     var message = buildInvoiceMessage(invoice, customer, pet, salon);
     var r = await sharePdf(pdf, invoiceSubject(invoice, salon), message);
     if (r === "failed" && alive.current) setErr("Could not open the share menu. Use the download button instead.");
+  }
+  // Computers can't attach a file to a chat or email from a link, so: download the PDF, open the
+  // customer's chat / email in the same tap, and the user attaches the downloaded file (paperclip).
+  function downloadAndOpen() {
+    downloadPdf(pdf);
+    if (to.trim()) openInMyApp();
   }
   var ownAppLabel = isEmail ? "Open in my email app" : "Open in my WhatsApp";
   var done = phase === "sent";
@@ -78,7 +84,7 @@ export default function SendInvoiceModal({ invoice, customer, pet, salon, email,
       <Button variant="outline" onClick={function () { openInMyApp(); }} disabled={!to.trim()}>{ownAppLabel + " (no PDF)"}</Button>
       {pdf === null ? <Button disabled>Preparing PDF…</Button> : null}
       {canShare ? <Button onClick={shareWithPdf}>Share invoice PDF</Button> : null}
-      {pdfReady && !canShare ? <Button onClick={function () { downloadPdf(pdf); }}>Download PDF</Button> : null}
+      {pdfReady && !canShare ? <Button onClick={downloadAndOpen}>{"Download PDF & open " + (isEmail ? "email" : "WhatsApp")}</Button> : null}
     </>
   ) : done ? <Button onClick={onClose}>Done</Button> : (
     <>
@@ -107,8 +113,7 @@ export default function SendInvoiceModal({ invoice, customer, pet, salon, email,
           {serverSend && sentBefore ? <Badge tone="warning">Already sent by {sentBefore.channel === "email" ? "email" : "WhatsApp"} to {sentBefore.recipient} on {when(sentBefore.created_at)}</Badge> : null}
           {!serverSend ? <div style={{ fontSize: 13, color: MUTED_FG }}>
             {canShare ? "Tap Share invoice PDF, then choose " + (isEmail ? "Gmail or your email app" : "WhatsApp") + ": the PDF is attached and the message is written. " + (to.trim() ? "Send it to " + to.trim() + "." : "")
-              : pdfReady ? "This device can't attach a PDF in one step. Download the PDF, then attach it in your " + (isEmail ? "email" : "WhatsApp") + " app (or use the no-PDF button for a message only)."
-              : pdf === "failed" ? "The PDF could not be made here. You can still send the message without it."
+              : pdfReady ? "A computer can't attach a PDF by itself. Tap the button: the PDF downloads and your " + (isEmail ? "email" : "WhatsApp") + " opens. Then click the paperclip and attach the invoice PDF from your Downloads folder before you send." : pdf === "failed" ? "The PDF could not be made here. You can still send the message without it."
               : "Getting the PDF ready…"}
           </div> : null}
           {phase === "unavailable" ? <div style={{ fontSize: 13, color: MUTED_FG }}>You can still open the message in your own {isEmail ? "email" : "WhatsApp"} app and press send there.</div> : null}

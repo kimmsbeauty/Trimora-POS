@@ -291,4 +291,12 @@ describe("BoardingPage", function () {
     fireEvent.click(await screen.findByRole("button", { name: "Delete kennel" }));
     expect(await screen.findByText(/stay history, so it can't be deleted/)).toBeTruthy();
   });
+
+  it("only treats a stay as already invoiced while its invoice is live: void and fully refunded invoices free it", async function () {
+    setup();
+    await screen.findByLabelText("Check out Simba");
+    var q = mockDb.mock.calls.filter(function (c) { return c[1] === "pet_invoices"; })[0][3];
+    expect(q).toContain("status=not.in.(void,refunded)");
+    expect(q).not.toContain("status=neq.void");
+  });
 });

@@ -4,10 +4,11 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 var mockDb = vi.fn();
 var mockRpc = vi.fn();
-var mockPdf = { canShare: true, make: null, shared: [], downloaded: [] };
+var mockPdf = { phone: true, canShare: true, make: null, shared: [], downloaded: [] };
 vi.mock("./invoicePdf", () => ({
   pdfFileName: function (inv) { return inv.invoice_number + ".pdf"; },
   makeInvoicePdf: function () { return mockPdf.make ? mockPdf.make() : Promise.resolve(new File(["x"], "INV.pdf", { type: "application/pdf" })); },
+  isPhoneLike: function () { return mockPdf.phone; },
   canSharePdf: function () { return mockPdf.canShare; },
   sharePdf: function (file, title, text) { mockPdf.shared.push({ file: file, title: title, text: text }); return Promise.resolve("shared"); },
   downloadPdf: function (file) { mockPdf.downloaded.push(file); },
@@ -340,7 +341,7 @@ describe("InvoicesPage", function () {
     var openSpy;
     function reply(ok, body) { global.fetch = vi.fn().mockResolvedValue({ ok: ok, json: function () { return Promise.resolve(body); } }); }
     beforeEach(function () { openSpy = vi.spyOn(window, "open").mockImplementation(function () { return null; }); });
-    afterEach(function () { openSpy.mockRestore(); invoiceSendConfig.serverSend = false; mockPdf.canShare = true; mockPdf.make = null; mockPdf.shared = []; mockPdf.downloaded = []; });
+    afterEach(function () { openSpy.mockRestore(); invoiceSendConfig.serverSend = false; mockPdf.phone = true; mockPdf.canShare = true; mockPdf.make = null; mockPdf.shared = []; mockPdf.downloaded = []; });
 
     it("attaches the invoice PDF through the phone's share sheet", async function () {
       setup({ open: "i1" });
@@ -351,12 +352,21 @@ describe("InvoicesPage", function () {
       expect(mockPdf.shared[0].text).toMatch(/INV-0009|Simba|KES/);
     });
 
+    it("on a computer uses download-and-open even if the browser could share files", async function () {
+      mockPdf.phone = false; mockPdf.canShare = true;
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      expect(await screen.findByRole("button", { name: "Download PDF & open WhatsApp" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Share invoice PDF" })).toBeNull();
+    });
+
     it("offers a PDF download where files can't be shared (desktop)", async function () {
       mockPdf.canShare = false;
       setup({ open: "i1" });
       fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
-      fireEvent.click(await screen.findByRole("button", { name: "Download PDF" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Download PDF & open WhatsApp" }));
       expect(mockPdf.downloaded.length).toBe(1);
+      expect(openSpy).toHaveBeenCalledTimes(1); // the customer's chat opens in the same tap
       expect(screen.queryByRole("button", { name: "Share invoice PDF" })).toBeNull();
     });
 
