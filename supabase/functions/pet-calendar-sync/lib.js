@@ -110,6 +110,8 @@ export function bookingEvent(b, ctx) {
 export function stayEvent(s, ctx) {
   var c = ctx || {};
   var tz = c.timezone || DEFAULT_TZ;
+  // A same-day stay (check-out on the check-in day) is day camp / day care, not an overnight boarding.
+  var sameDay = String(s.check_in_on).slice(0, 10) === String(s.check_out_on).slice(0, 10);
   var lines = [
     "Check-in: " + prettyDate(s.check_in_on),
     "Check-out: " + prettyDate(s.check_out_on),
@@ -122,9 +124,9 @@ export function stayEvent(s, ctx) {
   var outAt = s.checked_out_at ? localParts(s.checked_out_at, tz) : null;
   if (inAt) lines.push("Checked in at: " + prettyDate(inAt.date) + " " + inAt.time);
   if (outAt) lines.push("Checked out at: " + prettyDate(outAt.date) + " " + outAt.time);
-  lines.push("Boarding ref: " + shortRef(s.id), "", FOOTER);
+  lines.push((sameDay ? "Day camp ref: " : "Boarding ref: ") + shortRef(s.id), "", FOOTER);
   return {
-    summary: eventTitle("Boarding", c.petName, c.ownerName),
+    summary: eventTitle(sameDay ? "Day camp" : "Boarding", c.petName, c.ownerName),
     description: lines.join("\n"),
     start: { date: String(s.check_in_on).slice(0, 10) },
     end: { date: addDays(s.check_out_on, 1) },
