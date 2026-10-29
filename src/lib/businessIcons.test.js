@@ -25,11 +25,13 @@ describe("business icon files", function () {
       var p = businessIconPaths(slug);
       expect(pngInfo(path.join(ROOT, "public", p.icon192)).size).toBe("192x192");
       expect(pngInfo(path.join(ROOT, "public", p.icon512)).size).toBe("512x512");
+      expect(pngInfo(path.join(ROOT, "public", p.maskable192)).size).toBe("192x192");
+      expect(pngInfo(path.join(ROOT, "public", p.maskable512)).size).toBe("512x512");
       expect(pngInfo(path.join(ROOT, "public", p.apple)).size).toBe("180x180");
     });
     it(slug + " icons are opaque (iPhone fills transparency with black)", function () {
       var p = businessIconPaths(slug);
-      [p.icon192, p.icon512, p.apple].forEach(function (f) {
+      [p.icon192, p.icon512, p.maskable192, p.maskable512, p.apple].forEach(function (f) {
         var t = pngInfo(path.join(ROOT, "public", f)).colorType;
         expect([2, 3]).toContain(t); // 2 = RGB, 3 = palette; never 4/6 (alpha)
       });
@@ -48,8 +50,10 @@ describe("manifest icons", function () {
     var m = buildPetManifest("Pawpalske", "pawpalske");
     expect(m.icons.map(function (i) { return i.src; })).toEqual([
       "/business-icons/pawpalske/icon-192.png", "/business-icons/pawpalske/icon-512.png",
+      "/business-icons/pawpalske/maskable-192.png", "/business-icons/pawpalske/maskable-512.png",
     ]);
-    expect(m.icons.map(function (i) { return i.sizes; })).toEqual(["192x192", "512x512"]);
+    expect(m.icons.map(function (i) { return i.sizes; })).toEqual(["192x192", "512x512", "192x192", "512x512"]);
+    expect(m.icons.map(function (i) { return i.purpose; })).toEqual(["any", "any", "maskable", "maskable"]);
   });
   it("keeps the shared Trimora icons for everyone else", function () {
     expect(buildPetManifest("Happy Paws", "happy-paws").icons).toEqual(BASE_MANIFEST.icons);

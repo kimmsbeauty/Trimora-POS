@@ -46,6 +46,8 @@ export function buildPetManifest(rawName, slug) {
     m.icons = [
       { src: icons.icon192, sizes: "192x192", type: "image/png", purpose: "any" },
       { src: icons.icon512, sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: icons.maskable192, sizes: "192x192", type: "image/png", purpose: "maskable" },
+      { src: icons.maskable512, sizes: "512x512", type: "image/png", purpose: "maskable" },
     ];
   }
   return m;
