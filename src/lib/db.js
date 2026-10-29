@@ -26,6 +26,7 @@ export const TENANT_TABLES = new Set([
   "pet_loyalty_settings", "pet_loyalty_rewards", "pet_loyalty_accounts", "pet_loyalty_ledger", "pet_loyalty_redemptions",
   "pet_reminder_settings", "pet_photos",
   "pet_daycare_settings", "pet_daycare_visits", "pet_daycare_care_logs",
+  "salon_phone_numbers",
 ]);
 
 // See usage in dbDirect() below (M4 fail-closed guard): tables in this

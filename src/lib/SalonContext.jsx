@@ -120,6 +120,12 @@ export function SalonGate({ mode, children }) {
           var settingsRows = await db("GET", "salon_settings", null, "?salon_id=eq." + encodeURIComponent(resolvedSalon.id) + "&limit=1");
           if (cancelled) return;
 
+          // Business phone numbers (migration 117). Null when the table is not there yet or the call failed:
+          // consumers then fall back to contact_phone, so an invoice never loses its number.
+          var phoneRows = await db("GET", "salon_phone_numbers", null, "?select=phone,show_on_invoice,position&order=position.asc,created_at.asc&limit=200");
+          if (cancelled) return;
+          if (Array.isArray(phoneRows)) resolvedSalon = Object.assign({}, resolvedSalon, { phones: phoneRows });
+
           if (settingsRows && settingsRows.length > 0) {
             resolvedSalon = Object.assign({}, resolvedSalon, {
               primary_color:        settingsRows[0].primary_color,
@@ -138,6 +144,7 @@ export function SalonGate({ mode, children }) {
               tax_rate: settingsRows[0].tax_rate != null ? settingsRows[0].tax_rate : 16,
               tax_pin: settingsRows[0].tax_pin || null,
               receipt_footer_message: settingsRows[0].receipt_footer_message || null,
+              invoice_prefix: settingsRows[0].invoice_prefix || null,
               receipt_show_staff: settingsRows[0].receipt_show_staff !== false,
               receipt_show_vehicle: settingsRows[0].receipt_show_vehicle !== false,
             });

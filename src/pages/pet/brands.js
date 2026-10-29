@@ -23,7 +23,6 @@ var PRESETS = [
       location: "Nairobi, Kenya",
       email: "info@pawpalskenya.co.ke",
       website: "www.pawpalskenya.co.ke",
-      phone: "+254 700 123 456",
       thanks: "Thank you for trusting PawPals Kenya with your pet.",
     },
   },
@@ -32,6 +31,18 @@ var PRESETS = [
 export function brandFor(salon) {
   for (var i = 0; i < PRESETS.length; i++) if (PRESETS[i].match(salon)) return PRESETS[i].brand;
   return null;
+}
+
+// Phone numbers to print on an invoice: the owner's own list (Settings), only the ones switched on.
+// When the list has not been loaded at all (older callers), fall back to the single saved contact number.
+// No number is built in: a business shows exactly what its owner entered.
+export function invoicePhones(salon) {
+  var s = salon || {};
+  if (Array.isArray(s.phones)) {
+    return s.phones.filter(function (p) { return p && p.show_on_invoice !== false && String(p.phone || "").trim(); })
+      .map(function (p) { return String(p.phone).trim(); });
+  }
+  return s.contact_phone ? [String(s.contact_phone).trim()] : [];
 }
 
 // Merge a salon with its preset: the salon's own saved values win.
@@ -50,7 +61,7 @@ export function resolveBrand(salon, defaults) {
     location: p.location || "",
     email: p.email || "",
     website: p.website || "",
-    phone: s.contact_phone || p.phone || "",
+    phones: invoicePhones(s),
     thanks: s.receipt_footer_message || p.thanks || "Thank you for your business.",
     isPreset: presetColours,
   };

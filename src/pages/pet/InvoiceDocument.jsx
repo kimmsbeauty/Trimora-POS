@@ -11,7 +11,7 @@ import { fmt } from "../../lib/utils";
 import {
   FOREGROUND, MUTED_FG, BORDER, CARD, PRIMARY, INFO, DESTRUCTIVE, FONT_BODY,
 } from "./theme";
-import { PAWPALS_NAVY, PAWPALS_TINT, PAWPALS_TINT_BORDER, PAWPALS_PURPLE_TINT } from "./brandColors";
+import { PAWPALS_TINT, PAWPALS_TINT_BORDER, PAWPALS_PURPLE_TINT } from "./brandColors";
 import { METHOD_LABELS, STATUS_LABELS, displayStatus, outstanding, netPaid } from "./invoiceData";
 import { sortedRefunds } from "./receiptData";
 
@@ -49,40 +49,42 @@ export default function InvoiceDocument({ invoice, customer, pet, salon }) {
   var row = { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, padding: "7px 0", borderBottom: "1px solid " + PAWPALS_TINT_BORDER };
   var panel = { background: PAWPALS_TINT, borderRadius: 12, padding: "14px 18px" };
   var heading = { fontSize: 15, fontWeight: 800, color: accent, marginBottom: 8 };
-  var contactRow = { display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: ink, marginTop: 5 };
+  var contactRow = { display: "flex", alignItems: "flex-start", gap: 6, fontSize: 11, color: ink, marginTop: 4, lineHeight: 1.3 };
+  var contactText = { minWidth: 0, overflowWrap: "anywhere" };
   var th = { padding: "10px 12px", fontWeight: 800, color: ink };
 
   return (
     <div className="invoice-print" style={{ background: CARD, color: ink, border: "1px solid " + BORDER, borderRadius: 12, padding: 24, position: "relative", fontFamily: FONT_BODY }}>
       <style>{PRINT_CSS}</style>
 
-      {/* Header: logo | business details | INVOICE + number + status */}
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 20, flexWrap: "wrap", paddingBottom: 16, borderBottom: "2px solid " + PAWPALS_TINT_BORDER }}>
-        <div style={{ display: "flex", gap: 16, alignItems: "stretch", minWidth: 0, flex: "1 1 360px" }}>
-          {hasLogo ? (
-            <img src={brand.logo} alt={brand.name + " logo"} onError={function () { setLogoFailed(true); }}
-              style={{ width: 150, maxHeight: 130, objectFit: "contain", display: "block", alignSelf: "center" }} />
-          ) : null}
-          {hasLogo ? <div style={{ width: 2, background: accent, opacity: 0.35, borderRadius: 2 }} /> : null}
-          <div style={{ minWidth: 0, alignSelf: "center" }}>
-            <div style={{ fontSize: hasLogo ? 20 : 24, fontWeight: 800, color: ink }}>{brand.name}</div>
-            {brand.tagline ? <div style={{ fontSize: 13, color: MUTED_FG }}>{brand.tagline}</div> : null}
-            <div style={{ marginTop: 6 }}>
-              {brand.location ? <div style={contactRow}><InvoiceIcon name="pin" color={accent} />{brand.location}</div> : null}
-              {brand.phone ? <div style={contactRow}><InvoiceIcon name="phone" color={accent} />{brand.phone}</div> : null}
-              {brand.email ? <div style={contactRow}><InvoiceIcon name="mail" color={accent} />{brand.email}</div> : null}
-              {brand.website ? <div style={contactRow}><InvoiceIcon name="globe" color={accent} />{brand.website}</div> : null}
-              {invoice.tax_enabled && salon && salon.tax_pin ? <div style={{ fontSize: 12, color: MUTED_FG, marginTop: 5 }}>KRA PIN: {salon.tax_pin}</div> : null}
-            </div>
+      {/* Header: logo | business details. Everything is sized to fit the card, never cut off at the edge. */}
+      <div style={{ display: "flex", gap: 14, alignItems: "stretch", paddingBottom: 14 }}>
+        {hasLogo ? (
+          <img src={brand.logo} alt={brand.name + " logo"} onError={function () { setLogoFailed(true); }}
+            style={{ width: "40%", maxWidth: 150, minWidth: 0, maxHeight: 120, objectFit: "contain", display: "block", alignSelf: "center", flex: "0 1 auto" }} />
+        ) : null}
+        {hasLogo ? <div style={{ width: 2, background: accent, opacity: 0.35, borderRadius: 2, flex: "0 0 2px" }} /> : null}
+        <div style={{ minWidth: 0, flex: "1 1 0", alignSelf: "center", overflowWrap: "anywhere" }}>
+          <div style={{ fontSize: hasLogo ? 16 : 20, fontWeight: 800, color: ink, lineHeight: 1.2 }}>{brand.name}</div>
+          {brand.tagline ? <div style={{ fontSize: 11, color: MUTED_FG, lineHeight: 1.3 }}>{brand.tagline}</div> : null}
+          <div style={{ marginTop: 5 }}>
+            {brand.location ? <div style={contactRow}><InvoiceIcon name="pin" size={13} color={accent} /><span style={contactText}>{brand.location}</span></div> : null}
+            {brand.phones.map(function (ph) { return <div key={ph} style={contactRow}><InvoiceIcon name="phone" size={13} color={accent} /><span style={contactText}>{ph}</span></div>; })}
+            {brand.email ? <div style={contactRow}><InvoiceIcon name="mail" size={13} color={accent} /><span style={contactText}>{brand.email}</span></div> : null}
+            {brand.website ? <div style={contactRow}><InvoiceIcon name="globe" size={13} color={accent} /><span style={contactText}>{brand.website}</span></div> : null}
+            {invoice.tax_enabled && salon && salon.tax_pin ? <div style={{ fontSize: 11, color: MUTED_FG, marginTop: 4 }}>KRA PIN: {salon.tax_pin}</div> : null}
           </div>
         </div>
-        <div style={{ textAlign: "left", flex: "0 0 auto" }}>
-          <div style={{ fontSize: 38, fontWeight: 800, color: PAWPALS_NAVY, lineHeight: 1, letterSpacing: "0.01em" }}>INVOICE</div>
-          <div style={{ fontSize: 14, marginTop: 10, color: ink }}>Invoice No.</div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: ink }}>{invoice.invoice_number}</div>
-          <div style={{ display: "inline-block", marginTop: 8, padding: "5px 22px", borderRadius: 999, background: pillColor, color: CARD, fontSize: 13, fontWeight: 800, letterSpacing: "0.04em" }}>
-            {STATUS_LABELS[status].toUpperCase()}
-          </div>
+      </div>
+
+      {/* Invoice number + status */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "12px 0", borderTop: "2px solid " + PAWPALS_TINT_BORDER, borderBottom: "2px solid " + PAWPALS_TINT_BORDER }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 12, color: MUTED_FG }}>Invoice No.</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: ink, overflowWrap: "anywhere" }}>{invoice.invoice_number}</div>
+        </div>
+        <div style={{ display: "inline-block", padding: "5px 20px", borderRadius: 999, background: pillColor, color: CARD, fontSize: 13, fontWeight: 800, letterSpacing: "0.04em" }}>
+          {STATUS_LABELS[status].toUpperCase()}
         </div>
       </div>
 
@@ -206,9 +208,9 @@ export default function InvoiceDocument({ invoice, customer, pet, salon }) {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, color: accent, fontSize: 20, fontFamily: "'Dancing Script', 'Brush Script MT', cursive", fontWeight: 600 }}>
           <InvoiceIcon name="paw" size={22} color={accent} /><span>{brand.thanks}</span>
         </div>
-        {brand.phone || brand.email || brand.website ? (
+        {brand.phones.length || brand.email || brand.website ? (
           <div style={{ display: "flex", justifyContent: "center", gap: 18, flexWrap: "wrap", marginTop: 10, fontSize: 12, color: ink }}>
-            {brand.phone ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><InvoiceIcon name="phone" size={14} color={accent} />{brand.phone}</span> : null}
+            {brand.phones.length ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><InvoiceIcon name="phone" size={14} color={accent} />{brand.phones.join(" · ")}</span> : null}
             {brand.email ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><InvoiceIcon name="mail" size={14} color={accent} />{brand.email}</span> : null}
             {brand.website ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><InvoiceIcon name="globe" size={14} color={accent} />{brand.website}</span> : null}
           </div>

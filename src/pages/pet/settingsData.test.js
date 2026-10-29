@@ -1,4 +1,4 @@
-import { isValidLogoUrl, validateSettings, settingsRow } from "./settingsData";
+import { isValidLogoUrl, validateSettings, settingsRow, derivePrefix, normalizePrefix, invoiceNumberPreview, validatePhone, validatePhones, phonesPayload } from "./settingsData";
 
 var ok = { logo_url: "https://example.com/logo.png", tagline: "", contact_phone: "", tax_enabled: false, tax_rate: "16", tax_pin: "", receipt_footer_message: "" };
 
@@ -34,5 +34,52 @@ describe("settingsRow", function () {
   it("nulls blanks and uppercases the PIN", function () {
     var r = settingsRow(Object.assign({}, ok, { logo_url: " ", tax_enabled: true, tax_rate: "16", tax_pin: " p051234567a " }));
     expect(r.logo_url).toBeNull(); expect(r.tax_pin).toBe("P051234567A"); expect(r.tax_rate).toBe(16); expect(r.tax_enabled).toBe(true);
+  });
+});
+
+describe("invoice prefix", function () {
+  it("is derived from the full business name, letters and digits only", function () {
+    expect(derivePrefix("Pawpalske")).toBe("PAWPALSKE");
+    expect(derivePrefix("Paws & Co. 2")).toBe("PAWSCO2");
+    expect(derivePrefix("")).toBe("");
+    expect(derivePrefix("a".repeat(40)).length).toBe(20);
+  });
+  it("normalizes what the owner types and previews the next number", function () {
+    expect(normalizePrefix(" paw-pals! ")).toBe("PAWPALS");
+    expect(invoiceNumberPreview("pawpals", "Pawpalske")).toBe("PAWPALS-INV-0001");
+    expect(invoiceNumberPreview("", "Pawpalske")).toBe("PAWPALSKE-INV-0001");
+    expect(invoiceNumberPreview("", "")).toBe("INV-0001");
+  });
+  it("saves the prefix as null when blank", function () {
+    expect(settingsRow(Object.assign({}, ok, { invoice_prefix: "" })).invoice_prefix).toBeNull();
+    expect(settingsRow(Object.assign({}, ok, { invoice_prefix: "pawpals" })).invoice_prefix).toBe("PAWPALS");
+  });
+  it("rejects a prefix with symbols", function () {
+    expect(validateSettings(Object.assign({}, ok, { invoice_prefix: "PAW-PALS" }))).toMatch(/prefix/);
+    expect(validateSettings(Object.assign({}, ok, { invoice_prefix: "PAWPALS" }))).toBe("");
+  });
+});
+
+describe("business phone numbers", function () {
+  it("accepts normal Kenyan formats and rejects junk", function () {
+    expect(validatePhone("0712 345 678")).toBe("");
+    expect(validatePhone("+254 712 345 678")).toBe("");
+    expect(validatePhone("12345")).not.toBe("");
+    expect(validatePhone("call me maybe")).not.toBe("");
+  });
+  it("has no limit on how many numbers there can be", function () {
+    var many = [];
+    for (var i = 0; i < 30; i++) many.push({ phone: "07" + String(10000000 + i), show_on_invoice: true });
+    expect(validatePhones(many)).toBe("");
+  });
+  it("refuses the same number twice, however it is written", function () {
+    expect(validatePhones([{ phone: "0712 345 678" }, { phone: "0712-345-678" }])).toMatch(/twice/);
+  });
+  it("is checked as part of the settings", function () {
+    expect(validateSettings(Object.assign({}, ok, { phones: [{ phone: "12", show_on_invoice: true }] }))).toMatch(/valid phone/);
+  });
+  it("builds the payload with the show-on-invoice switch", function () {
+    expect(phonesPayload([{ phone: " 0712345678 ", show_on_invoice: false }, { phone: "0722345678" }]))
+      .toEqual([{ phone: "0712345678", show_on_invoice: false }, { phone: "0722345678", show_on_invoice: true }]);
   });
 });

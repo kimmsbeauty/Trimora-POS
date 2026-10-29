@@ -6,6 +6,7 @@
 // the text filled in; nothing is sent by Trimora and no file is attached.
 import { fmt, normalizePhoneForWhatsApp } from "../../lib/utils";
 import { STATUS_LABELS, displayStatus, outstanding } from "./invoiceData";
+import { invoicePhones } from "./brands";
 
 function dateLabel(iso) {
   if (!iso) return "";
@@ -54,7 +55,8 @@ export function buildInvoiceMessage(invoice, customer, pet, salon) {
   if (invoice.notes) { out.push(""); out.push(invoice.notes); }
   out.push("");
   out.push((salon && salon.receipt_footer_message) || "Thank you for your business.");
-  if (salon && salon.name) out.push(salon.name + (salon.contact_phone ? " - Tel: " + salon.contact_phone : ""));
+  var tel = invoicePhones(salon);
+  if (salon && salon.name) out.push(salon.name + (tel.length ? " - Tel: " + tel.join(", ") : ""));
   return out.join("\n");
 }
 

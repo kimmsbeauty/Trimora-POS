@@ -52,6 +52,8 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
   var pinValState = useState(""); var pinVal = pinValState[0]; var setPinVal = pinValState[1];
   var pinErrState = useState(""); var pinErr = pinErrState[0]; var setPinErr = pinErrState[1];
   var pinResolver = useRef(null);
+  var delState = useState(null); var deleting = delState[0]; var setDeleting = delState[1]; // {id, number, typed}
+  var pinWhyState = useState("record this refund"); var pinWhy = pinWhyState[0]; var setPinWhy = pinWhyState[1];
   var sendState = useState(null); var sendChannel = sendState[0]; var setSendChannel = sendState[1]; // "email" | "whatsapp" | null
 
   useEffect(function () { if (openInvoiceId) setDetailId(openInvoiceId); }, [openInvoiceId]);
@@ -108,7 +110,7 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
   var totals = summarize(all);
   var detail = detailId ? all.filter(function (i) { return i.id === detailId; })[0] : null;
   function setF(k, v) { var o = {}; o[k] = v; setFilters(Object.assign({}, filters, o)); setShown(PAGE); }
-  function closeDetail() { setSendChannel(null); if (!saving && !refunding && !pinAsk) { setDetailId(null); setReceiptId(null); setRefundReceiptId(null); setJustRefunded(null); setJustPaid(false); setErr(""); setPay({ method: "cash", amount: "", reference: "" }); if (onDetailClosed) onDetailClosed(); } }
+  function closeDetail() { setSendChannel(null); if (!saving && !refunding && !deleting && !pinAsk) { setDetailId(null); setReceiptId(null); setRefundReceiptId(null); setJustRefunded(null); setJustPaid(false); setErr(""); setPay({ method: "cash", amount: "", reference: "" }); if (onDetailClosed) onDetailClosed(); } }
 
   async function recordPayment() {
     if (saving || !detail) return;
@@ -148,9 +150,31 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
     answerPin(pinVal);
   }
 
+  // Permanent delete: type the invoice number, then the admin PIN. The database removes the invoice, its
+  // payments and refunds for good (migration 117), puts products back in stock and, if it was the last
+  // invoice, restarts numbering at 0001.
+  async function confirmDelete() {
+    if (saving || !deleting) return;
+    if (deleting.typed.trim().toUpperCase() !== String(deleting.number).toUpperCase()) { setErr("Type the invoice number exactly to confirm."); return; }
+    setErr("");
+    setPinWhy("delete this invoice permanently");
+    var pin = await askPin();
+    if (pin === null) return;
+    setSaving(true);
+    var res = await dbRpcAuth("pet_delete_invoice", { p_admin_pin: pin, p_invoice_id: deleting.id });
+    pin = null;
+    setSaving(false);
+    if (res.error) { setErr(invoiceErrorMessage(res.error)); return; }
+    if (res.data === null || res.data === undefined || res.data === false) { setErr(REFUND_PIN_REFUSED); return; }
+    setDeleting(null); setDetailId(null); setReceiptId(null); setRefundReceiptId(null); setJustPaid(false); setJustRefunded(null);
+    if (onDetailClosed) onDetailClosed();
+    setTick(tick + 1);
+  }
+
   function openRefund() {
     if (!detail) return;
     setErr("");
+    setPinWhy("record this refund");
     setRefunding({ amount: String(refundable(detail)), method: "cash", reason: "", reference: "", restock: false, key: newIdempotencyKey() });
   }
 
@@ -233,6 +257,7 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
           <Button variant="ghost" onClick={closeDetail}>Close</Button>
           {detail.status === "issued" ? <Button variant="ghost-danger" onClick={function () { setErr(""); setVoiding({ id: detail.id, reason: "" }); }}>Void invoice</Button> : null}
           {refundable(detail) > 0 ? <Button variant="ghost-danger" onClick={openRefund}>Refund</Button> : null}
+          <Button variant="ghost-danger" onClick={function () { setErr(""); setDeleting({ id: detail.id, number: detail.invoice_number, typed: "" }); }}>Delete permanently</Button>
           <Button variant="outline" onClick={function () { setSendChannel("email"); }}>Email</Button>
           <Button variant="outline" onClick={function () { setSendChannel("whatsapp"); }}>WhatsApp</Button>
           <Button onClick={function () { window.print(); }}>Print</Button>
@@ -306,7 +331,7 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
                 })}
               </div>
             ) : null}
-            {!voiding && !refunding ? <ErrorLine>{err}</ErrorLine> : null}
+            {!voiding && !refunding && !deleting ? <ErrorLine>{err}</ErrorLine> : null}
           </div>
         ) : null}
       </Modal>
@@ -389,8 +414,27 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
         ) : null}
       </Modal>
 
+      <Modal open={!!deleting} onClose={function () { if (!saving && !pinAsk) { setDeleting(null); setErr(""); } }} title="Delete this invoice permanently?"
+        footer={<>
+          <Button variant="ghost" onClick={function () { setDeleting(null); setErr(""); }} disabled={saving}>Keep invoice</Button>
+          <Button variant="danger" onClick={confirmDelete} disabled={saving}>{saving ? "Deleting…" : "Delete permanently…"}</Button>
+        </>}>
+        {deleting ? (
+          <div>
+            <p style={{ margin: "0 0 10px", fontSize: 13, lineHeight: 1.5, color: FOREGROUND }}>
+              {deleting.number} will be erased for good, together with its payments and refunds. This can't be undone and it won't appear in your reports.
+              Use it to clear test invoices. For a real sale, void or refund it instead so your records stay complete. The admin PIN is asked next.
+            </p>
+            <Field label={"Type " + deleting.number + " to confirm"} htmlFor="delete-confirm">
+              <input id="delete-confirm" style={inputStyle} autoComplete="off" value={deleting.typed} onChange={function (e) { setDeleting(Object.assign({}, deleting, { typed: e.target.value })); }} />
+            </Field>
+            <ErrorLine>{err}</ErrorLine>
+          </div>
+        ) : null}
+      </Modal>
+
       <Modal open={pinAsk} onClose={function () { answerPin(null); }} title="Confirm with admin PIN"
-        description="Enter the admin PIN to record this refund."
+        description={"Enter the admin PIN to " + pinWhy + "."}
         footer={<>
           <Button variant="ghost" onClick={function () { answerPin(null); }}>Cancel</Button>
           <Button onClick={submitPin}>Confirm</Button>
