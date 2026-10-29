@@ -2,9 +2,9 @@
 --
 -- Trimora Pet -- one-way sync of grooming bookings and boarding stays to a business's Google Calendar.
 --
--- STATUS: NOT APPLIED. Written for review. Per the standing Pet rule it is applied to production
--- only after an explicit "apply 113". The pet-calendar-sync edge function needs it, so deploy the
--- function AFTER applying this. Nothing syncs until a business switches it on in Settings.
+-- STATUS: APPLIED to production 2026-10-28 (schema_migrations 20261028120618 "pet_google_calendar").
+-- The pet-calendar-sync edge function needs it and is deployed separately. Nothing syncs until a
+-- business switches it on in Settings.
 --
 -- HOW IT WORKS: a business shares its Google Calendar with Trimora's service account and saves the
 -- calendar id in Settings. From then on, every change to a booking or boarding stay writes one row to
