@@ -95,7 +95,7 @@ export default function GoogleCalendarSettings() {
     <Card style={{ padding: 16, display: "grid", gap: 12, maxWidth: 640, marginTop: 16 }}>
       <div style={{ fontWeight: 700, fontSize: 14 }}>Google Calendar</div>
       <p style={{ margin: 0, color: MUTED_FG, fontSize: 12, lineHeight: 1.5 }}>
-        Copies your grooming appointments (with their start and end times) and boarding stays (as all-day events from check-in to check-out) to your Google Calendar, and keeps them up to date. Booking notes and care notes are never sent, and Google does not email customers or staff. Changes made inside Google Calendar are not copied back, and are replaced the next time the booking changes in Trimora.
+        Copies your grooming appointments and daycare visits (with their start and end times) and boarding stays (as all-day events from check-in to check-out) to your Google Calendar, and keeps them up to date. Booking notes, instructions and care notes are never sent, and Google does not email customers or staff. Changes made inside Google Calendar are not copied back, and are replaced the next time the booking changes in Trimora.
       </p>
       {load === "loading" ? <p style={{ margin: 0, color: MUTED_FG, fontSize: 13 }}>Loading…</p> : null}
       {load === "needs-db" ? <ErrorLine>Google Calendar sync needs a database update. Ask your administrator to apply migration 113.</ErrorLine> : null}

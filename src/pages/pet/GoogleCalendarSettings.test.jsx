@@ -42,7 +42,8 @@ describe("GoogleCalendarSettings", function () {
     mockDb.mockResolvedValue([]);
     render(<GoogleCalendarSettings />);
     await screen.findByText(EMAIL);
-    expect(screen.getByText(/Booking notes and care notes are never sent/)).toBeTruthy();
+    expect(screen.getByText(/Booking notes, instructions and care notes are never sent/)).toBeTruthy();
+    expect(screen.getByText(/grooming appointments and daycare visits/)).toBeTruthy();
     expect(screen.getByText(/does not email customers or staff/)).toBeTruthy();
   });
 

@@ -4,8 +4,8 @@
 // whole flow (create, skip, update, delete, restore, retry, calendar change) is unit tested with fakes.
 // index.ts supplies the real Supabase client and the real Google HTTP calls.
 import {
-  SOURCE_STAY, MAX_ATTEMPTS, DEFAULT_TZ,
-  shouldRemove, bookingEvent, stayEvent, contentHash, eventIdFor, classifyGoogleError,
+  SOURCE_STAY, SOURCE_DAYCARE, MAX_ATTEMPTS, DEFAULT_TZ,
+  shouldRemove, bookingEvent, stayEvent, daycareEvent, contentHash, eventIdFor, classifyGoogleError,
 } from "./lib.js";
 
 export var GROUPS_PER_RUN = 60;
@@ -40,7 +40,7 @@ export function makeApi(call) {
 
 // Build one event from the saved booking/stay, or null if it should not be on the calendar.
 export async function loadEvent(supabase, salonId, type, id, tz) {
-  var table = type === SOURCE_STAY ? "pet_boarding_stays" : "pet_bookings";
+  var table = type === SOURCE_STAY ? "pet_boarding_stays" : type === SOURCE_DAYCARE ? "pet_daycare_visits" : "pet_bookings";
   var row = (await supabase.from(table).select("*").eq("id", id).eq("salon_id", salonId).maybeSingle()).data;
   if (shouldRemove(type, row)) return null;
   var customer = (await supabase.from("customers").select("name").eq("id", row.customer_id).eq("salon_id", salonId).maybeSingle()).data;
@@ -49,6 +49,10 @@ export async function loadEvent(supabase, salonId, type, id, tz) {
   if (type === SOURCE_STAY) {
     var kennel = (await supabase.from("pet_kennels").select("name").eq("id", row.kennel_id).eq("salon_id", salonId).maybeSingle()).data;
     return stayEvent(row, Object.assign({}, base, { kennelName: kennel && kennel.name }));
+  }
+  if (type === SOURCE_DAYCARE) {
+    var carer = row.assigned_staff_id ? (await supabase.from("staff").select("name").eq("id", row.assigned_staff_id).eq("salon_id", salonId).maybeSingle()).data : null;
+    return daycareEvent(row, Object.assign({}, base, { staffName: carer && carer.name }));
   }
   var staff = row.staff_id ? (await supabase.from("staff").select("name").eq("id", row.staff_id).eq("salon_id", salonId).maybeSingle()).data : null;
   var lines = (await supabase.from("pet_booking_services").select("service_name").eq("booking_id", id).eq("salon_id", salonId)).data || [];

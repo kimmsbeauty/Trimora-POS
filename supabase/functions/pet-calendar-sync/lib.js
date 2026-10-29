@@ -8,11 +8,14 @@
 //             booking reference.
 //   Boarding  title "Boarding – Pet (Owner)", ALL-DAY event covering check-in through check-out;
 //             description: dates, kennel, service, status, reference, actual check-in/out times.
+//   Daycare   title "Daycare – Pet (Owner)", timed start/end; description: plan, service, staff, status,
+//             daycare reference.
 //   NEVER SENT: booking notes, feeding notes, care notes, phone numbers, emails, prices, medical or
 //   vaccination records.
 
 export var SOURCE_BOOKING = "booking";
 export var SOURCE_STAY = "stay";
+export var SOURCE_DAYCARE = "daycare";
 export var MAX_ATTEMPTS = 8;
 export var DEFAULT_TZ = "Africa/Nairobi";
 
@@ -20,6 +23,8 @@ var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oc
 // booked and ready are the statuses new bookings actually use (migration 092); same wording as the app.
 var BOOKING_STATUS = { booked: "Booked", pending: "Pending", confirmed: "Confirmed", "checked-in": "Checked in", "in-progress": "In progress", ready: "Ready for Collection", completed: "Completed" };
 var STAY_STATUS = { reserved: "Reserved", occupied: "Checked in", "checked-out": "Checked out" };
+var DAYCARE_STATUS = { booked: "Booked", "checked-in": "Checked in", "in-daycare": "In daycare", "ready-for-pickup": "Ready for pickup", completed: "Completed" };
+var DAYCARE_PLAN = { full_day: "Full day", half_day: "Half day", hourly: "Hourly" };
 var FOOTER = "Managed in Trimora Pet. Edit it there: changes made here are overwritten the next time the booking changes.";
 
 export function validCalendarId(id) {
@@ -30,7 +35,7 @@ export function validCalendarId(id) {
 // means a retry can never create a duplicate.
 export function eventIdFor(type, id) {
   var hex = String(id || "").toLowerCase().replace(/[^0-9a-f]/g, "");
-  return (type === SOURCE_STAY ? "tks" : "tkb") + hex;
+  return (type === SOURCE_STAY ? "tks" : type === SOURCE_DAYCARE ? "tkd" : "tkb") + hex;
 }
 
 export function shortRef(id) {
@@ -63,7 +68,8 @@ export function localParts(ts, tz) {
   }
 }
 
-// A booking or stay that should NOT be on the calendar (or no longer is).
+// A booking, stay or daycare visit that should NOT be on the calendar (or no longer is).
+// Bookings and daycare visits are removed when cancelled or a no-show; a stay only when cancelled.
 export function shouldRemove(type, row) {
   if (!row) return true;
   if (type === SOURCE_STAY) return row.status === "cancelled";
@@ -102,6 +108,29 @@ export function bookingEvent(b, ctx) {
     start: { dateTime: new Date(b.starts_at).toISOString(), timeZone: tz },
     end: { dateTime: new Date(b.ends_at).toISOString(), timeZone: tz },
     extendedProperties: { private: { trimora_source: SOURCE_BOOKING, trimora_id: String(b.id), trimora_salon: String(b.salon_id), trimora_staff: staffMeta(b) } },
+  };
+}
+
+// v: a pet_daycare_visits row. ctx: { petName, ownerName, staffName, timezone }
+// Never sent: customer instructions, notes, price, care logs or anything about the pet's health.
+export function daycareEvent(v, ctx) {
+  var c = ctx || {};
+  var tz = c.timezone || DEFAULT_TZ;
+  var lines = [
+    "Plan: " + (DAYCARE_PLAN[v.plan] || clean(v.plan, 20)),
+    "Service: " + (clean(v.service_name, 80) || "Not specified"),
+    "Staff: " + (clean(c.staffName, 60) || "Unassigned"),
+    "Status: " + (DAYCARE_STATUS[v.status] || clean(v.status, 20)),
+    "Daycare ref: " + shortRef(v.id),
+    "",
+    FOOTER,
+  ];
+  return {
+    summary: eventTitle("Daycare", c.petName, c.ownerName),
+    description: lines.join("\n"),
+    start: { dateTime: new Date(v.scheduled_start).toISOString(), timeZone: tz },
+    end: { dateTime: new Date(v.scheduled_end).toISOString(), timeZone: tz },
+    extendedProperties: { private: { trimora_source: SOURCE_DAYCARE, trimora_id: String(v.id), trimora_salon: String(v.salon_id), trimora_staff: v.assigned_staff_id ? String(v.assigned_staff_id) : "" } },
   };
 }
 

@@ -1,7 +1,7 @@
 // Unit tests for the pure helpers of the pet-calendar-sync edge function: exactly what goes to Google.
 import {
   validCalendarId, eventIdFor, shortRef, addDays, prettyDate, localParts, shouldRemove, eventTitle,
-  bookingEvent, stayEvent, contentHash, classifyGoogleError, parseServiceAccount, base64url, pemToDer, safeEqual,
+  bookingEvent, stayEvent, contentHash, classifyGoogleError, parseServiceAccount, base64url, pemToDer, safeEqual, daycareEvent,
 } from "../../../supabase/functions/pet-calendar-sync/lib.js";
 
 var BOOKING = { id: "12345678-aaaa-bbbb-cccc-ddddeeeeffff", salon_id: "s1", staff_id: "st1", starts_at: "2026-11-02T06:00:00+00:00", ends_at: "2026-11-02T07:30:00+00:00", status: "confirmed", notes: "ALLERGIC TO CHICKEN, ON MEDS" };
@@ -167,5 +167,41 @@ describe("google errors and credentials", function () {
     expect(safeEqual("abc", "abd")).toBe(false);
     expect(safeEqual("abc", "ab")).toBe(false);
     expect(safeEqual(null, "")).toBe(true);
+  });
+});
+
+describe("daycare events", function () {
+  var VISIT = { id: "dc123456-aaaa-bbbb-cccc-ddddeeeeffff", salon_id: "s1", assigned_staff_id: "st1", plan: "full_day", service_name: "Daycare full day", status: "booked", scheduled_start: "2026-11-02T05:00:00+00:00", scheduled_end: "2026-11-02T14:00:00+00:00", customer_instructions: "SECRET INSTRUCTIONS", notes: "SECRET NOTE", price: 1500 };
+  var ev = daycareEvent(VISIT, { petName: "Rex", ownerName: "Tom", staffName: "Amina" });
+  it("is a timed event titled Daycare with the plan, service, staff and status", function () {
+    expect(ev.summary).toBe("Daycare – Rex (Tom)");
+    expect(ev.start.dateTime).toBe("2026-11-02T05:00:00.000Z");
+    expect(ev.end.dateTime).toBe("2026-11-02T14:00:00.000Z");
+    expect(ev.description).toContain("Plan: Full day");
+    expect(ev.description).toContain("Service: Daycare full day");
+    expect(ev.description).toContain("Staff: Amina");
+    expect(ev.description).toContain("Status: Booked");
+    expect(ev.description).toContain("Daycare ref: DC123456");
+  });
+  it("never sends instructions, notes or the price, and adds no guests", function () {
+    var all = JSON.stringify(ev);
+    expect(all).not.toContain("SECRET");
+    expect(all).not.toContain("1500");
+    expect(ev.attendees).toBeUndefined();
+  });
+  it("words the other statuses and plans like the app", function () {
+    expect(daycareEvent(Object.assign({}, VISIT, { status: "in-daycare", plan: "half_day" }), {}).description).toContain("Status: In daycare");
+    expect(daycareEvent(Object.assign({}, VISIT, { status: "ready-for-pickup", plan: "hourly" }), {}).description).toContain("Plan: Hourly");
+    expect(daycareEvent(Object.assign({}, VISIT, { assigned_staff_id: null }), {}).description).toContain("Staff: Unassigned");
+  });
+  it("uses its own Google event id prefix, valid for Google (a-v and 0-9)", function () {
+    var id = eventIdFor("daycare", VISIT.id);
+    expect(id).toBe("tkddc123456aaaabbbbccccddddeeeeffff");
+    expect(id).toMatch(/^[a-v0-9]{5,100}$/);
+  });
+  it("is removed from the calendar when cancelled or a no-show", function () {
+    expect(shouldRemove("daycare", Object.assign({}, VISIT, { status: "cancelled" }))).toBe(true);
+    expect(shouldRemove("daycare", Object.assign({}, VISIT, { status: "no-show" }))).toBe(true);
+    expect(shouldRemove("daycare", VISIT)).toBe(false);
   });
 });
