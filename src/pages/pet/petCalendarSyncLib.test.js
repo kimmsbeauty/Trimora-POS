@@ -34,6 +34,12 @@ describe("grooming events", function () {
     expect(ev.description).toContain("Status: Confirmed");
     expect(ev.description).toContain("Booking ref: 12345678");
   });
+  it("words the statuses new bookings really use (booked, ready) like the app does", function () {
+    var booked = bookingEvent(Object.assign({}, BOOKING, { status: "booked" }), {});
+    var ready = bookingEvent(Object.assign({}, BOOKING, { status: "ready" }), {});
+    expect(booked.description).toContain("Status: Booked");
+    expect(ready.description).toContain("Status: Ready for Collection");
+  });
   it("never includes the booking notes", function () {
     expect(JSON.stringify(ev)).not.toMatch(/ALLERGIC|MEDS/);
   });
