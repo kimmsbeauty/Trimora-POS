@@ -2,9 +2,9 @@
 --
 -- Trimora Pet -- boarding: bill a stay, with the late-collection charge.
 --
--- STATUS: written for owner review. NOT applied anywhere. Apply by hand in the Supabase SQL
--- Editor only after the owner says "apply 107". Apply it BEFORE the matching app code is
--- merged (the Boarding screen calls the new functions).
+-- STATUS: APPLIED to production (verified 2026-10-29 by catalog check: pet_invoices.stay_id,
+-- pet_invoices_stay_live_uidx, pet_stay_billing and pet_invoice_stay all exist). It was applied
+-- by hand in the SQL Editor, so it has NO supabase_migrations.schema_migrations entry.
 --
 -- THE OWNER'S POLICY (decided 2026-10-25)
 --   * EARLY check-out: the customer pays the FULL BOOKED stay. Leaving early changes nothing.

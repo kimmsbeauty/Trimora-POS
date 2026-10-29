@@ -2,8 +2,8 @@
 --
 -- Trimora Pet -- Daycare management (visits, care log, capacity, checkout billing).
 --
--- STATUS: written for owner review. NOT applied to production. Test it on a branch or the PGlite
--- suite (src/pages/pet/migration114.db.test.js) first; apply by hand only after "apply 114".
+-- STATUS: APPLIED to production 2026-10-29 (schema_migrations 20261029043357 "pet_daycare"), before
+-- the app code merged in PR #79. Tested in the PGlite suite (src/pages/pet/migration114.db.test.js).
 --
 -- ADDITIVE: three tables, one column + index on pet_invoices, a WIDENED (superset) category check on
 -- pet_services, and RPCs. Salon, Auto, grooming and boarding behaviour is unchanged.
