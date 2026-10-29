@@ -11,14 +11,15 @@
 //
 // Unknown slug, lookup failure or timeout -> the generic manifest, never an error.
 
-import { BASE_MANIFEST, buildPetManifest, fetchBusinessName, isValidSlug } from "./_lib/petManifest.mjs";
+import { buildPetManifest, fetchBusinessName, isValidSlug } from "./_lib/petManifest.mjs";
 
 export default async function handler(req, res) {
   var slug = req.query && req.query.slug;
   if (Array.isArray(slug)) slug = slug[0];
 
   var name = isValidSlug(slug) ? await fetchBusinessName(slug, process.env) : "";
-  var manifest = name ? buildPetManifest(name) : BASE_MANIFEST;
+  // Icons depend only on the (validated) slug, so a business keeps its own icon even if the name lookup fails.
+  var manifest = buildPetManifest(name, isValidSlug(slug) ? slug : "");
 
   res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
   // Cache a real name for an hour (as before); a fallback only briefly so a blip doesn't stick.
