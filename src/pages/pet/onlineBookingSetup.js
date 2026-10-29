@@ -7,7 +7,7 @@ import { normalizePhoneForWhatsApp } from "../../lib/utils";
 
 export function hasBookableService(services) {
   return (services || []).some(function (s) {
-    return !!s && s.active !== false && s.category !== "Boarding" && Number(s.duration_minutes) > 0;
+    return !!s && s.active !== false && s.category !== "Boarding" && s.category !== "Daycare" && Number(s.duration_minutes) > 0;
   });
 }
 

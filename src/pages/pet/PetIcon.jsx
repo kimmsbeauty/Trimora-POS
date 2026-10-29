@@ -16,6 +16,7 @@ var PATHS = {
   customers: <g><circle cx="9" cy="8" r="3.5" /><path d="M2 21c0-4 3-6 7-6s7 2 7 6" /><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 15c2.5.7 4 2.6 4 6" /></g>,
   pets: <path d="M12 21s-8-5.5-8-11a4.5 4.5 0 0 1 8-2.5A4.5 4.5 0 0 1 20 10c0 5.5-8 11-8 11z" />,
   grooming: <g><circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M8.5 8l11 11M8.5 16l11-11" /></g>,
+  daycare: <g><circle cx="12" cy="12" r="4" /><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4" /></g>,
   boarding: <g><path d="M3 11l9-7 9 7v9H3z" /><path d="M9 20v-6h6v6" /></g>,
   invoices: <g><path d="M7 3h8l4 4v14H7z" /><path d="M15 3v4h4M10 12h6M10 16h6" /></g>,
   supplies: <g><path d="M3 7l9-4 9 4v10l-9 4-9-4z" /><path d="M3 7l9 4 9-4M12 11v10" /></g>,

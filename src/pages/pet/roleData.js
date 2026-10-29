@@ -13,6 +13,7 @@ export var PERMISSIONS = [
   { key: "manage_bookings", label: "Manage bookings and the grooming board" },
   { key: "manage_customers", label: "Add and edit customers and pets" },
   { key: "manage_services", label: "Edit the service catalogue" },
+  { key: "manage_daycare", label: "Run daycare visits, care records and checkout" },
   { key: "take_payments", label: "Take payments and issue invoices" },
   { key: "view_reports", label: "View reports" },
   { key: "manage_staff_roles", label: "Manage roles and assign staff" },

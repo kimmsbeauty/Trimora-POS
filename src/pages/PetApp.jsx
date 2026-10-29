@@ -39,6 +39,7 @@ import SettingsPage from "./pet/SettingsPage";
 import SuppliesPage from "./pet/SuppliesPage";
 import StaffPage from "./pet/StaffPage";
 import BoardingPage from "./pet/BoardingPage";
+import DaycarePage from "./pet/DaycarePage";
 import ReportsPage from "./pet/ReportsPage";
 import LoyaltyPage from "./pet/LoyaltyPage";
 import OverviewPage from "./pet/OverviewPage";
@@ -197,6 +198,8 @@ function PetStaffRoute() {
         ? <ReportsPage />
         : activeItem.key === "boarding"
         ? <BoardingPage canEdit={isAdmin} />
+        : activeItem.key === "daycare"
+        ? <DaycarePage canEdit={isAdmin} onOpenInvoice={function (id) { setOpenInvoice(id); setTab("invoices"); }} />
         : activeItem.key === "reminders"
         ? <RemindersPage />
         : activeItem.key === "requests"

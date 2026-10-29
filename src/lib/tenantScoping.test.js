@@ -163,6 +163,9 @@ var KNOWN_CLIENT_QUERIED_SALON_SCOPED_TABLES = [
                  // the row; READ-ONLY for the client (writes go through the pet_*
                  // database functions); BoardingPage.jsx.
   "pet_boarding_stays", // ditto -- boarding stays; same read-only rule.
+  "pet_daycare_settings", // added with migration 114 -- daycare capacity/rates mapping; READ-ONLY for the client (database function).
+  "pet_daycare_visits", // ditto -- daycare visits; read-only, written only by pet_daycare_* functions.
+  "pet_daycare_care_logs", // ditto -- append-only care log; read-only for the client.
 ];
 
 // Tables confirmed live (2026-07-07) to have a salon_id column, but

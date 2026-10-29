@@ -53,7 +53,7 @@ describe("PetShell matches the approved prototype geometry", function () {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("labels the four sections and keeps all 15 modules in the agreed order", function () {
+  it("labels the four sections and keeps all 16 modules in the agreed order", function () {
     setup();
     var nav = screen.getByRole("navigation", { name: "Main navigation", hidden: true });
     ["Workspace", "Customers & Services", "Business Operations", "Administration"].forEach(function (l) {
@@ -61,7 +61,7 @@ describe("PetShell matches the approved prototype geometry", function () {
     });
     var labels = Array.prototype.map.call(nav.querySelectorAll("button.pet-nav-item"), function (b) { return b.textContent; });
     expect(labels).toEqual(PET_NAV.map(function (n) { return n.label; }));
-    expect(labels.length).toBe(15);
+    expect(labels.length).toBe(16);
   });
 
   it("shows no Administration heading or items to staff", function () {
@@ -79,7 +79,7 @@ describe("PetShell matches the approved prototype geometry", function () {
     expect(nav.querySelectorAll("[aria-current='page']").length).toBe(1);
     expect(nav.querySelector("[aria-current='page']").textContent).toBe("Checkout");
     Array.prototype.forEach.call(buttons, function (b, i) { fireEvent.click(b); expect(onSelect).toHaveBeenLastCalledWith(PET_NAV[i].key); });
-    expect(onSelect).toHaveBeenCalledTimes(15);
+    expect(onSelect).toHaveBeenCalledTimes(16);
   });
 
   it("badges only the item it is told to", function () {
