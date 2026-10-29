@@ -46,6 +46,7 @@ function setup(opts) {
   mockRpc.mockImplementation(function (fn, args) {
     if (opts.rpcError) return Promise.resolve({ error: opts.rpcError });
     if (fn === "pet_refund_invoice") return Promise.resolve({ data: args.p_admin_pin === "9999" ? "rf-new" : null });
+    if (fn === "pet_delete_invoice") return Promise.resolve({ data: args.p_admin_pin === "9999" ? true : null });
     return Promise.resolve({ data: "ok" });
   });
   render(<InvoicesPage openInvoiceId={opts.open} initialStatus={opts.initialStatus} />);
@@ -143,16 +144,16 @@ describe("InvoicesPage", function () {
       fireEvent.click(await screen.findByRole("button", { name: "View receipt RCT-0001-1" }));
       expect(await screen.findByText("RECEIPT")).toBeTruthy();
       expect(screen.getByAltText("Paws & Co logo")).toBeTruthy();
-      expect(screen.queryByText("INVOICE")).toBeNull();
+      expect(screen.queryByText("Invoice No.")).toBeNull();
       expect(screen.getByText("Balance remaining")).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Back to invoice" }));
-      expect(await screen.findByText("INVOICE")).toBeTruthy();
+      expect(await screen.findByText("Invoice No.")).toBeTruthy();
     });
 
     it("has no receipts section for an invoice with no payments", async function () {
       setup();
       fireEvent.click(await screen.findByLabelText("Open invoice INV-0001"));
-      await screen.findByText("INVOICE");
+      await screen.findByText("Invoice No.");
       expect(screen.queryByText("Receipts")).toBeNull();
     });
 
@@ -519,6 +520,54 @@ describe("InvoicesPage", function () {
       });
       render(<InvoicesPage openInvoiceId="i1" />);
       expect(await screen.findByRole("button", { name: "Email" })).toBeTruthy();
+    });
+  });
+  describe("permanent delete (migration 117)", function () {
+    function delCalls() { return mockRpc.mock.calls.filter(function (c) { return c[0] === "pet_delete_invoice"; }); }
+    function typePin(pin) {
+      fireEvent.change(screen.getByLabelText("Admin PIN"), { target: { value: pin } });
+      fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    }
+    async function openDelete() {
+      setup({ invoices: [inv(), inv({ id: "i2", invoice_number: "INV-0002" })] });
+      fireEvent.click(await screen.findByLabelText("Open invoice INV-0001"));
+      fireEvent.click(await screen.findByRole("button", { name: "Delete permanently" }));
+    }
+
+    it("is offered on any invoice, and calls nothing until confirmed", async function () {
+      await openDelete();
+      expect(await screen.findByText("Delete this invoice permanently?")).toBeTruthy();
+      expect(delCalls().length).toBe(0);
+    });
+
+    it("needs the invoice number typed exactly before it asks for the PIN", async function () {
+      await openDelete();
+      fireEvent.change(screen.getByLabelText("Type INV-0001 to confirm"), { target: { value: "INV-0002" } });
+      fireEvent.click(screen.getByRole("button", { name: "Delete permanently…" }));
+      expect(await screen.findByText(/Type the invoice number exactly/)).toBeTruthy();
+      expect(screen.queryByLabelText("Admin PIN")).toBeNull();
+      expect(delCalls().length).toBe(0);
+    });
+
+    it("asks for the admin PIN, then deletes through pet_delete_invoice and drops it from the list", async function () {
+      await openDelete();
+      fireEvent.change(screen.getByLabelText("Type INV-0001 to confirm"), { target: { value: " inv-0001 " } });
+      fireEvent.click(screen.getByRole("button", { name: "Delete permanently…" }));
+      expect(await screen.findByText(/to delete this invoice permanently/)).toBeTruthy();
+      expect(delCalls().length).toBe(0);
+      typePin("9999");
+      await waitFor(function () { expect(delCalls().length).toBe(1); });
+      expect(delCalls()[0][1]).toEqual({ p_admin_pin: "9999", p_invoice_id: "i1" });
+      await waitFor(function () { expect(screen.queryByText("Delete this invoice permanently?")).toBeNull(); });
+    });
+
+    it("a wrong PIN says so and deletes nothing", async function () {
+      await openDelete();
+      fireEvent.change(screen.getByLabelText("Type INV-0001 to confirm"), { target: { value: "INV-0001" } });
+      fireEvent.click(screen.getByRole("button", { name: "Delete permanently…" }));
+      await screen.findByLabelText("Admin PIN"); typePin("0000");
+      expect(await screen.findByText(/admin PIN wasn't accepted/)).toBeTruthy();
+      expect(screen.getByText("Delete this invoice permanently?")).toBeTruthy(); // still open
     });
   });
 });

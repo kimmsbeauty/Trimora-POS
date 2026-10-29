@@ -6,10 +6,10 @@
 // successful save the page reloads to pick them up. Admin only (UI-level, like
 // the rest of Pet until roles are enforced in the database).
 import React, { useState } from "react";
-import { db } from "../../lib/db";
+import { db, dbRpcAuth } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
 import { MUTED_FG, BORDER, FOREGROUND } from "./theme";
-import { validateSettings, settingsRow } from "./settingsData";
+import { validateSettings, settingsRow, phonesPayload, derivePrefix, normalizePrefix, invoiceNumberPreview } from "./settingsData";
 import ReminderSettings from "./ReminderSettings";
 import PublicBookingSettings from "./PublicBookingSettings";
 import GoogleCalendarSettings from "./GoogleCalendarSettings";
@@ -23,7 +23,11 @@ export default function SettingsPage({ onSaved }) {
     logo_url: salon.logo_url || "", tagline: salon.tagline || "", contact_phone: salon.contact_phone || "",
     tax_enabled: !!salon.tax_enabled, tax_rate: salon.tax_rate != null ? String(salon.tax_rate) : "16",
     tax_pin: salon.tax_pin || "", receipt_footer_message: salon.receipt_footer_message || "",
+    invoice_prefix: salon.invoice_prefix || "",
+    // Every number the owner adds, each with a "show on invoice" switch. No limit and none built in.
+    phones: (Array.isArray(salon.phones) ? salon.phones : []).map(function (p) { return { phone: p.phone, show_on_invoice: p.show_on_invoice !== false }; }),
   });
+  var newPhoneState = useState(""); var newPhone = newPhoneState[0]; var setNewPhone = newPhoneState[1];
   var d = dState[0]; var setD = dState[1];
   var savingState = useState(false); var saving = savingState[0]; var setSaving = savingState[1];
   var errState = useState(""); var err = errState[0]; var setErr = errState[1];
@@ -32,6 +36,23 @@ export default function SettingsPage({ onSaved }) {
 
   function set(k, v) { var o = {}; o[k] = v; setD(Object.assign({}, d, o)); setErr(""); setSaved(false); if (k === "logo_url") setLogoFailed(false); }
 
+  function addPhone() {
+    var t = newPhone.trim();
+    if (!t) return;
+    var msg = validateSettings(Object.assign({}, d, { phones: d.phones.concat([{ phone: t, show_on_invoice: true }]) }));
+    if (msg) { setErr(msg); return; }
+    setD(Object.assign({}, d, { phones: d.phones.concat([{ phone: t, show_on_invoice: true }]) }));
+    setNewPhone(""); setErr(""); setSaved(false);
+  }
+  function setPhone(i, patch) {
+    setD(Object.assign({}, d, { phones: d.phones.map(function (p, j) { return j === i ? Object.assign({}, p, patch) : p; }) }));
+    setErr(""); setSaved(false);
+  }
+  function removePhone(i) {
+    setD(Object.assign({}, d, { phones: d.phones.filter(function (p, j) { return j !== i; }) }));
+    setErr(""); setSaved(false);
+  }
+
   async function save() {
     if (saving) return;
     var msg = validateSettings(d);
@@ -39,8 +60,11 @@ export default function SettingsPage({ onSaved }) {
     if (!salon.id) { setErr("Couldn't identify this business. Sign in again."); return; }
     setSaving(true); setErr("");
     var ok = await db("PATCH", "salon_settings", settingsRow(d), "?salon_id=eq." + salon.id);
+    if (ok === null || ok === undefined || ok === false) { setSaving(false); setErr("Couldn't save. Check your connection and try again."); return; }
+    // The phone list is replaced in one database call, so it is saved whole or not at all.
+    var ph = await dbRpcAuth("salon_save_phone_numbers", { p_phones: phonesPayload(d.phones) });
     setSaving(false);
-    if (ok === null || ok === undefined || ok === false) { setErr("Couldn't save. Check your connection and try again."); return; }
+    if (ph.error) { setErr(/DUPLICATE_PHONE/.test(ph.error) ? "The same phone number is in the list twice." : /INVALID_PHONE/.test(ph.error) ? "One of the phone numbers isn't valid." : "Your settings were saved, but the phone numbers couldn't be. Try again."); return; }
     setSaved(true);
     setTimeout(onSaved || defaultReload, 700);
   }
@@ -63,6 +87,37 @@ export default function SettingsPage({ onSaved }) {
         <Field label="Tagline (optional)" htmlFor="set-tagline"><input id="set-tagline" style={inputStyle} value={d.tagline} onChange={function (e) { set("tagline", e.target.value); }} /></Field>
         <Field label="Business WhatsApp number" htmlFor="set-phone"><input id="set-phone" inputMode="tel" style={inputStyle} value={d.contact_phone} onChange={function (e) { set("contact_phone", e.target.value); }} /></Field>
         <p style={{ margin: "-6px 0 0", fontSize: 12, color: MUTED_FG }}>Customers who send an online booking request are offered WhatsApp buttons that message this number (e.g. 0712345678). Leave blank to hide them.</p>
+
+        <div style={{ fontWeight: 700, fontSize: 14, marginTop: 6 }}>Business phone numbers</div>
+        <p style={{ margin: "-6px 0 0", fontSize: 12, color: MUTED_FG }}>Add as many numbers as you need (for example each partner's). Choose which ones are printed on invoices.</p>
+        {d.phones.length === 0 ? <p style={{ margin: 0, fontSize: 12, color: MUTED_FG }}>No numbers yet: invoices won't show a phone number.</p> : null}
+        {d.phones.map(function (p, i) {
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <input aria-label={"Phone number " + (i + 1)} inputMode="tel" style={Object.assign({}, inputStyle, { flex: "1 1 160px", width: "auto" })} value={p.phone}
+                onChange={function (e) { setPhone(i, { phone: e.target.value }); }} />
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: FOREGROUND }}>
+                <input type="checkbox" aria-label={"Show " + (p.phone || "number " + (i + 1)) + " on invoices"} checked={p.show_on_invoice} onChange={function (e) { setPhone(i, { show_on_invoice: e.target.checked }); }} />
+                Show on invoice
+              </label>
+              <Button size="sm" variant="ghost-danger" onClick={function () { removePhone(i); }} ariaLabel={"Remove " + (p.phone || "number " + (i + 1))}>Remove</Button>
+            </div>
+          );
+        })}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <input aria-label="New phone number" inputMode="tel" placeholder="e.g. 0712 345 678" style={Object.assign({}, inputStyle, { flex: "1 1 160px", width: "auto" })} value={newPhone}
+            onChange={function (e) { setNewPhone(e.target.value); setErr(""); }} onKeyDown={function (e) { if (e.key === "Enter") { e.preventDefault(); addPhone(); } }} />
+          <Button size="sm" variant="outline" onClick={addPhone}>Add number</Button>
+        </div>
+
+        <div style={{ fontWeight: 700, fontSize: 14, marginTop: 6 }}>Invoice numbers</div>
+        <Field label="Invoice number prefix (optional)" htmlFor="set-prefix">
+          <input id="set-prefix" style={inputStyle} value={d.invoice_prefix} placeholder={derivePrefix(salon.name)} maxLength={20}
+            onChange={function (e) { set("invoice_prefix", normalizePrefix(e.target.value)); }} />
+        </Field>
+        <p style={{ margin: "-6px 0 0", fontSize: 12, color: MUTED_FG }}>
+          Your next invoices will read <strong>{invoiceNumberPreview(d.invoice_prefix, salon.name)}</strong>. Leave the prefix blank to use your business name. Invoices already issued keep their numbers.
+        </p>
 
         <div style={{ fontWeight: 700, fontSize: 14, marginTop: 6 }}>Tax</div>
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: FOREGROUND }}>

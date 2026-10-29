@@ -70,4 +70,34 @@ describe("InvoiceDocument", function () {
     expect(screen.getByText("M-Pesa")).toBeTruthy();
     expect(screen.queryByText("info@pawpalskenya.co.ke")).toBeNull();
   });
+  it("no longer prints a big INVOICE heading, but keeps the number and status", function () {
+    render(<InvoiceDocument invoice={invoice} customer={customer} pet={pet} salon={{ name: "Paws & Co" }} />);
+    expect(screen.queryByText("INVOICE")).toBeNull();
+    expect(screen.getByText("Invoice No.")).toBeTruthy();
+    expect(screen.getByText("INV-0007")).toBeTruthy();
+    expect(screen.getByText("PART PAID")).toBeTruthy();
+  });
+  it("prints every phone number the owner switched on, and skips the rest", function () {
+    var salon = { name: "Paws & Co", phones: [{ phone: "0711 111 111", show_on_invoice: true }, { phone: "0722 222 222", show_on_invoice: false }, { phone: "0733 333 333", show_on_invoice: true }] };
+    render(<InvoiceDocument invoice={invoice} customer={customer} pet={pet} salon={salon} />);
+    expect(screen.getAllByText("0711 111 111").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/0733 333 333/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/0722 222 222/)).toBeNull();
+  });
+  it("has no built-in phone number: PawPals shows only what its owner entered", function () {
+    var { container } = render(<InvoiceDocument invoice={invoice} customer={customer} pet={pet} salon={{ name: "PawPals Kenya", slug: "pawpals-kenya", phones: [] }} />);
+    expect(container.textContent).not.toMatch(/700 123 456/);
+    var again = render(<InvoiceDocument invoice={invoice} customer={customer} pet={pet} salon={{ name: "PawPals Kenya", slug: "pawpals-kenya", phones: [{ phone: "0799 000 111", show_on_invoice: true }] }} />);
+    expect(again.container.textContent).toMatch(/0799 000 111/);
+  });
+  it("falls back to the single contact number when the phone list was not loaded", function () {
+    render(<InvoiceDocument invoice={invoice} customer={customer} pet={pet} salon={{ name: "Paws & Co", contact_phone: "0700111222" }} />);
+    expect(screen.getAllByText(/0700111222/).length).toBeGreaterThan(0);
+  });
+  it("keeps long email and website text inside the card (wraps instead of clipping)", function () {
+    render(<InvoiceDocument invoice={invoice} customer={customer} pet={pet} salon={{ name: "PawPals Kenya", slug: "pawpals-kenya" }} />);
+    var el = screen.getAllByText("www.pawpalskenya.co.ke")[0];
+    expect(el.style.overflowWrap).toBe("anywhere");
+    expect(el.style.minWidth).toBe("0px");
+  });
 });
