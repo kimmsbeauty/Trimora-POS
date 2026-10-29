@@ -5,7 +5,7 @@
 
 import { SPECIES } from "./petData";
 
-export var CATEGORIES = ["Grooming", "Boarding", "Add-on"];
+export var CATEGORIES = ["Grooming", "Boarding", "Add-on", "Daycare"];
 export var MAX_PRICE = 10000000;
 
 function clean(v) { return typeof v === "string" ? v.trim() : v; }
@@ -18,6 +18,7 @@ export function validateService(draft) {
   if (isBlank(draft.price)) return "Enter a price (0 for free).";
   var price = Number(draft.price);
   if (!isFinite(price) || Math.floor(price) !== price || price < 0 || price > MAX_PRICE) return "Price must be a whole number of shillings, 0 or more.";
+  if (draft.category === "Daycare" && !isBlank(draft.duration_minutes)) return "Daycare services are priced per visit or hour, so leave the duration blank.";
   if (!isBlank(draft.duration_minutes)) {
     var d = Number(draft.duration_minutes);
     if (!isFinite(d) || Math.floor(d) !== d || d <= 0 || d > 1440) return "Duration must be a whole number of minutes between 1 and 1440.";
@@ -59,7 +60,7 @@ export function durationLabel(minutes) {
 // The public booking page (migration 108) only lists services that are active, not Boarding and
 // have a duration, so a service without one is quietly left off. These let the Grooming page say so.
 export function missingFromOnlineBooking(s) {
-  return !!s && s.active !== false && s.category !== "Boarding" && !s.duration_minutes;
+  return !!s && s.active !== false && s.category !== "Boarding" && s.category !== "Daycare" && !s.duration_minutes;
 }
 
 export function countMissingFromOnlineBooking(services) {

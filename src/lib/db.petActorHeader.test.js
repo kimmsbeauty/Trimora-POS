@@ -2,7 +2,7 @@
 //
 // X-Pet-Actor (migration 087) must be sent ONLY on pet_* table requests, ONLY when an actor is
 // selected, and must never change behaviour for Salon/Auto tables.
-import { db } from "./db";
+import { db, dbRpcAuth } from "./db";
 import { setCurrentSalonId } from "./currentSalon";
 import { setPetActor } from "./petActor";
 
@@ -49,6 +49,16 @@ describe("db.js X-Pet-Actor header", () => {
   it("never sends a malformed actor", async () => {
     sessionStorage.setItem("trimora_pet_actor", "not-a-uuid");
     await db("GET", "pet_pets", null, "?select=*");
+    expect(lastHeaders()["X-Pet-Actor"]).toBeUndefined();
+  });
+
+  it("dbRpcAuth sends it for pet_* RPCs only, and only when an actor is selected", async () => {
+    await dbRpcAuth("pet_daycare_set_status", { p_id: "x" });
+    expect(lastHeaders()["X-Pet-Actor"]).toBeUndefined();
+    setPetActor(GOOD);
+    await dbRpcAuth("pet_daycare_set_status", { p_id: "x" });
+    expect(lastHeaders()["X-Pet-Actor"]).toBe(GOOD);
+    await dbRpcAuth("apply_wallet_transaction", {});
     expect(lastHeaders()["X-Pet-Actor"]).toBeUndefined();
   });
 });

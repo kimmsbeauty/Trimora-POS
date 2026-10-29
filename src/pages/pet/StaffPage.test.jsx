@@ -51,7 +51,7 @@ describe("StaffPage (roles and assignment)", function () {
   it("lists roles with counts and active staff only, and states that roles are not enforced", async function () {
     setup();
     expect(await screen.findByLabelText("Edit Groomer")).toBeTruthy();
-    expect(screen.getByText("1 of 6 permissions · 1 person")).toBeTruthy();
+    expect(screen.getByText("1 of 7 permissions · 1 person")).toBeTruthy();
     expect(screen.getByText("Amina")).toBeTruthy();
     expect(screen.queryByText("Gone")).toBeNull();
     expect(screen.getByText(/not yet enforced/)).toBeTruthy();

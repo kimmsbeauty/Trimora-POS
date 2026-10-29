@@ -24,6 +24,7 @@ export var PET_NAV = [
   { key: "pets", label: "Pets", icon: "pets", section: "services", adminOnly: false },
   { key: "grooming", label: "Grooming", icon: "grooming", section: "services", adminOnly: false },
   { key: "boarding", label: "Boarding", icon: "boarding", section: "services", adminOnly: false },
+  { key: "daycare", label: "Daycare", icon: "daycare", section: "services", adminOnly: false },
   { key: "invoices", label: "Invoices & Payments", icon: "invoices", section: "operations", adminOnly: false },
   { key: "supplies", label: "Supplies & Inventory", icon: "supplies", section: "operations", adminOnly: false },
   { key: "loyalty", label: "Loyalty Programme", icon: "loyalty", section: "operations", adminOnly: false },
