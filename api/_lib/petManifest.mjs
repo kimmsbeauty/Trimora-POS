@@ -4,6 +4,8 @@
 // exposing this folder as routes). Kept free of req/res so they are unit-tested
 // in src/lib/petManifestApi.test.js.
 
+import { businessIconPaths } from "./businessIcons.mjs";
+
 // Must match public/pet.webmanifest apart from name / short_name; a test
 // enforces that, so the static file stays the single reference.
 export const BASE_MANIFEST = {
@@ -34,10 +36,19 @@ export function cleanName(raw) {
   return raw.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
 }
 
-export function buildPetManifest(rawName) {
+// name: business name ("" -> generic). slug: only used to pick that business's own icons.
+export function buildPetManifest(rawName, slug) {
+  var m = Object.assign({}, BASE_MANIFEST);
   var name = cleanName(rawName);
-  if (!name) return Object.assign({}, BASE_MANIFEST);
-  return Object.assign({}, BASE_MANIFEST, { name: name, short_name: name.slice(0, 24).trim() });
+  if (name) { m.name = name; m.short_name = name.slice(0, 24).trim(); }
+  var icons = businessIconPaths(slug);
+  if (icons) {
+    m.icons = [
+      { src: icons.icon192, sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: icons.icon512, sizes: "512x512", type: "image/png", purpose: "any" },
+    ];
+  }
+  return m;
 }
 
 // Reads the business name from the anon-readable public_salon_directory view

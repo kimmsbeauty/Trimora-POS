@@ -1,3 +1,4 @@
+import { businessIconPaths } from "../../api/_lib/businessIcons.mjs";
 // src/lib/pwaManifest.js
 //
 // Trimora POS is multi-tenant — every salon lives at /:slug/pos. A static
@@ -131,6 +132,17 @@ export function setPetPwaManifest(salon) {
     apple.setAttribute("name", "apple-mobile-web-app-title");
     apple.setAttribute("content", label);
     document.head.appendChild(apple);
+  }
+  // iPhone takes the home-screen icon from this link at "Add to Home Screen", not from the manifest.
+  var icons = businessIconPaths(salon.slug);
+  if (icons) {
+    var touch = document.querySelector('link[rel="apple-touch-icon"]');
+    if (!touch) {
+      touch = document.createElement("link");
+      touch.rel = "apple-touch-icon";
+      document.head.appendChild(touch);
+    }
+    touch.setAttribute("href", icons.apple);
   }
   document.title = label + " \u2014 Pet";
 }
