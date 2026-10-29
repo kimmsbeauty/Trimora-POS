@@ -15,9 +15,12 @@
 //
 // Device callers must be an authenticated device of the requested salon (same gate as pet-send-invoice).
 //
-// Secrets (Supabase function secrets, Trimora's own, shared by all businesses):
-//   GOOGLE_SERVICE_ACCOUNT_JSON   the service account's JSON key, as one string
-//   CALENDAR_SYNC_CRON_SECRET     any long random string; the scheduler sends it as x-cron-secret
+// Secrets:
+//   GOOGLE_SERVICE_ACCOUNT_JSON   the service account's JSON key, as one string (Edge Function secret)
+//   Scheduler secret              the scheduler sends it as x-cron-secret. It is accepted if it equals the Vault
+//                                 secret `calendar_sync_cron_secret` (checked in the database by
+//                                 pet_calendar_cron_secret_ok, migration 115) OR the optional function secret
+//                                 CALENDAR_SYNC_CRON_SECRET.
 // Missing GOOGLE_SERVICE_ACCOUNT_JSON answers 503 NOT_CONFIGURED and changes nothing.
 //
 // Needs migration 113 applied first. See README.md.
@@ -92,8 +95,14 @@ serve(async (req) => {
 
     // -- scheduler
     if (action === "process") {
-      const secret = Deno.env.get("CALENDAR_SYNC_CRON_SECRET") || "";
-      if (!secret || !safeEqual(req.headers.get("x-cron-secret"), secret)) return reply(401, { error: "Not authorized." });
+      const given = req.headers.get("x-cron-secret") || "";
+      const envSecret = Deno.env.get("CALENDAR_SYNC_CRON_SECRET") || "";
+      let allowed = !!envSecret && safeEqual(given, envSecret);
+      if (!allowed && given) {
+        const { data } = await supabase.rpc("pet_calendar_cron_secret_ok", { p_secret: given });
+        allowed = data === true;
+      }
+      if (!allowed) return reply(401, { error: "Not authorized." });
       return reply(200, { success: true, ...(await runSync(supabase, apiFor(sa), null)) });
     }
 
