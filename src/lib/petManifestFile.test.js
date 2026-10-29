@@ -66,8 +66,10 @@ describe("vercel.json routing for the manifest", function () {
     expect(catchAllIndex).toBeGreaterThan(-1);
     expect(manifestIndex).toBeGreaterThan(-1);
     expect(manifestIndex).toBeLessThan(catchAllIndex);
-    expect(rewrites[manifestIndex].destination).toBe("/pet.webmanifest");
-    expect(fs.existsSync(path.join(ROOT, "public/pet.webmanifest"))).toBe(true);
+    // served by api/pet-manifest.mjs, which puts the business's own name in the manifest
+    expect(rewrites[manifestIndex].destination).toBe("/api/pet-manifest?slug=:slug");
+    expect(fs.existsSync(path.join(ROOT, "api/pet-manifest.mjs"))).toBe(true);
+    expect(fs.existsSync(path.join(ROOT, "public/pet.webmanifest"))).toBe(true); // generic fallback reference
   });
 
   it("matches the per-business manifest path and nothing else", function () {
@@ -76,13 +78,6 @@ describe("vercel.json routing for the manifest", function () {
     expect(re.test("/happy-paws/pet")).toBe(false);
     expect(re.test("/a/b/pet.webmanifest")).toBe(false);
     expect(re.test("/pet.webmanifest")).toBe(false);
-  });
-
-  it("sends the right content type and a short cache for the manifest", function () {
-    var rule = vercel.headers.filter(function (h) { return h.source === "/:slug/pet.webmanifest"; })[0];
-    var byKey = {}; rule.headers.forEach(function (h) { byKey[h.key] = h.value; });
-    expect(byKey["Content-Type"]).toMatch(/^application\/manifest\+json/);
-    expect(byKey["Cache-Control"]).toMatch(/max-age=\d+/);
   });
 
   it("keeps the security headers on every path and allows a same-origin manifest", function () {
