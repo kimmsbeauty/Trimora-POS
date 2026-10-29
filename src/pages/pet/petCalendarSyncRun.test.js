@@ -60,6 +60,7 @@ var S = "11111111-0000-0000-0000-000000000001";
 var CAL = "pawpals@group.calendar.google.com";
 var BK = "bbbbbbbb-1111-0000-0000-000000000001";
 var ST = "cccccccc-2222-0000-0000-000000000001";
+var DV = "dddddddd-3333-0000-0000-000000000001";
 
 function seed(over) {
   return Object.assign({
@@ -73,6 +74,7 @@ function seed(over) {
     pet_booking_services: [{ salon_id: S, booking_id: BK, service_name: "Full groom" }],
     pet_bookings: [{ id: BK, salon_id: S, customer_id: "cu1", pet_id: "p1", staff_id: "sf1", starts_at: "2026-11-02T06:00:00Z", ends_at: "2026-11-02T07:00:00Z", status: "confirmed", notes: "PRIVATE NOTE" }],
     pet_boarding_stays: [{ id: ST, salon_id: S, customer_id: "cu1", pet_id: "p1", kennel_id: "k1", check_in_on: "2026-11-02", check_out_on: "2026-11-05", status: "reserved", service_name: "Boarding", feeding_notes: "SECRET", care_notes: "SECRET" }],
+    pet_daycare_visits: [{ id: DV, salon_id: S, customer_id: "cu1", pet_id: "p1", assigned_staff_id: "sf1", plan: "full_day", service_name: "Daycare full day", status: "booked", scheduled_start: "2026-11-03T05:00:00Z", scheduled_end: "2026-11-03T14:00:00Z", customer_instructions: "SECRET INSTRUCTIONS", notes: "SECRET NOTE", price: 1500 }],
     pet_calendar_events: [],
     pet_calendar_outbox: [],
   }, over || {});
@@ -109,6 +111,26 @@ describe("creating events", function () {
     expect(b.start).toEqual({ date: "2026-11-02" }); expect(b.end).toEqual({ date: "2026-11-06" });
     expect(b.id).toMatch(/^tks/); expect(b.description).toContain("Kennel: Kennel 3");
     expect(JSON.stringify(b)).not.toContain("SECRET");
+  });
+
+  it("creates a daycare visit as a timed event and never sends the instructions, notes or price", async function () {
+    var db = fakeDb(seed()); var g = fakeGoogle(); q(db, "daycare", DV);
+    var r = await go(db, g);
+    expect(r).toEqual({ synced: 1, skipped: 0, failed: 0, remaining: 0 });
+    var b = g.calls[0].body;
+    expect(b.id).toMatch(/^tkd/); expect(b.summary).toBe("Daycare – Bella (Jane Wanjiru)");
+    expect(b.start.dateTime).toBe("2026-11-03T05:00:00.000Z"); expect(b.end.dateTime).toBe("2026-11-03T14:00:00.000Z");
+    expect(b.description).toContain("Staff: Amina"); expect(b.attendees).toBeUndefined();
+    expect(JSON.stringify(b)).not.toContain("SECRET"); expect(JSON.stringify(b)).not.toContain("1500");
+    expect(db.T.pet_calendar_events[0]).toMatchObject({ source_type: "daycare", source_id: DV, google_event_id: b.id });
+  });
+
+  it("removes a daycare event when the visit is cancelled", async function () {
+    var db = fakeDb(seed()); var g = fakeGoogle(); q(db, "daycare", DV); await go(db, g); g.calls.length = 0;
+    db.T.pet_daycare_visits[0].status = "cancelled"; q(db, "daycare", DV);
+    await go(db, g);
+    expect(g.calls.length).toBe(1); expect(g.calls[0].method).toBe("DELETE");
+    expect(db.T.pet_calendar_events.length).toBe(0);
   });
 
   it("turns several queued changes to one booking into a single Google call", async function () {
