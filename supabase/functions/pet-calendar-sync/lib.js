@@ -17,7 +17,8 @@ export var MAX_ATTEMPTS = 8;
 export var DEFAULT_TZ = "Africa/Nairobi";
 
 var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-var BOOKING_STATUS = { pending: "Pending", confirmed: "Confirmed", "checked-in": "Checked in", "in-progress": "In progress", completed: "Completed" };
+// booked and ready are the statuses new bookings actually use (migration 092); same wording as the app.
+var BOOKING_STATUS = { booked: "Booked", pending: "Pending", confirmed: "Confirmed", "checked-in": "Checked in", "in-progress": "In progress", ready: "Ready for Collection", completed: "Completed" };
 var STAY_STATUS = { reserved: "Reserved", occupied: "Checked in", "checked-out": "Checked out" };
 var FOOTER = "Managed in Trimora Pet. Edit it there: changes made here are overwritten the next time the booking changes.";
 
