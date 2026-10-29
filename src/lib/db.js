@@ -331,6 +331,10 @@ export async function dbRpcAuth(functionName, args = {}) {
       const errBody = await res.json().catch(function () { return null; });
       return { error: (errBody && (errBody.message || errBody.error)) || "Request failed" };
     }
+    // A function that returns void (e.g. pet_save_calendar_connection) is answered with 204 No Content and
+    // an empty body. res.json() throws on that, which used to be reported as "Network error" even though
+    // the call had succeeded.
+    if (res.status === 204) return { data: null };
     const result = await res.json();
     return { data: result };
   } catch (e) {

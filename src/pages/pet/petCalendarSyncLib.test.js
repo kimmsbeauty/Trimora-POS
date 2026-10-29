@@ -58,6 +58,13 @@ describe("boarding events", function () {
     expect(ev.start).toEqual({ date: "2026-11-02" });
     expect(ev.end).toEqual({ date: "2026-11-06" });      // Google's all-day end is exclusive
   });
+  it("titles a same-day stay as Day camp and an overnight stay as Boarding", function () {
+    var day = stayEvent(Object.assign({}, STAY, { check_out_on: "2026-11-02" }), { petName: "Rex", ownerName: "Tom" });
+    expect(day.summary).toBe("Day camp – Rex (Tom)");
+    expect(day.description).toContain("Day camp ref:");
+    expect(ev.summary).toBe("Boarding – Rex (Tom)");
+    expect(ev.description).toContain("Boarding ref:");
+  });
   it("shows a same-day stay as one day", function () {
     var e = stayEvent(Object.assign({}, STAY, { check_out_on: "2026-11-02" }), {});
     expect(e.start).toEqual({ date: "2026-11-02" }); expect(e.end).toEqual({ date: "2026-11-03" });
