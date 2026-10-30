@@ -77,29 +77,27 @@ export default function InvoiceDocument({ invoice, customer, pet, salon }) {
         </div>
       </div>
 
-      {/* Invoice number + status */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "12px 0", borderTop: "2px solid " + PAWPALS_TINT_BORDER, borderBottom: "2px solid " + PAWPALS_TINT_BORDER }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 12, color: MUTED_FG }}>Invoice No.</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: ink, overflowWrap: "anywhere" }}>{invoice.invoice_number}</div>
+      {/* Reference bar: number, date, due date and payment status on one tidy row. No heading of its own. */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "12px 0", marginBottom: 14, borderTop: "2px solid " + PAWPALS_TINT_BORDER, borderBottom: "2px solid " + PAWPALS_TINT_BORDER }}>
+        <div style={{ display: "flex", gap: "10px 28px", flexWrap: "wrap", minWidth: 0 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12, color: MUTED_FG }}>No.</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: ink, overflowWrap: "anywhere" }}>{invoice.invoice_number}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: MUTED_FG }}>Date</div>
+            <div style={{ fontSize: 14, color: ink, paddingTop: 3 }}>{dateLabel(invoice.issued_at)}</div>
+          </div>
+          {invoice.due_date ? (
+            <div>
+              <div style={{ fontSize: 12, color: MUTED_FG }}>Due Date</div>
+              <div style={{ fontSize: 14, color: ink, paddingTop: 3 }}>{dateLabel(invoice.due_date)}</div>
+            </div>
+          ) : null}
         </div>
         <div style={{ display: "inline-block", padding: "5px 20px", borderRadius: 999, background: pillColor, color: CARD, fontSize: 13, fontWeight: 800, letterSpacing: "0.04em" }}>
           {STATUS_LABELS[status].toUpperCase()}
         </div>
-      </div>
-
-      {/* Dates */}
-      <div style={{ display: "flex", gap: 28, flexWrap: "wrap", padding: "14px 4px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <InvoiceIcon name="calendar" size={26} color={ink} />
-          <div><div style={{ fontSize: 12, color: MUTED_FG }}>Invoice Date</div><div style={{ fontSize: 14, color: ink }}>{dateLabel(invoice.issued_at)}</div></div>
-        </div>
-        {invoice.due_date ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <InvoiceIcon name="calendar" size={26} color={ink} />
-            <div><div style={{ fontSize: 12, color: MUTED_FG }}>Due Date</div><div style={{ fontSize: 14, color: ink }}>{dateLabel(invoice.due_date)}</div></div>
-          </div>
-        ) : null}
       </div>
 
       {/* Customer + pet */}

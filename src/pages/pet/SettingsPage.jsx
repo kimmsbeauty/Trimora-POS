@@ -5,15 +5,16 @@
 // the Salon and Auto apps use). The app reads these once at sign-in, so after a
 // successful save the page reloads to pick them up. Admin only (UI-level, like
 // the rest of Pet until roles are enforced in the database).
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { db, dbRpcAuth } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
 import { MUTED_FG, BORDER, FOREGROUND } from "./theme";
+import { REFUND_PIN_REFUSED } from "./invoiceData";
 import { validateSettings, settingsRow, phonesPayload, derivePrefix, normalizePrefix, invoiceNumberPreview } from "./settingsData";
 import ReminderSettings from "./ReminderSettings";
 import PublicBookingSettings from "./PublicBookingSettings";
 import GoogleCalendarSettings from "./GoogleCalendarSettings";
-import { PageHeader, Card, Button, Field, ErrorLine, inputStyle } from "./ui";
+import { PageHeader, Card, Button, Field, ErrorLine, Modal, inputStyle } from "./ui";
 
 function defaultReload() { try { window.location.reload(); } catch (e) { /* ignore */ } }
 
@@ -24,9 +25,28 @@ export default function SettingsPage({ onSaved }) {
     tax_enabled: !!salon.tax_enabled, tax_rate: salon.tax_rate != null ? String(salon.tax_rate) : "16",
     tax_pin: salon.tax_pin || "", receipt_footer_message: salon.receipt_footer_message || "",
     invoice_prefix: salon.invoice_prefix || "",
+    contact_email: salon.contact_email || "", website: salon.website || "", address: salon.address || "",
     // Every number the owner adds, each with a "show on invoice" switch. No limit and none built in.
     phones: (Array.isArray(salon.phones) ? salon.phones : []).map(function (p) { return { phone: p.phone, show_on_invoice: p.show_on_invoice !== false }; }),
   });
+  // The list as loaded, to know whether it changed (only a changed list needs the admin PIN).
+  var loadedPhones = useRef(JSON.stringify(phonesPayload(Array.isArray(salon.phones) ? salon.phones : [])));
+  var pinAskState = useState(false); var pinAsk = pinAskState[0]; var setPinAsk = pinAskState[1];
+  var pinValState = useState(""); var pinVal = pinValState[0]; var setPinVal = pinValState[1];
+  var pinErrState = useState(""); var pinErr = pinErrState[0]; var setPinErr = pinErrState[1];
+  var pinResolver = useRef(null);
+  function askPin() {
+    return new Promise(function (resolve) { pinResolver.current = resolve; setPinVal(""); setPinErr(""); setPinAsk(true); });
+  }
+  function answerPin(value) {
+    var r = pinResolver.current; pinResolver.current = null;
+    setPinAsk(false); setPinVal(""); setPinErr("");
+    if (r) r(value);
+  }
+  function submitPin() {
+    if (!/^[0-9]{4,6}$/.test(pinVal)) { setPinErr("Enter the admin PIN (4 to 6 digits)."); return; }
+    answerPin(pinVal);
+  }
   var newPhoneState = useState(""); var newPhone = newPhoneState[0]; var setNewPhone = newPhoneState[1];
   var d = dState[0]; var setD = dState[1];
   var savingState = useState(false); var saving = savingState[0]; var setSaving = savingState[1];
@@ -58,13 +78,27 @@ export default function SettingsPage({ onSaved }) {
     var msg = validateSettings(d);
     if (msg) { setErr(msg); return; }
     if (!salon.id) { setErr("Couldn't identify this business. Sign in again."); return; }
+    // Changing the phone list needs the admin PIN, like refunds and deletes. Ask first so a cancelled prompt saves nothing.
+    var payload = phonesPayload(d.phones);
+    var phonesChanged = JSON.stringify(payload) !== loadedPhones.current;
+    var pin = null;
+    if (phonesChanged) {
+      pin = await askPin();
+      if (pin === null) return;
+    }
     setSaving(true); setErr("");
     var ok = await db("PATCH", "salon_settings", settingsRow(d), "?salon_id=eq." + salon.id);
-    if (ok === null || ok === undefined || ok === false) { setSaving(false); setErr("Couldn't save. Check your connection and try again."); return; }
-    // The phone list is replaced in one database call, so it is saved whole or not at all.
-    var ph = await dbRpcAuth("salon_save_phone_numbers", { p_phones: phonesPayload(d.phones) });
-    setSaving(false);
-    if (ph.error) { setErr(/DUPLICATE_PHONE/.test(ph.error) ? "The same phone number is in the list twice." : /INVALID_PHONE/.test(ph.error) ? "One of the phone numbers isn't valid." : "Your settings were saved, but the phone numbers couldn't be. Try again."); return; }
+    if (ok === null || ok === undefined || ok === false) { pin = null; setSaving(false); setErr("Couldn't save. Check your connection and try again."); return; }
+    if (phonesChanged) {
+      // The phone list is replaced in one database call, so it is saved whole or not at all.
+      var ph = await dbRpcAuth("salon_save_phone_numbers", { p_admin_pin: pin, p_phones: payload });
+      pin = null;
+      setSaving(false);
+      if (ph.error) { setErr(/DUPLICATE_PHONE/.test(ph.error) ? "The same phone number is in the list twice." : /INVALID_PHONE/.test(ph.error) ? "One of the phone numbers isn't valid." : "Your settings were saved, but the phone numbers weren't. Check your connection and try again."); return; }
+      if (ph.data === null || ph.data === undefined) { setErr("Your other settings were saved, but the phone numbers weren't. " + REFUND_PIN_REFUSED); return; }
+    } else {
+      setSaving(false);
+    }
     setSaved(true);
     setTimeout(onSaved || defaultReload, 700);
   }
@@ -85,11 +119,14 @@ export default function SettingsPage({ onSaved }) {
           </div>
         ) : <p style={{ margin: 0, fontSize: 12, color: MUTED_FG }}>No logo yet: invoices will show your business name instead.</p>}
         <Field label="Tagline (optional)" htmlFor="set-tagline"><input id="set-tagline" style={inputStyle} value={d.tagline} onChange={function (e) { set("tagline", e.target.value); }} /></Field>
+        <Field label="Business email (optional)" htmlFor="set-email"><input id="set-email" inputMode="email" style={inputStyle} value={d.contact_email} onChange={function (e) { set("contact_email", e.target.value); }} /></Field>
+        <Field label="Website (optional)" htmlFor="set-website"><input id="set-website" style={inputStyle} value={d.website} placeholder="www.your-site.com" onChange={function (e) { set("website", e.target.value); }} /></Field>
+        <Field label="Address / location (optional)" htmlFor="set-address"><input id="set-address" style={inputStyle} value={d.address} placeholder="Town, Country" onChange={function (e) { set("address", e.target.value); }} /></Field>
         <Field label="Business WhatsApp number" htmlFor="set-phone"><input id="set-phone" inputMode="tel" style={inputStyle} value={d.contact_phone} onChange={function (e) { set("contact_phone", e.target.value); }} /></Field>
         <p style={{ margin: "-6px 0 0", fontSize: 12, color: MUTED_FG }}>Customers who send an online booking request are offered WhatsApp buttons that message this number (e.g. 0712345678). Leave blank to hide them.</p>
 
         <div style={{ fontWeight: 700, fontSize: 14, marginTop: 6 }}>Business phone numbers</div>
-        <p style={{ margin: "-6px 0 0", fontSize: 12, color: MUTED_FG }}>Add as many numbers as you need (for example each partner's). Choose which ones are printed on invoices.</p>
+        <p style={{ margin: "-6px 0 0", fontSize: 12, color: MUTED_FG }}>Add as many numbers as you need (for example each partner's). Choose which ones are printed on invoices. Changing this list asks for the admin PIN.</p>
         {d.phones.length === 0 ? <p style={{ margin: 0, fontSize: 12, color: MUTED_FG }}>No numbers yet: invoices won't show a phone number.</p> : null}
         {d.phones.map(function (p, i) {
           return (
@@ -112,11 +149,11 @@ export default function SettingsPage({ onSaved }) {
 
         <div style={{ fontWeight: 700, fontSize: 14, marginTop: 6 }}>Invoice numbers</div>
         <Field label="Invoice number prefix (optional)" htmlFor="set-prefix">
-          <input id="set-prefix" style={inputStyle} value={d.invoice_prefix} placeholder={derivePrefix(salon.name)} maxLength={20}
+          <input id="set-prefix" style={inputStyle} value={d.invoice_prefix} placeholder={derivePrefix(salon.name, salon.slug)} maxLength={20}
             onChange={function (e) { set("invoice_prefix", normalizePrefix(e.target.value)); }} />
         </Field>
         <p style={{ margin: "-6px 0 0", fontSize: 12, color: MUTED_FG }}>
-          Your next invoices will read <strong>{invoiceNumberPreview(d.invoice_prefix, salon.name)}</strong>. Leave the prefix blank to use your business name. Invoices already issued keep their numbers.
+          Your next invoices will read <strong>{invoiceNumberPreview(d.invoice_prefix, salon.name, salon.slug)}</strong>. Leave the prefix blank to use the first word of your business name. Invoices already issued keep their numbers.
         </p>
 
         <div style={{ fontWeight: 700, fontSize: 14, marginTop: 6 }}>Tax</div>
@@ -143,6 +180,20 @@ export default function SettingsPage({ onSaved }) {
       <ReminderSettings />
       <PublicBookingSettings />
       <GoogleCalendarSettings />
+
+      <Modal open={pinAsk} onClose={function () { answerPin(null); }} title="Confirm with admin PIN"
+        description="Enter the admin PIN to save your business phone numbers."
+        footer={<>
+          <Button variant="ghost" onClick={function () { answerPin(null); }}>Cancel</Button>
+          <Button onClick={submitPin}>Confirm</Button>
+        </>}>
+        <Field label="Admin PIN" htmlFor="settings-admin-pin">
+          <input id="settings-admin-pin" type="password" inputMode="numeric" autoComplete="off" maxLength={6} style={inputStyle} value={pinVal}
+            onChange={function (e) { setPinVal(e.target.value.replace(/[^0-9]/g, "")); setPinErr(""); }}
+            onKeyDown={function (e) { if (e.key === "Enter") submitPin(); }} autoFocus />
+        </Field>
+        <ErrorLine>{pinErr}</ErrorLine>
+      </Modal>
     </div>
   );
 }

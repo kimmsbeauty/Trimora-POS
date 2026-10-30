@@ -150,11 +150,12 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
     answerPin(pinVal);
   }
 
-  // Permanent delete: type the invoice number, then the admin PIN. The database removes the invoice, its
-  // payments and refunds for good (migration 117), puts products back in stock and, if it was the last
-  // invoice, restarts numbering at 0001.
+  // Permanent delete: type the invoice number, then the admin PIN. Only an invoice with no payments, refunds or
+  // M-Pesa record can go (migration 118); the database refuses the rest. It puts products back in stock, keeps a
+  // copy for the records and never gives the number out again.
   async function confirmDelete() {
     if (saving || !deleting) return;
+    if (deleting.blocked) return;
     if (deleting.typed.trim().toUpperCase() !== String(deleting.number).toUpperCase()) { setErr("Type the invoice number exactly to confirm."); return; }
     setErr("");
     setPinWhy("delete this invoice permanently");
@@ -257,7 +258,7 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
           <Button variant="ghost" onClick={closeDetail}>Close</Button>
           {detail.status === "issued" ? <Button variant="ghost-danger" onClick={function () { setErr(""); setVoiding({ id: detail.id, reason: "" }); }}>Void invoice</Button> : null}
           {refundable(detail) > 0 ? <Button variant="ghost-danger" onClick={openRefund}>Refund</Button> : null}
-          <Button variant="ghost-danger" onClick={function () { setErr(""); setDeleting({ id: detail.id, number: detail.invoice_number, typed: "" }); }}>Delete permanently</Button>
+          <Button variant="ghost-danger" onClick={function () { setErr(""); setDeleting({ id: detail.id, number: detail.invoice_number, typed: "", blocked: (detail.pet_payments || []).length > 0 || sortedRefunds(detail).length > 0 }); }}>Delete permanently</Button>
           <Button variant="outline" onClick={function () { setSendChannel("email"); }}>Email</Button>
           <Button variant="outline" onClick={function () { setSendChannel("whatsapp"); }}>WhatsApp</Button>
           <Button onClick={function () { window.print(); }}>Print</Button>
@@ -414,16 +415,23 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
         ) : null}
       </Modal>
 
-      <Modal open={!!deleting} onClose={function () { if (!saving && !pinAsk) { setDeleting(null); setErr(""); } }} title="Delete this invoice permanently?"
-        footer={<>
+      <Modal open={!!deleting} onClose={function () { if (!saving && !pinAsk) { setDeleting(null); setErr(""); } }} title={deleting && deleting.blocked ? "This invoice can't be deleted" : "Delete this invoice permanently?"}
+        footer={deleting && deleting.blocked ? (
+          <Button variant="ghost" onClick={function () { setDeleting(null); setErr(""); }}>Close</Button>
+        ) : <>
           <Button variant="ghost" onClick={function () { setDeleting(null); setErr(""); }} disabled={saving}>Keep invoice</Button>
           <Button variant="danger" onClick={confirmDelete} disabled={saving}>{saving ? "Deleting…" : "Delete permanently…"}</Button>
         </>}>
-        {deleting ? (
+        {deleting && deleting.blocked ? (
+          <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: FOREGROUND }}>
+            {deleting.number} has a payment or refund on record, so it can't be deleted: that would erase real money history from your reports.
+            Refund it instead, and the invoice stays on file with the refund recorded.
+          </p>
+        ) : deleting ? (
           <div>
             <p style={{ margin: "0 0 10px", fontSize: 13, lineHeight: 1.5, color: FOREGROUND }}>
-              {deleting.number} will be erased for good, together with its payments and refunds. This can't be undone and it won't appear in your reports.
-              Use it to clear test invoices. For a real sale, void or refund it instead so your records stay complete. The admin PIN is asked next.
+              {deleting.number} will be erased for good. Its number is never used again, and any products on it go back into stock. This can't be undone and it won't appear in your reports.
+              Use it to clear test invoices. The admin PIN is asked next.
             </p>
             <Field label={"Type " + deleting.number + " to confirm"} htmlFor="delete-confirm">
               <input id="delete-confirm" style={inputStyle} autoComplete="off" value={deleting.typed} onChange={function (e) { setDeleting(Object.assign({}, deleting, { typed: e.target.value })); }} />

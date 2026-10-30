@@ -144,16 +144,16 @@ describe("InvoicesPage", function () {
       fireEvent.click(await screen.findByRole("button", { name: "View receipt RCT-0001-1" }));
       expect(await screen.findByText("RECEIPT")).toBeTruthy();
       expect(screen.getByAltText("Paws & Co logo")).toBeTruthy();
-      expect(screen.queryByText("Invoice No.")).toBeNull();
+      expect(screen.queryByText("No.")).toBeNull();
       expect(screen.getByText("Balance remaining")).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Back to invoice" }));
-      expect(await screen.findByText("Invoice No.")).toBeTruthy();
+      expect(await screen.findByText("No.")).toBeTruthy();
     });
 
     it("has no receipts section for an invoice with no payments", async function () {
       setup();
       fireEvent.click(await screen.findByLabelText("Open invoice INV-0001"));
-      await screen.findByText("Invoice No.");
+      await screen.findByText("No.");
       expect(screen.queryByText("Receipts")).toBeNull();
     });
 
@@ -522,7 +522,7 @@ describe("InvoicesPage", function () {
       expect(await screen.findByRole("button", { name: "Email" })).toBeTruthy();
     });
   });
-  describe("permanent delete (migration 117)", function () {
+  describe("permanent delete (migrations 117, 118)", function () {
     function delCalls() { return mockRpc.mock.calls.filter(function (c) { return c[0] === "pet_delete_invoice"; }); }
     function typePin(pin) {
       fireEvent.change(screen.getByLabelText("Admin PIN"), { target: { value: pin } });
@@ -568,6 +568,28 @@ describe("InvoicesPage", function () {
       await screen.findByLabelText("Admin PIN"); typePin("0000");
       expect(await screen.findByText(/admin PIN wasn't accepted/)).toBeTruthy();
       expect(screen.getByText("Delete this invoice permanently?")).toBeTruthy(); // still open
+    });
+
+    it("explains instead of deleting when the invoice has a payment on record, and never calls the database", async function () {
+      var paidRow = [{ id: "pay1", method: "cash", amount: 1000, paid_at: "2026-10-24T09:00:00Z" }];
+      setup({ invoices: [inv({ status: "partial", amount_paid: 1000, pet_payments: paidRow })] });
+      fireEvent.click(await screen.findByLabelText("Open invoice INV-0001"));
+      fireEvent.click(await screen.findByRole("button", { name: "Delete permanently" }));
+      expect(await screen.findByText("This invoice can't be deleted")).toBeTruthy();
+      expect(screen.getByText(/Refund it instead/)).toBeTruthy();
+      expect(screen.queryByLabelText(/Type INV-0001/)).toBeNull();
+      expect(screen.queryByRole("button", { name: "Delete permanently…" })).toBeNull();
+      expect(delCalls().length).toBe(0);
+    });
+
+    it("tells the owner when the database refuses (for example an M-Pesa payment on record)", async function () {
+      await openDelete();
+      mockRpc.mockImplementation(function (fn) { return Promise.resolve(fn === "pet_delete_invoice" ? { error: "INVOICE_HAS_MPESA" } : { data: [] }); });
+      fireEvent.change(screen.getByLabelText("Type INV-0001 to confirm"), { target: { value: "INV-0001" } });
+      fireEvent.click(screen.getByRole("button", { name: "Delete permanently…" }));
+      await screen.findByLabelText("Admin PIN"); typePin("9999");
+      expect(await screen.findByText(/M-Pesa payment on record/)).toBeTruthy();
+      expect(screen.getByText("Delete this invoice permanently?")).toBeTruthy();
     });
   });
 });
