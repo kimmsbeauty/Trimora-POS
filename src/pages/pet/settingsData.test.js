@@ -1,4 +1,4 @@
-import { isValidLogoUrl, validateSettings, settingsRow, derivePrefix, normalizePrefix, invoiceNumberPreview, validatePhone, validatePhones, phonesPayload } from "./settingsData";
+import { isValidLogoUrl, validateSettings, settingsRow, derivePrefix, firstMeaningfulWord, normalizePrefix, invoiceNumberPreview, validatePhone, validatePhones, phonesPayload } from "./settingsData";
 
 var ok = { logo_url: "https://example.com/logo.png", tagline: "", contact_phone: "", tax_enabled: false, tax_rate: "16", tax_pin: "", receipt_footer_message: "" };
 
@@ -38,17 +38,26 @@ describe("settingsRow", function () {
 });
 
 describe("invoice prefix", function () {
-  it("is derived from the full business name, letters and digits only", function () {
+  it("is the first meaningful word of the business name", function () {
+    expect(derivePrefix("PawPals KE")).toBe("PAWPALS");
+    expect(derivePrefix("Kimms Beauty Parlour")).toBe("KIMMS");
     expect(derivePrefix("Pawpalske")).toBe("PAWPALSKE");
-    expect(derivePrefix("Paws & Co. 2")).toBe("PAWSCO2");
-    expect(derivePrefix("")).toBe("");
-    expect(derivePrefix("a".repeat(40)).length).toBe(20);
+    expect(derivePrefix("The Happy Paws")).toBe("HAPPY");
+    expect(derivePrefix("A & B Salon")).toBe("SALON");
+    expect(derivePrefix("J&J Cuts")).toBe("JJ");
+    expect(derivePrefix("Paws-N-Claws")).toBe("PAWS");
+    expect(firstMeaningfulWord("a".repeat(40)).length).toBe(20);
+  });
+  it("falls back to the web-address slug, then to a generic prefix", function () {
+    expect(derivePrefix("!!!", "sunny-pets")).toBe("SUNNY");
+    expect(derivePrefix("", "")).toBe("BIZ");
+    expect(derivePrefix(null, null)).toBe("BIZ");
   });
   it("normalizes what the owner types and previews the next number", function () {
     expect(normalizePrefix(" paw-pals! ")).toBe("PAWPALS");
-    expect(invoiceNumberPreview("pawpals", "Pawpalske")).toBe("PAWPALS-INV-0001");
-    expect(invoiceNumberPreview("", "Pawpalske")).toBe("PAWPALSKE-INV-0001");
-    expect(invoiceNumberPreview("", "")).toBe("INV-0001");
+    expect(invoiceNumberPreview("pawpals", "Anything")).toBe("PAWPALS-INV-0001");
+    expect(invoiceNumberPreview("", "PawPals KE")).toBe("PAWPALS-INV-0001");
+    expect(invoiceNumberPreview("", "", "")).toBe("BIZ-INV-0001");
   });
   it("saves the prefix as null when blank", function () {
     expect(settingsRow(Object.assign({}, ok, { invoice_prefix: "" })).invoice_prefix).toBeNull();
@@ -81,5 +90,19 @@ describe("business phone numbers", function () {
   it("builds the payload with the show-on-invoice switch", function () {
     expect(phonesPayload([{ phone: " 0712345678 ", show_on_invoice: false }, { phone: "0722345678" }]))
       .toEqual([{ phone: "0712345678", show_on_invoice: false }, { phone: "0722345678", show_on_invoice: true }]);
+  });
+});
+
+describe("business email, website and address", function () {
+  it("are saved as typed, null when blank", function () {
+    var r = settingsRow(Object.assign({}, ok, { contact_email: " hello@example.com ", website: "", address: " Some Town " }));
+    expect(r.contact_email).toBe("hello@example.com"); expect(r.website).toBeNull(); expect(r.address).toBe("Some Town");
+  });
+  it("checks the email shape and the lengths", function () {
+    expect(validateSettings(Object.assign({}, ok, { contact_email: "hello@example.com" }))).toBe("");
+    expect(validateSettings(Object.assign({}, ok, { contact_email: "not-an-email" }))).toMatch(/email/);
+    expect(validateSettings(Object.assign({}, ok, { website: "w".repeat(201) }))).toMatch(/website/);
+    expect(validateSettings(Object.assign({}, ok, { address: "a".repeat(301) }))).toMatch(/address/);
+    expect(validateSettings(Object.assign({}, ok, { contact_email: "", website: "", address: "" }))).toBe("");
   });
 });

@@ -58,9 +58,10 @@ export function resolveBrand(salon, defaults) {
     // The preset's colours belong to its logo, so they only apply with it.
     ink: p.ink || defaults.ink,
     tagline: s.tagline || p.tagline || "",
-    location: p.location || "",
-    email: p.email || "",
-    website: p.website || "",
+    // The business's own Settings win; the preset only fills what the owner has not entered yet.
+    location: s.address || p.location || "",
+    email: s.contact_email || p.email || "",
+    website: s.website || p.website || "",
     phones: invoicePhones(s),
     thanks: s.receipt_footer_message || p.thanks || "Thank you for your business.",
     isPreset: presetColours,

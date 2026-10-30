@@ -9,18 +9,27 @@ export function isValidLogoUrl(url) {
   return /^https:\/\/[^\s]+$/i.test(u);
 }
 
-// Invoice number prefix. Left blank, it comes from the business name (letters and digits only, upper case),
-// so each business's invoices carry its own name: "Pawpalske" -> PAWPALSKE-INV-0001. The database does the
-// same derivation when it numbers an invoice; this copy only previews it.
-export function derivePrefix(name) {
-  return String(name || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20);
+// Invoice number prefix. Left blank, it is the FIRST MEANINGFUL WORD of the business name (upper case, letters
+// and digits only, up to 20), so each business's invoices carry its own name: "PawPals KE" -> PAWPALS-INV-0001.
+// Words that don't count: THE, AN, AND, OF and one-letter words. When the name gives nothing, the first word of
+// the web-address slug is used, then BIZ. The database does the same derivation when it numbers an invoice
+// (pet_prefix_word, migration 118); this copy only previews it.
+var SKIPPED_WORDS = ["THE", "AN", "AND", "OF"];
+export function firstMeaningfulWord(text) {
+  var words = String(text || "").split(/[\s_-]+/).map(function (w) { return w.toUpperCase().replace(/[^A-Z0-9]/g, ""); })
+    .filter(function (w) { return w !== ""; });
+  var pick = words.filter(function (w) { return w.length >= 2 && SKIPPED_WORDS.indexOf(w) === -1; })[0] || words[0] || "";
+  return pick.slice(0, 20);
+}
+export var FALLBACK_PREFIX = "BIZ";
+export function derivePrefix(name, slug) {
+  return firstMeaningfulWord(name) || firstMeaningfulWord(slug) || FALLBACK_PREFIX;
 }
 export function normalizePrefix(v) {
   return String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20);
 }
-export function invoiceNumberPreview(prefix, name) {
-  var p = normalizePrefix(prefix) || derivePrefix(name);
-  return (p ? p + "-" : "") + "INV-0001";
+export function invoiceNumberPreview(prefix, name, slug) {
+  return (normalizePrefix(prefix) || derivePrefix(name, slug)) + "-INV-0001";
 }
 
 // Business phone numbers: any number of them, each can be left off the invoice.
@@ -53,6 +62,10 @@ export function validateSettings(d) {
   if (String(d.tagline || "").length > 120) return "The tagline is too long (120 characters at most).";
   if (String(d.receipt_footer_message || "").length > 200) return "The invoice footer is too long (200 characters at most).";
   if (d.invoice_prefix != null && String(d.invoice_prefix).trim() !== "" && !/^[A-Za-z0-9]{1,20}$/.test(String(d.invoice_prefix).trim())) return "The invoice prefix can only use letters and numbers (20 at most).";
+  if (String(d.contact_email || "").trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(d.contact_email).trim())) return "Enter a valid business email address.";
+  if (String(d.contact_email || "").trim().length > 254) return "The business email is too long.";
+  if (String(d.website || "").trim().length > 200) return "The website is too long (200 characters at most).";
+  if (String(d.address || "").trim().length > 300) return "The address is too long (300 characters at most).";
   var phoneMsg = validatePhones(d.phones);
   if (phoneMsg) return phoneMsg;
   var phone = String(d.contact_phone || "").trim();
@@ -71,5 +84,8 @@ export function settingsRow(d) {
     tax_pin: nul(d.tax_pin) ? String(d.tax_pin).trim().toUpperCase() : null,
     receipt_footer_message: nul(d.receipt_footer_message),
     invoice_prefix: normalizePrefix(d.invoice_prefix) || null,
+    contact_email: nul(d.contact_email),
+    website: nul(d.website),
+    address: nul(d.address),
   };
 }

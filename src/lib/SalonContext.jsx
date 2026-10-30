@@ -145,6 +145,9 @@ export function SalonGate({ mode, children }) {
               tax_pin: settingsRows[0].tax_pin || null,
               receipt_footer_message: settingsRows[0].receipt_footer_message || null,
               invoice_prefix: settingsRows[0].invoice_prefix || null,
+              contact_email: settingsRows[0].contact_email || null,
+              website: settingsRows[0].website || null,
+              address: settingsRows[0].address || null,
               receipt_show_staff: settingsRows[0].receipt_show_staff !== false,
               receipt_show_vehicle: settingsRows[0].receipt_show_vehicle !== false,
             });

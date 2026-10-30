@@ -70,12 +70,43 @@ describe("InvoiceDocument", function () {
     expect(screen.getByText("M-Pesa")).toBeTruthy();
     expect(screen.queryByText("info@pawpalskenya.co.ke")).toBeNull();
   });
-  it("no longer prints a big INVOICE heading, but keeps the number and status", function () {
-    render(<InvoiceDocument invoice={invoice} customer={customer} pet={pet} salon={{ name: "Paws & Co" }} />);
-    expect(screen.queryByText("INVOICE")).toBeNull();
-    expect(screen.getByText("Invoice No.")).toBeTruthy();
+  it("has no heading: the word invoice appears nowhere on the document, but the number, date and status stay", function () {
+    var withEverything = Object.assign({}, invoice, { notes: "" });
+    var salon = { name: "Paws & Co", logo_url: "https://example.com/logo.png", tagline: "Pet care", contact_email: "hello@example.com", website: "www.example.com", address: "Some Town",
+      phones: [{ phone: "0711 111 111", show_on_invoice: true }] };
+    var view = render(<InvoiceDocument invoice={withEverything} customer={customer} pet={pet} salon={salon} />);
+    // What a person can read: the text on the page, not the print stylesheet's class names.
+    var clone = view.container.cloneNode(true);
+    Array.from(clone.querySelectorAll("style")).forEach(function (n) { n.remove(); });
+    expect(clone.textContent).not.toMatch(/invoice/i);
+    expect(Array.from(view.container.querySelectorAll("[alt],[title],[aria-label]")).map(function (n) {
+      return [n.getAttribute("alt"), n.getAttribute("title"), n.getAttribute("aria-label")].join(" ");
+    }).join(" ")).not.toMatch(/invoice/i);
+    expect(screen.getByText("No.")).toBeTruthy();
+    expect(screen.getByText("Date")).toBeTruthy();
+    expect(screen.getByText("Due Date")).toBeTruthy();
     expect(screen.getByText("INV-0007")).toBeTruthy();
     expect(screen.getByText("PART PAID")).toBeTruthy();
+  });
+  it("shows a new-format number as the reference, wrapped inside the card, with no due date row when there is none", function () {
+    var inv = Object.assign({}, invoice, { invoice_number: "A-VERY-LONG-BUSINESS-PREFIX-INV-10001", due_date: null });
+    render(<InvoiceDocument invoice={inv} customer={customer} pet={pet} salon={{ name: "Paws & Co" }} />);
+    var num = screen.getByText("A-VERY-LONG-BUSINESS-PREFIX-INV-10001");
+    expect(num.style.overflowWrap).toBe("anywhere");
+    expect(screen.queryByText("Due Date")).toBeNull();
+  });
+  it("takes the business email, website and address from the business's own settings, wrapped to fit", function () {
+    var long = "a-really-long-name-for-an-email-address-that-would-not-fit@a-very-long-domain-name.example.com";
+    render(<InvoiceDocument invoice={invoice} customer={customer} pet={pet} salon={{ name: "Paws & Co", contact_email: long, website: "www.example.com", address: "Some Town, Some Country" }} />);
+    var mail = screen.getAllByText(long)[0];
+    expect(mail.style.overflowWrap).toBe("anywhere");
+    expect(screen.getAllByText("www.example.com").length).toBeGreaterThan(0);
+    expect(screen.getByText("Some Town, Some Country")).toBeTruthy();
+  });
+  it("shows no empty contact rows when a business has entered nothing", function () {
+    var view = render(<InvoiceDocument invoice={invoice} customer={customer} pet={pet} salon={{ name: "Paws & Co" }} />);
+    expect(view.container.querySelectorAll("svg").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/@/)).toBeNull();
   });
   it("prints every phone number the owner switched on, and skips the rest", function () {
     var salon = { name: "Paws & Co", phones: [{ phone: "0711 111 111", show_on_invoice: true }, { phone: "0722 222 222", show_on_invoice: false }, { phone: "0733 333 333", show_on_invoice: true }] };
