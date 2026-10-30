@@ -15,7 +15,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { db, dbRpcAuth } from "../../lib/db";
 import { useSalon } from "../../lib/SalonContext";
 import { fmt } from "../../lib/utils";
-import { MUTED_FG, MUTED, BORDER, FOREGROUND } from "./theme";
+import { MUTED_FG, MUTED, BORDER, FOREGROUND, DESTRUCTIVE } from "./theme";
 import {
   METHODS, METHOD_LABELS, STATUS_LABELS, STATUS_TONES, invoiceErrorMessage, outstanding, displayStatus, filterInvoices, summarize,
   refundable, netPaid, hasProductLines, validateRefund, newIdempotencyKey, REFUND_PIN_REFUSED,
@@ -150,12 +150,11 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
     answerPin(pinVal);
   }
 
-  // Permanent delete: type the invoice number, then the admin PIN. Only an invoice with no payments, refunds or
-  // M-Pesa record can go (migration 118); the database refuses the rest. It puts products back in stock, keeps a
-  // copy for the records and never gives the number out again.
+  // Permanent delete: type the invoice number, then the admin PIN. Any invoice can go, paid ones included (the owner
+  // clears trial invoices this way, migration 119); the database keeps a full copy with its payments and refunds,
+  // puts products back in stock and never gives the number out again. An M-Pesa push still waiting is refused.
   async function confirmDelete() {
     if (saving || !deleting) return;
-    if (deleting.blocked) return;
     if (deleting.typed.trim().toUpperCase() !== String(deleting.number).toUpperCase()) { setErr("Type the invoice number exactly to confirm."); return; }
     setErr("");
     setPinWhy("delete this invoice permanently");
@@ -258,7 +257,7 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
           <Button variant="ghost" onClick={closeDetail}>Close</Button>
           {detail.status === "issued" ? <Button variant="ghost-danger" onClick={function () { setErr(""); setVoiding({ id: detail.id, reason: "" }); }}>Void invoice</Button> : null}
           {refundable(detail) > 0 ? <Button variant="ghost-danger" onClick={openRefund}>Refund</Button> : null}
-          <Button variant="ghost-danger" onClick={function () { setErr(""); setDeleting({ id: detail.id, number: detail.invoice_number, typed: "", blocked: (detail.pet_payments || []).length > 0 || sortedRefunds(detail).length > 0 }); }}>Delete permanently</Button>
+          <Button variant="ghost-danger" onClick={function () { setErr(""); setDeleting({ id: detail.id, number: detail.invoice_number, typed: "", payments: (detail.pet_payments || []).length, refunds: sortedRefunds(detail).length, paid: Number(detail.amount_paid) || 0 }); }}>Delete permanently</Button>
           <Button variant="outline" onClick={function () { setSendChannel("email"); }}>Email</Button>
           <Button variant="outline" onClick={function () { setSendChannel("whatsapp"); }}>WhatsApp</Button>
           <Button onClick={function () { window.print(); }}>Print</Button>
@@ -415,24 +414,23 @@ export default function InvoicesPage({ openInvoiceId, onDetailClosed, initialSta
         ) : null}
       </Modal>
 
-      <Modal open={!!deleting} onClose={function () { if (!saving && !pinAsk) { setDeleting(null); setErr(""); } }} title={deleting && deleting.blocked ? "This invoice can't be deleted" : "Delete this invoice permanently?"}
-        footer={deleting && deleting.blocked ? (
-          <Button variant="ghost" onClick={function () { setDeleting(null); setErr(""); }}>Close</Button>
-        ) : <>
+      <Modal open={!!deleting} onClose={function () { if (!saving && !pinAsk) { setDeleting(null); setErr(""); } }} title="Delete this invoice permanently?"
+        footer={<>
           <Button variant="ghost" onClick={function () { setDeleting(null); setErr(""); }} disabled={saving}>Keep invoice</Button>
           <Button variant="danger" onClick={confirmDelete} disabled={saving}>{saving ? "Deleting…" : "Delete permanently…"}</Button>
         </>}>
-        {deleting && deleting.blocked ? (
-          <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: FOREGROUND }}>
-            {deleting.number} has a payment or refund on record, so it can't be deleted: that would erase real money history from your reports.
-            Refund it instead, and the invoice stays on file with the refund recorded.
-          </p>
-        ) : deleting ? (
+        {deleting ? (
           <div>
             <p style={{ margin: "0 0 10px", fontSize: 13, lineHeight: 1.5, color: FOREGROUND }}>
               {deleting.number} will be erased for good. Its number is never used again, and any products on it go back into stock. This can't be undone and it won't appear in your reports.
-              Use it to clear test invoices. The admin PIN is asked next.
+              The admin PIN is asked next.
             </p>
+            {deleting.payments > 0 || deleting.refunds > 0 ? (
+              <p role="alert" style={{ margin: "0 0 10px", fontSize: 13, lineHeight: 1.5, color: DESTRUCTIVE, fontWeight: 600 }}>
+                This invoice has {deleting.payments} payment{deleting.payments === 1 ? "" : "s"}{deleting.paid > 0 ? " (" + fmt(deleting.paid) + " paid)" : ""}{deleting.refunds > 0 ? " and " + deleting.refunds + " refund" + (deleting.refunds === 1 ? "" : "s") : ""} on record.
+                They are removed from your reports too. Only delete it if it is a trial or test invoice. For a real sale, refund it instead so your records stay complete.
+              </p>
+            ) : null}
             <Field label={"Type " + deleting.number + " to confirm"} htmlFor="delete-confirm">
               <input id="delete-confirm" style={inputStyle} autoComplete="off" value={deleting.typed} onChange={function (e) { setDeleting(Object.assign({}, deleting, { typed: e.target.value })); }} />
             </Field>

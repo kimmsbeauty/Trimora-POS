@@ -522,7 +522,7 @@ describe("InvoicesPage", function () {
       expect(await screen.findByRole("button", { name: "Email" })).toBeTruthy();
     });
   });
-  describe("permanent delete (migrations 117, 118)", function () {
+  describe("permanent delete (migrations 117 to 119)", function () {
     function delCalls() { return mockRpc.mock.calls.filter(function (c) { return c[0] === "pet_delete_invoice"; }); }
     function typePin(pin) {
       fireEvent.change(screen.getByLabelText("Admin PIN"), { target: { value: pin } });
@@ -570,25 +570,35 @@ describe("InvoicesPage", function () {
       expect(screen.getByText("Delete this invoice permanently?")).toBeTruthy(); // still open
     });
 
-    it("explains instead of deleting when the invoice has a payment on record, and never calls the database", async function () {
+    it("warns about the money on record for a paid invoice, then deletes it with the PIN like any other", async function () {
       var paidRow = [{ id: "pay1", method: "cash", amount: 1000, paid_at: "2026-10-24T09:00:00Z" }];
       setup({ invoices: [inv({ status: "partial", amount_paid: 1000, pet_payments: paidRow })] });
       fireEvent.click(await screen.findByLabelText("Open invoice INV-0001"));
       fireEvent.click(await screen.findByRole("button", { name: "Delete permanently" }));
-      expect(await screen.findByText("This invoice can't be deleted")).toBeTruthy();
-      expect(screen.getByText(/Refund it instead/)).toBeTruthy();
-      expect(screen.queryByLabelText(/Type INV-0001/)).toBeNull();
-      expect(screen.queryByRole("button", { name: "Delete permanently…" })).toBeNull();
+      expect(await screen.findByText("Delete this invoice permanently?")).toBeTruthy();
+      expect(screen.getByRole("alert").textContent).toMatch(/1 payment .*on record/);
+      expect(screen.getByRole("alert").textContent).toMatch(/trial or test invoice/);
       expect(delCalls().length).toBe(0);
-    });
-
-    it("tells the owner when the database refuses (for example an M-Pesa payment on record)", async function () {
-      await openDelete();
-      mockRpc.mockImplementation(function (fn) { return Promise.resolve(fn === "pet_delete_invoice" ? { error: "INVOICE_HAS_MPESA" } : { data: [] }); });
       fireEvent.change(screen.getByLabelText("Type INV-0001 to confirm"), { target: { value: "INV-0001" } });
       fireEvent.click(screen.getByRole("button", { name: "Delete permanently…" }));
       await screen.findByLabelText("Admin PIN"); typePin("9999");
-      expect(await screen.findByText(/M-Pesa payment on record/)).toBeTruthy();
+      await waitFor(function () { expect(delCalls().length).toBe(1); });
+      expect(delCalls()[0][1]).toEqual({ p_admin_pin: "9999", p_invoice_id: "i1" });
+    });
+
+    it("shows no money warning for an invoice with no payments", async function () {
+      await openDelete();
+      expect(await screen.findByText("Delete this invoice permanently?")).toBeTruthy();
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("tells the owner when the database refuses (for example an M-Pesa payment still waiting)", async function () {
+      await openDelete();
+      mockRpc.mockImplementation(function (fn) { return Promise.resolve(fn === "pet_delete_invoice" ? { error: "INVOICE_HAS_PENDING_MPESA" } : { data: [] }); });
+      fireEvent.change(screen.getByLabelText("Type INV-0001 to confirm"), { target: { value: "INV-0001" } });
+      fireEvent.click(screen.getByRole("button", { name: "Delete permanently…" }));
+      await screen.findByLabelText("Admin PIN"); typePin("9999");
+      expect(await screen.findByText(/still waiting for the customer/)).toBeTruthy();
       expect(screen.getByText("Delete this invoice permanently?")).toBeTruthy();
     });
   });
