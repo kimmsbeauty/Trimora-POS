@@ -185,7 +185,7 @@ function PetStaffRoute() {
         : activeItem.key === "calendar"
         ? <CalendarPage initialView={intent && intent.view} startNew={!!(intent && intent.startNew)} openBookingId={intent && intent.bookingId} />
         : activeItem.key === "checkout"
-        ? <CheckoutPage onInvoiceCreated={function (id) { setOpenInvoice(id); setTab("invoices"); }} />
+        ? <CheckoutPage onInvoiceCreated={function (id) { setOpenInvoice(id); setTab("invoices"); }} onOpenDaycare={function () { selectTab("daycare"); }} />
         : activeItem.key === "invoices"
         ? <InvoicesPage openInvoiceId={openInvoice} onDetailClosed={function () { setOpenInvoice(null); }} initialStatus={intent && intent.status} />
         : activeItem.key === "supplies"

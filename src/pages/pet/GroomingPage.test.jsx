@@ -169,4 +169,20 @@ describe("GroomingPage (service catalogue)", function () {
     expect(screen.queryByRole("note")).toBeNull();
     expect(screen.queryByText(/Not on online booking/)).toBeNull();
   });
+
+  describe("Daycare billing notice", function () {
+    it("explains how Daycare is billed when the category is Daycare, and only then", async function () {
+      setup();
+      await screen.findByText("Full groom");
+      fireEvent.click(screen.getAllByText("+ Add service")[0]);
+      expect(screen.queryByText("How Daycare services are billed")).toBeNull();
+      fireEvent.change(screen.getByLabelText("Category"), { target: { value: "Daycare" } });
+      var note = screen.getByRole("note");
+      expect(note.textContent).toMatch(/won't appear in Checkout/);
+      expect(note.textContent).toMatch(/Daycare → Settings/);
+      expect(note.textContent).toMatch(/when a dog is checked out/);
+      fireEvent.change(screen.getByLabelText("Category"), { target: { value: "Boarding" } });
+      expect(screen.queryByRole("note")).toBeNull();
+    });
+  });
 });

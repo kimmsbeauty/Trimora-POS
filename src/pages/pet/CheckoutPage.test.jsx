@@ -36,7 +36,7 @@ function setup(opts) {
   });
   mockRpc.mockImplementation(function () { return Promise.resolve(opts.rpcError ? { error: opts.rpcError } : { data: "inv-1" }); });
   var onCreated = vi.fn();
-  render(<CheckoutPage onInvoiceCreated={onCreated} />);
+  render(<CheckoutPage onInvoiceCreated={onCreated} onOpenDaycare={opts.onOpenDaycare} />);
   return onCreated;
 }
 
@@ -164,5 +164,28 @@ describe("CheckoutPage", function () {
     var q = mockDb.mock.calls.filter(function (c) { return c[1] === "pet_invoices"; })[0][3];
     expect(q).toContain("status=not.in.(void,refunded)");
     expect(q).not.toContain("status=neq.void");
+  });
+
+  describe("Daycare hint", function () {
+    it("tells staff Daycare is billed from the Daycare page and takes them there", async function () {
+      var go = vi.fn();
+      setup({ onOpenDaycare: go });
+      var note = await screen.findByRole("note");
+      expect(note.textContent).toMatch(/Daycare isn't added here/);
+      expect(note.textContent).toMatch(/invoice is created at checkout/);
+      fireEvent.click(screen.getByRole("button", { name: "Go to Daycare" }));
+      expect(go).toHaveBeenCalledTimes(1);
+    });
+    it("still explains it, without a button, when no navigation handler is given", async function () {
+      setup();
+      expect(await screen.findByRole("note")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Go to Daycare" })).toBeNull();
+    });
+    it("leaves checkout billing as it was: Daycare services stay out of the picker", async function () {
+      setup();
+      await screen.findByRole("note");
+      var call = mockDb.mock.calls.filter(function (c) { return c[1] === "pet_services"; })[0];
+      expect(call[3]).toContain("category=neq.Daycare");
+    });
   });
 });
