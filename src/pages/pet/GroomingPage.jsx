@@ -17,7 +17,7 @@ import {
   CATEGORIES, validateService, serviceRow, isDuplicateService, durationLabel, speciesLabel, filterServices,
   missingFromOnlineBooking, countMissingFromOnlineBooking,
 } from "./serviceData";
-import { PageHeader, Card, Button, Field, Badge, Modal, ErrorLine, EmptyState, inputStyle } from "./ui";
+import { PageHeader, Card, Button, Field, Badge, Modal, ErrorLine, EmptyState, InfoNote, inputStyle } from "./ui";
 
 var EMPTY_DRAFT = { name: "", description: "", category: "Grooming", duration_minutes: "", price: "", species: [], active: true };
 
@@ -235,6 +235,12 @@ export default function GroomingPage({ canEdit }) {
               <Field label="Price (KES)" htmlFor="svc-price"><input id="svc-price" inputMode="numeric" style={inputStyle} value={draft.price} onChange={function (e) { setField("price", e.target.value); }} /></Field>
               <Field label="Duration in minutes (needed to show on online booking)" htmlFor="svc-duration"><input id="svc-duration" inputMode="numeric" style={inputStyle} value={draft.duration_minutes} onChange={function (e) { setField("duration_minutes", e.target.value); }} /></Field>
             </div>
+            {draft.category === "Daycare" ? (
+              <InfoNote title="How Daycare services are billed">
+                A Daycare service is a rate, not something you add to an invoice one at a time, so it won't appear in Checkout.
+                After saving, choose it as the Full-day, Half-day or Hourly rate in Daycare → Settings. The invoice is then created automatically when a dog is checked out.
+              </InfoNote>
+            ) : null}
             <fieldset style={{ border: "1px solid " + BORDER, borderRadius: 12, padding: "8px 12px", margin: 0 }}>
               <legend style={{ fontSize: 12, fontWeight: 600, color: MUTED_FG, padding: "0 4px" }}>Applies to (none ticked = all species)</legend>
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>

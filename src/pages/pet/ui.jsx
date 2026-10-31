@@ -70,6 +70,19 @@ export function Badge({ tone, children }) {
   );
 }
 
+// A calm, non-blocking explanation shown above or inside a form. role="note" so assistive tech reads it in context.
+export function InfoNote({ title, children, action }) {
+  return (
+    <div role="note" style={{ background: ACCENT, border: "1px solid " + BORDER, borderRadius: 12, padding: "10px 12px", display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+      <div style={{ fontSize: 13, lineHeight: 1.5, color: ACCENT_FG, flex: "1 1 240px", minWidth: 0 }}>
+        {title ? <div style={{ fontWeight: 700, marginBottom: 2 }}>{title}</div> : null}
+        {children}
+      </div>
+      {action || null}
+    </div>
+  );
+}
+
 export function ErrorLine({ children }) {
   if (!children) return null;
   return <p role="alert" style={{ margin: "8px 0 0", color: DESTRUCTIVE, fontSize: 12, fontWeight: 700 }}>{children}</p>;

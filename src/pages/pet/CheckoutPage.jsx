@@ -19,14 +19,14 @@ import { MUTED_FG, MUTED, BORDER, FOREGROUND } from "./theme";
 import {
   METHODS, METHOD_LABELS, computeTotals, validateCheckout, paymentRows, paymentsSum, invoiceErrorMessage, newIdempotencyKey,
 } from "./invoiceData";
-import { PageHeader, Card, Button, Field, ErrorLine, EmptyState, inputStyle } from "./ui";
+import { PageHeader, Card, Button, Field, ErrorLine, EmptyState, InfoNote, inputStyle } from "./ui";
 
 function blankDraft() {
   return { customer_id: "", pet_id: "", booking_id: "", lines: [{ ref: "", quantity: "1" }], discountType: "amount", discountValue: "",
     due_date: "", notes: "", payments: [] };
 }
 
-export default function CheckoutPage({ onInvoiceCreated }) {
+export default function CheckoutPage({ onInvoiceCreated, onOpenDaycare }) {
   var salon = useSalon();
   var dataState = useState(null); var data = dataState[0]; var setData = dataState[1];
   var statusState = useState("loading"); var loadStatus = statusState[0]; var setLoadStatus = statusState[1];
@@ -146,6 +146,12 @@ export default function CheckoutPage({ onInvoiceCreated }) {
   return (
     <div>
       <PageHeader title="Checkout" subtitle="Create an invoice for a visit or a walk-in sale and take payment" />
+      <div style={{ margin: "0 0 14px" }}>
+        <InfoNote title="Looking for Daycare?"
+          action={onOpenDaycare ? <Button size="sm" variant="outline" onClick={onOpenDaycare}>Go to Daycare</Button> : null}>
+          Daycare isn't added here. Check the dog in on the Daycare page; the invoice is created at checkout with the right days or hours (and any late fee).
+        </InfoNote>
+      </div>
       {serviceOptions.length === 0 && itemOptions.length === 0 ? (
         <Card><EmptyState title="No services to sell" description="Add services in the Grooming tab (including boarding rates), or retail products in Products & Supplies, before using checkout." /></Card>
       ) : (
