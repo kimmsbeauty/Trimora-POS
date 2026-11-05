@@ -4,10 +4,11 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 var mockDb = vi.fn();
 var mockRpc = vi.fn();
-var mockPdf = { canShare: true, make: null, shared: [], downloaded: [] };
+var mockPdf = { phone: true, canShare: true, make: null, shared: [], downloaded: [] };
 vi.mock("./invoicePdf", () => ({
   pdfFileName: function (inv) { return inv.invoice_number + ".pdf"; },
   makeInvoicePdf: function () { return mockPdf.make ? mockPdf.make() : Promise.resolve(new File(["x"], "INV.pdf", { type: "application/pdf" })); },
+  isPhoneLike: function () { return mockPdf.phone; },
   canSharePdf: function () { return mockPdf.canShare; },
   sharePdf: function (file, title) { mockPdf.shared.push({ file: file, title: title }); return Promise.resolve(mockPdf.shareResult || "shared"); },
   downloadPdf: function (file) { mockPdf.downloaded.push(file); },
@@ -341,9 +342,9 @@ describe("InvoicesPage", function () {
     var openSpy;
     function reply(ok, body) { global.fetch = vi.fn().mockResolvedValue({ ok: ok, json: function () { return Promise.resolve(body); } }); }
     beforeEach(function () { openSpy = vi.spyOn(window, "open").mockImplementation(function () { return null; }); });
-    afterEach(function () { openSpy.mockRestore(); invoiceSendConfig.serverSend = false; mockPdf.canShare = true; mockPdf.shareResult = null; mockPdf.make = null; mockPdf.shared = []; mockPdf.downloaded = []; });
+    afterEach(function () { openSpy.mockRestore(); invoiceSendConfig.serverSend = false; mockPdf.phone = true; mockPdf.canShare = true; mockPdf.shareResult = null; mockPdf.make = null; mockPdf.shared = []; mockPdf.downloaded = []; });
 
-    it("WhatsApp: attaches ONLY the invoice PDF through the share sheet, with no message text and no download", async function () {
+    it("phone, WhatsApp: attaches ONLY the invoice PDF through the share sheet, with no message text and no download", async function () {
       setup({ open: "i1" });
       fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
       fireEvent.click(await screen.findByRole("button", { name: "Send invoice PDF on WhatsApp" }));
@@ -372,15 +373,33 @@ describe("InvoicesPage", function () {
       expect(screen.queryByRole("button", { name: "Share invoice PDF" })).toBeNull();
     });
 
-    it("downloads the PDF and opens the customer's chat (no text) only where the browser can't share files", async function () {
-      mockPdf.canShare = false;
+    it("computer, WhatsApp: the button downloads the PDF and opens the customer's chat directly (no text), because a computer's share menu often has no WhatsApp", async function () {
+      mockPdf.phone = false;
       setup({ open: "i1" });
       fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
       fireEvent.click(await screen.findByRole("button", { name: "Send invoice PDF on WhatsApp" }));
       expect(mockPdf.downloaded.length).toBe(1);
       expect(mockPdf.shared.length).toBe(0);
-      expect(openSpy).toHaveBeenCalledTimes(1); // the customer's chat opens in the same tap
+      expect(openSpy).toHaveBeenCalledTimes(1);
       expect(openSpy.mock.calls[0][0]).toBe("https://wa.me/254712345678");
+    });
+
+    it("computer: a second 'Use share menu' button still offers the share sheet, with only the PDF", async function () {
+      mockPdf.phone = false;
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Use share menu" }));
+      await waitFor(function () { expect(mockPdf.shared.length).toBe(1); });
+      expect(mockPdf.shared[0].text).toBeUndefined();
+      expect(mockPdf.downloaded.length).toBe(0);
+    });
+
+    it("where files can't be shared at all, only the download-and-open button is offered", async function () {
+      mockPdf.phone = false; mockPdf.canShare = false;
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      await screen.findByRole("button", { name: "Send invoice PDF on WhatsApp" });
+      expect(screen.queryByRole("button", { name: "Use share menu" })).toBeNull();
     });
 
     it("falls back to the download if the share sheet fails", async function () {
