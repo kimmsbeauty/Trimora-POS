@@ -1,218 +1,272 @@
 // src/pages/pet/InvoiceDocument.jsx
 //
-// The printable invoice, laid out like the approved PawPals Kenya design. It carries the BUSINESS'S
-// OWN branding: logo and colours from Settings, or the built-in preset in brands.js (PawPals Kenya),
-// or the business name in text. Totals, payments and the VAT line come from the saved invoice,
-// never recomputed here (prices are VAT inclusive, so VAT is shown as "included", not added).
+// The printable invoice, laid out exactly like the approved PawPals Kenya invoice: logo with a
+// coloured strapline bar, "INVOICE" with the number and balance due at the top right, business
+// details, Bill To and dates, a dark item table, totals, notes, and a boxed thank-you footer.
+// It carries the BUSINESS'S OWN branding: logo and colours from Settings, or the built-in preset
+// in brands.js (PawPals Kenya). The footer thank-you and paw use the logo's two colours.
+// Totals, payments and the VAT line come from the saved invoice, never recomputed here (prices are
+// VAT inclusive, so VAT is shown as "included", not added).
 import React, { useState } from "react";
 import InvoiceIcon from "./InvoiceIcons";
 import { resolveBrand } from "./brands";
-import { fmt } from "../../lib/utils";
 import {
   FOREGROUND, MUTED_FG, BORDER, CARD, PRIMARY, INFO, DESTRUCTIVE, FONT_BODY,
 } from "./theme";
-import { PAWPALS_TINT, PAWPALS_TINT_BORDER, PAWPALS_PURPLE_TINT } from "./brandColors";
-import { METHOD_LABELS, STATUS_LABELS, displayStatus, outstanding, netPaid } from "./invoiceData";
+import { METHOD_LABELS, outstanding, netPaid } from "./invoiceData";
 import { sortedRefunds } from "./receiptData";
 
 var PRINT_CSS = "@media print { body * { visibility: hidden; } .invoice-print, .invoice-print * { visibility: visible; } " +
   ".invoice-print { position: fixed; top: 0; left: 0; width: 100%; border: none !important; box-shadow: none !important; } } " +
   ".invoice-print, .invoice-print * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
 
+var BODY = "#1A1A1A"; // printed text is black, like the approved design (the brand navy is kept for the footer links)
+var TABLE_HEAD = "#3C3C3C";
+var RULE = "#D9D9D9";
+var LABEL = "#555555";
+var BALANCE_BG = "#F5F2F0";
+var FOOTER_RULE = "#D9D6F2";
+
+// 2,000.00 (always two decimals, like the approved design).
+export function money(n) {
+  return (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function kes(n) { return "KES" + money(n); }
+
 function parseDate(iso) {
   if (!iso) return null;
   return /^\d{4}-\d{2}-\d{2}$/.test(String(iso)) ? new Date(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10))) : new Date(iso);
 }
-function dateLabel(iso) {
+// 04 Nov 2026
+export function dateLabel(iso) {
   var d = parseDate(iso);
-  return d ? d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "";
+  if (!d || isNaN(d.getTime())) return "";
+  return String(d.getDate()).padStart(2, "0") + " " + d.toLocaleDateString("en-GB", { month: "short" }) + " " + d.getFullYear();
 }
-function dateTimeLabel(iso) {
+function dayKey(iso) {
   var d = parseDate(iso);
-  if (!d) return "";
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) + ", " +
-    d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return d && !isNaN(d.getTime()) ? d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate() : "";
+}
+// "Due on Receipt" when it falls due the day it is issued (or has no due date), otherwise "Net 7".
+export function termsLabel(invoice) {
+  if (!invoice.due_date || dayKey(invoice.due_date) === dayKey(invoice.issued_at)) return "Due on Receipt";
+  var a = parseDate(invoice.issued_at); var b = parseDate(invoice.due_date);
+  if (!a || !b || isNaN(a.getTime()) || isNaN(b.getTime())) return "Due on Receipt";
+  var days = Math.round((new Date(b.getFullYear(), b.getMonth(), b.getDate()) - new Date(a.getFullYear(), a.getMonth(), a.getDate())) / 86400000);
+  return days > 0 ? "Net " + days : "Due on Receipt";
+}
+
+// One address line per row: keep the owner's own line breaks, else split "Kabete Central, Kenya" on commas.
+function addressLines(addr) {
+  var s = String(addr || "").trim();
+  if (!s) return [];
+  var parts = /\n/.test(s) ? s.split(/\n+/) : s.split(",");
+  return parts.map(function (x) { return x.trim(); }).filter(Boolean);
+}
+
+// Payment instructions printed under Notes while money is still owed (from the business's Settings).
+function paymentNoteLines(salon) {
+  var s = salon || {};
+  var out = [];
+  if (s.mpesa_paybill) {
+    out.push("PAYBILL:" + String(s.mpesa_paybill).trim());
+    if (s.mpesa_account) out.push("ACC NO:" + String(s.mpesa_account).trim());
+  } else if (s.mpesa_till) {
+    out.push("TILL:" + String(s.mpesa_till).trim());
+  }
+  return out;
+}
+
+// Split the thank-you line so the business name picks up the logo's second colour.
+export function thanksParts(thanks, name) {
+  var t = String(thanks || "");
+  var n = String(name || "").trim();
+  var i = n ? t.toLowerCase().indexOf(n.toLowerCase()) : -1;
+  if (i < 0) return [{ text: t, tone: "primary" }];
+  var parts = [];
+  if (i > 0) parts.push({ text: t.slice(0, i), tone: "primary" });
+  parts.push({ text: t.slice(i, i + n.length), tone: "secondary" });
+  if (i + n.length < t.length) parts.push({ text: t.slice(i + n.length), tone: "primary" });
+  return parts;
 }
 
 export default function InvoiceDocument({ invoice, customer, pet, salon }) {
   var failState = useState(false); var logoFailed = failState[0]; var setLogoFailed = failState[1];
   var brand = resolveBrand(salon, { primary: PRIMARY, secondary: INFO, ink: FOREGROUND });
-  var accent = brand.primary; var ink = brand.ink;
-  var status = displayStatus(invoice);
+  var primary = brand.primary; var secondary = brand.secondary; var ink = brand.ink;
   var lines = invoice.pet_invoice_lines || [];
   var payments = (invoice.pet_payments || []).slice().sort(function (a, b) { return new Date(a.paid_at) - new Date(b.paid_at); });
   var isVoid = invoice.status === "void";
   var refunds = sortedRefunds(invoice);
   var hasLogo = !!brand.logo && !logoFailed;
-  var pillColor = isVoid || status === "overdue" ? DESTRUCTIVE : status === "paid" ? accent : MUTED_FG;
+  var owed = outstanding(invoice);
+  var addr = addressLines(brand.location);
+  var noteLines = String(invoice.notes || "").split(/\n+/).map(function (x) { return x.trim(); }).filter(Boolean);
+  if (!isVoid && owed > 0) {
+    paymentNoteLines(salon).forEach(function (l) {
+      var already = noteLines.some(function (n) { return n.toLowerCase().indexOf(l.toLowerCase()) !== -1; });
+      if (!already) noteLines.push(l);
+    });
+  }
+  var footEmail = brand.footerEmail; var footWeb = brand.footerWebsite;
+  var tone = { primary: primary, secondary: secondary };
 
-  var row = { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, padding: "7px 0", borderBottom: "1px solid " + PAWPALS_TINT_BORDER };
-  var panel = { background: PAWPALS_TINT, borderRadius: 12, padding: "14px 18px" };
-  var heading = { fontSize: 15, fontWeight: 800, color: accent, marginBottom: 8 };
-  var contactRow = { display: "flex", alignItems: "flex-start", gap: 6, fontSize: 11, color: ink, marginTop: 4, lineHeight: 1.3 };
-  var contactText = { minWidth: 0, overflowWrap: "anywhere" };
-  var th = { padding: "10px 12px", fontWeight: 800, color: ink };
+  var small = { fontSize: 11, color: BODY, lineHeight: 1.35 };
+  var metaRow = { display: "flex", justifyContent: "space-between", gap: 16, fontSize: 11, lineHeight: 1.9 };
+  var th = { padding: "10px 8px", fontWeight: 400, fontSize: 11, color: CARD, background: TABLE_HEAD };
+  var td = { padding: "12px 8px", fontSize: 11, color: BODY, verticalAlign: "top", borderBottom: "1px solid " + RULE };
+  var totalRow = { display: "flex", justifyContent: "space-between", gap: 16, padding: "8px 10px", fontSize: 11, color: BODY };
 
   return (
-    <div className="invoice-print" style={{ background: CARD, color: ink, border: "1px solid " + BORDER, borderRadius: 12, padding: 24, position: "relative", fontFamily: FONT_BODY }}>
+    <div className="invoice-print" style={{ background: CARD, color: ink, border: "1px solid " + BORDER, borderRadius: 4, padding: "28px 32px", position: "relative", fontFamily: FONT_BODY }}>
       <style>{PRINT_CSS}</style>
 
-      {/* Header: logo | business details. Everything is sized to fit the card, never cut off at the edge. */}
-      <div style={{ display: "flex", gap: 14, alignItems: "stretch", paddingBottom: 14 }}>
-        {hasLogo ? (
-          <img src={brand.logo} alt={brand.name + " logo"} onError={function () { setLogoFailed(true); }}
-            style={{ width: "40%", maxWidth: 150, minWidth: 0, maxHeight: 120, objectFit: "contain", display: "block", alignSelf: "center", flex: "0 1 auto" }} />
-        ) : null}
-        {hasLogo ? <div style={{ width: 2, background: accent, opacity: 0.35, borderRadius: 2, flex: "0 0 2px" }} /> : null}
-        <div style={{ minWidth: 0, flex: "1 1 0", alignSelf: "center", overflowWrap: "anywhere" }}>
-          <div style={{ fontSize: hasLogo ? 16 : 20, fontWeight: 800, color: ink, lineHeight: 1.2 }}>{brand.name}</div>
-          {brand.tagline ? <div style={{ fontSize: 11, color: MUTED_FG, lineHeight: 1.3 }}>{brand.tagline}</div> : null}
-          <div style={{ marginTop: 5 }}>
-            {brand.location ? <div style={contactRow}><InvoiceIcon name="pin" size={13} color={accent} /><span style={contactText}>{brand.location}</span></div> : null}
-            {brand.phones.map(function (ph) { return <div key={ph} style={contactRow}><InvoiceIcon name="phone" size={13} color={accent} /><span style={contactText}>{ph}</span></div>; })}
-            {brand.email ? <div style={contactRow}><InvoiceIcon name="mail" size={13} color={accent} /><span style={contactText}>{brand.email}</span></div> : null}
-            {brand.website ? <div style={contactRow}><InvoiceIcon name="globe" size={13} color={accent} /><span style={contactText}>{brand.website}</span></div> : null}
-            {invoice.tax_enabled && salon && salon.tax_pin ? <div style={{ fontSize: 11, color: MUTED_FG, marginTop: 4 }}>KRA PIN: {salon.tax_pin}</div> : null}
-          </div>
-        </div>
-      </div>
-
-      {/* Reference bar: number, date, due date and payment status on one tidy row. No heading of its own. */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "12px 0", marginBottom: 14, borderTop: "2px solid " + PAWPALS_TINT_BORDER, borderBottom: "2px solid " + PAWPALS_TINT_BORDER }}>
-        <div style={{ display: "flex", gap: "10px 28px", flexWrap: "wrap", minWidth: 0 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 12, color: MUTED_FG }}>No.</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: ink, overflowWrap: "anywhere" }}>{invoice.invoice_number}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 12, color: MUTED_FG }}>Date</div>
-            <div style={{ fontSize: 14, color: ink, paddingTop: 3 }}>{dateLabel(invoice.issued_at)}</div>
-          </div>
-          {invoice.due_date ? (
-            <div>
-              <div style={{ fontSize: 12, color: MUTED_FG }}>Due Date</div>
-              <div style={{ fontSize: 14, color: ink, paddingTop: 3 }}>{dateLabel(invoice.due_date)}</div>
-            </div>
+      {/* Top: logo with strapline bar (left) | INVOICE, number and balance due (right) */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
+        <div style={{ flex: "0 1 240px", minWidth: 0 }}>
+          {hasLogo ? (
+            <img src={brand.logo} alt={brand.name + " logo"} onError={function () { setLogoFailed(true); }}
+              style={{ width: "100%", maxWidth: 230, maxHeight: 190, objectFit: "contain", display: "block" }} />
+          ) : (
+            <div style={{ fontSize: 20, fontWeight: 800, color: ink, lineHeight: 1.2, overflowWrap: "anywhere" }}>{brand.name}</div>
+          )}
+          {brand.invoiceTagline ? (
+            <div style={{ marginTop: 6, background: primary, color: CARD, textAlign: "center", fontSize: 11, padding: "3px 6px", overflowWrap: "anywhere" }}>{brand.invoiceTagline}</div>
           ) : null}
         </div>
-        <div style={{ display: "inline-block", padding: "5px 20px", borderRadius: 999, background: pillColor, color: CARD, fontSize: 13, fontWeight: 800, letterSpacing: "0.04em" }}>
-          {STATUS_LABELS[status].toUpperCase()}
+        <div style={{ textAlign: "right", minWidth: 0 }}>
+          <div style={{ fontSize: 28, fontWeight: 500, color: "#1A1A1A", letterSpacing: "0.01em", lineHeight: 1.1 }}>INVOICE</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#1A1A1A", marginTop: 8, overflowWrap: "anywhere" }}># {invoice.invoice_number}</div>
+          {!isVoid ? (
+            <div style={{ marginTop: 22 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#1A1A1A" }}>Balance Due</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#1A1A1A", marginTop: 4 }}>{kes(owed)}</div>
+            </div>
+          ) : (
+            <div style={{ marginTop: 22, fontSize: 13, fontWeight: 800, color: DESTRUCTIVE, letterSpacing: "0.04em" }}>VOID</div>
+          )}
         </div>
       </div>
 
-      {/* Customer + pet */}
-      <div style={Object.assign({}, panel, { display: "flex", gap: 24, flexWrap: "wrap" })}>
+      {/* Business details (left) | invoice dates (right) */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 24, marginTop: 14, flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-          <div style={heading}>Customer Information</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}><InvoiceIcon name="user" size={20} color={ink} />{customer ? customer.name : "Customer"}</div>
-          {customer && customer.phone ? <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, marginTop: 8 }}><InvoiceIcon name="phone" size={20} color={ink} />{customer.phone}</div> : null}
+          {hasLogo ? <div style={{ fontSize: 11, fontWeight: 700, color: "#1A1A1A", overflowWrap: "anywhere" }}>{brand.name}</div> : null}
+          {addr.map(function (l, i) { return <div key={i} style={Object.assign({}, small, { overflowWrap: "anywhere" })}>{l}</div>; })}
+          {brand.phones.length ? <div style={Object.assign({}, small, { overflowWrap: "anywhere" })}>{brand.phones.join("*")}</div> : null}
+          {brand.email ? <div style={Object.assign({}, small, { overflowWrap: "anywhere", minWidth: 0 })}>{brand.email}</div> : null}
+          {invoice.tax_enabled && salon && salon.tax_pin ? <div style={small}>KRA PIN: {salon.tax_pin}</div> : null}
         </div>
-        {pet ? (
-          <div style={{ flex: "1 1 220px", minWidth: 0, borderLeft: "1px solid " + PAWPALS_TINT_BORDER, paddingLeft: 24 }}>
-            <div style={heading}>Pet Information</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}><InvoiceIcon name="paw" size={20} color={ink} />{pet.name}</div>
-            {pet.species ? <div style={{ fontSize: 14, marginTop: 8, paddingLeft: 30 }}>{pet.species}</div> : null}
-          </div>
-        ) : null}
+        <div style={{ flex: "0 1 270px", minWidth: 200 }}>
+          <div style={Object.assign({}, metaRow, { color: BODY })}><span style={{ color: LABEL }}>Invoice Date :</span><span>{dateLabel(invoice.issued_at)}</span></div>
+          <div style={Object.assign({}, metaRow, { color: BODY })}><span style={{ color: LABEL }}>Terms :</span><span>{termsLabel(invoice)}</span></div>
+          <div style={Object.assign({}, metaRow, { color: BODY })}><span style={{ color: LABEL }}>Due Date :</span><span>{dateLabel(invoice.due_date || invoice.issued_at)}</span></div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 18 }}>
+        <div style={{ fontSize: 11, color: LABEL }}>Bill To</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#1A1A1A", overflowWrap: "anywhere" }}>{customer ? customer.name : "Customer"}</div>
+        {pet ? <div style={{ fontSize: 10, color: LABEL, marginTop: 2 }}>Pet: {pet.name}{pet.species ? " (" + pet.species + ")" : ""}</div> : null}
       </div>
 
       {/* Items */}
-      <div style={{ overflowX: "auto", marginTop: 16, border: "1px solid " + PAWPALS_TINT_BORDER, borderRadius: 12 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-          <thead>
-            <tr style={{ background: PAWPALS_TINT, textAlign: "left" }}>
-              <th style={th}>Service / Description</th>
-              <th style={Object.assign({}, th, { textAlign: "center" })}>Qty</th>
-              <th style={Object.assign({}, th, { textAlign: "right" })}>Unit Price (KES)</th>
-              <th style={Object.assign({}, th, { textAlign: "right" })}>Amount (KES)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lines.map(function (l) {
-              return (
-                <tr key={l.id} style={{ borderTop: "1px solid " + PAWPALS_TINT_BORDER }}>
-                  <td style={{ padding: "12px", fontWeight: 600 }}>{l.description}</td>
-                  <td style={{ padding: "12px", textAlign: "center" }}>{l.quantity}</td>
-                  <td style={{ padding: "12px", textAlign: "right" }}>{fmt(l.unit_price)}</td>
-                  <td style={{ padding: "12px", textAlign: "right" }}>{fmt(l.line_total)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", marginTop: 16 }}>
+        <colgroup><col style={{ width: "6%" }} /><col /><col style={{ width: "11%" }} /><col style={{ width: "16%" }} /><col style={{ width: "19%" }} /></colgroup>
+        <thead>
+          <tr>
+            <th style={Object.assign({}, th, { textAlign: "left", paddingLeft: 12 })}>#</th>
+            <th style={Object.assign({}, th, { textAlign: "left" })}>Item &amp; Description</th>
+            <th style={Object.assign({}, th, { textAlign: "right" })}>Qty</th>
+            <th style={Object.assign({}, th, { textAlign: "right" })}>Rate</th>
+            <th style={Object.assign({}, th, { textAlign: "right", paddingRight: 12 })}>Vatable<br />Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lines.map(function (l, i) {
+            var parts = String(l.description || "").split(/\n+/);
+            return (
+              <tr key={l.id}>
+                <td style={Object.assign({}, td, { paddingLeft: 12 })}>{i + 1}</td>
+                <td style={Object.assign({}, td, { overflowWrap: "anywhere" })}>
+                  <div>{parts[0]}</div>
+                  {parts.slice(1).map(function (x, j) { return <div key={j} style={{ color: MUTED_FG, marginTop: 2 }}>{x}</div>; })}
+                </td>
+                <td style={Object.assign({}, td, { textAlign: "right" })}>{money(l.quantity)}</td>
+                <td style={Object.assign({}, td, { textAlign: "right" })}>{money(l.unit_price)}</td>
+                <td style={Object.assign({}, td, { textAlign: "right", paddingRight: 12 })}>{money(l.line_total)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      {/* Totals */}
+      <div style={{ marginLeft: "auto", width: "55%", minWidth: 250, marginTop: 4 }}>
+        <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ fontWeight: 700, flex: 1, textAlign: "right" }}>Sub Total</span><span style={{ width: "34%", textAlign: "right" }}>{money(invoice.subtotal)}</span></div>
+        {invoice.discount_amount > 0 ? <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ flex: 1, textAlign: "right" }}>Discount</span><span style={{ width: "34%", textAlign: "right" }}>- {money(invoice.discount_amount)}</span></div> : null}
+        {invoice.tax_enabled ? <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ flex: 1, textAlign: "right" }}>VAT ({invoice.tax_rate}%) included</span><span style={{ width: "34%", textAlign: "right" }}>{money(invoice.tax_amount)}</span></div> : null}
+        <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE, fontWeight: 700 })}><span style={{ flex: 1, textAlign: "right" }}>Total</span><span style={{ width: "34%", textAlign: "right" }}>{kes(invoice.total)}</span></div>
+        {!isVoid && invoice.amount_paid > 0 ? <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ flex: 1, textAlign: "right" }}>Payment Made</span><span style={{ width: "34%", textAlign: "right" }}>(-) {money(invoice.amount_paid)}</span></div> : null}
+        {!isVoid && invoice.amount_refunded > 0 ? <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ flex: 1, textAlign: "right" }}>Refunded</span><span style={{ width: "34%", textAlign: "right" }}>{money(invoice.amount_refunded)}</span></div> : null}
+        {!isVoid && invoice.amount_refunded > 0 ? <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ flex: 1, textAlign: "right" }}>Kept after refunds</span><span style={{ width: "34%", textAlign: "right" }}>{kes(netPaid(invoice))}</span></div> : null}
+        {!isVoid ? (
+          <div style={Object.assign({}, totalRow, { background: BALANCE_BG, fontWeight: 700 })}>
+            <span style={{ flex: 1, textAlign: "right" }}>Balance Due</span><span style={{ width: "34%", textAlign: "right" }}>{kes(owed)}</span>
+          </div>
+        ) : null}
       </div>
 
-      {/* Payment details (left) + totals (right) */}
-      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginTop: 16, alignItems: "flex-end" }}>
-        <div style={{ flex: "1 1 260px", minWidth: 0 }}>
-          {payments.length ? (
-            <div style={panel}>
-              <div style={heading}>Payment Details</div>
-              {payments.map(function (p, i) {
-                var cell = { display: "flex", gap: 12, fontSize: 13, padding: "6px 0", borderBottom: "1px solid " + PAWPALS_TINT_BORDER };
-                return (
-                  <div key={p.id} style={{ marginTop: i ? 10 : 0 }}>
-                    <div style={cell}><span style={{ color: MUTED_FG, flex: "0 0 130px" }}>Payment Method</span><span>{METHOD_LABELS[p.method] || p.method}</span></div>
-                    {p.reference ? <div style={cell}><span style={{ color: MUTED_FG, flex: "0 0 130px" }}>Transaction Reference</span><span style={{ wordBreak: "break-all" }}>{p.reference}</span></div> : null}
-                    <div style={Object.assign({}, cell, { borderBottom: "none" })}><span style={{ color: MUTED_FG, flex: "0 0 130px" }}>Payment Date</span><span>{dateTimeLabel(p.paid_at)}</span></div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
-        </div>
-
-        <div style={{ flex: "1 1 280px", maxWidth: 380, marginLeft: "auto" }}>
-          <div style={row}><span>Subtotal</span><span>{fmt(invoice.subtotal)}</span></div>
-          {invoice.discount_amount > 0 ? <div style={row}><span>Discount</span><span>- {fmt(invoice.discount_amount)}</span></div> : null}
-          {invoice.tax_enabled ? (
-            <div style={row}>
-              <span>VAT / Tax (included) <span style={{ marginLeft: 8, padding: "2px 18px", borderRadius: 6, background: PAWPALS_TINT, border: "1px solid " + PAWPALS_TINT_BORDER, fontSize: 12 }}>{invoice.tax_rate}%</span></span>
-              <span>{fmt(invoice.tax_amount)}</span>
-            </div>
-          ) : null}
-          <div style={Object.assign({}, row, { fontWeight: 800 })}><span>Total</span><span>{fmt(invoice.total)}</span></div>
-          {!isVoid ? <div style={row}><span>Amount Paid</span><span>{fmt(invoice.amount_paid)}</span></div> : null}
-          {!isVoid && invoice.amount_refunded > 0 ? <div style={row}><span>Refunded</span><span>- {fmt(invoice.amount_refunded)}</span></div> : null}
-          {!isVoid && invoice.amount_refunded > 0 ? <div style={Object.assign({}, row, { fontWeight: 700 })}><span>Kept after refunds</span><span>{fmt(netPaid(invoice))}</span></div> : null}
-          {!isVoid ? (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, padding: "12px 14px", borderRadius: 10, background: PAWPALS_PURPLE_TINT, color: accent }}>
-              <span style={{ fontSize: 15, fontWeight: 800 }}>Balance Due</span>
-              <span style={{ fontSize: 20, fontWeight: 800 }}>{fmt(outstanding(invoice))}</span>
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      {refunds.length ? (
+      {/* Payments received (only once there are any) and refunds */}
+      {!isVoid && payments.length ? (
         <div style={{ marginTop: 14 }}>
-          <div style={{ fontSize: 11, color: MUTED_FG, fontWeight: 700, marginBottom: 4 }}>REFUNDS</div>
+          <div style={{ fontSize: 10, color: LABEL, marginBottom: 3 }}>Payments received</div>
+          {payments.map(function (p) {
+            return (
+              <div key={p.id} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 10, color: BODY, padding: "2px 0" }}>
+                <span style={{ overflowWrap: "anywhere" }}>{dateLabel(p.paid_at)} · {METHOD_LABELS[p.method] || p.method}{p.reference ? " · " + p.reference : ""}</span>
+                <span>{kes(p.amount)}</span>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+      {refunds.length ? (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 10, color: LABEL, marginBottom: 3 }}>Refunds</div>
           {refunds.map(function (f) {
             return (
-              <div key={f.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0" }}>
-                <span>{dateLabel(f.refunded_at)} · {METHOD_LABELS[f.method] || f.method}{f.reference ? " · " + f.reference : ""} · {f.reason}</span>
-                <span>- {fmt(f.amount)}</span>
+              <div key={f.id} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 10, color: BODY, padding: "2px 0" }}>
+                <span style={{ overflowWrap: "anywhere" }}>{dateLabel(f.refunded_at)} · {METHOD_LABELS[f.method] || f.method}{f.reference ? " · " + f.reference : ""} · {f.reason}</span>
+                <span>- {kes(f.amount)}</span>
               </div>
             );
           })}
         </div>
       ) : null}
 
-      {invoice.notes ? <p style={{ margin: "14px 0 0", fontSize: 12, color: MUTED_FG, lineHeight: 1.5 }}>{invoice.notes}</p> : null}
-      {isVoid ? <p style={{ margin: "14px 0 0", fontSize: 12, color: DESTRUCTIVE, fontWeight: 700 }}>Voided {dateLabel(invoice.voided_at)}: {invoice.void_reason}</p> : null}
-
-      {/* Footer */}
-      <div style={{ marginTop: 22, paddingTop: 14, borderTop: "2px solid " + PAWPALS_TINT_BORDER, textAlign: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, color: accent, fontSize: 20, fontFamily: "'Dancing Script', 'Brush Script MT', cursive", fontWeight: 600 }}>
-          <InvoiceIcon name="paw" size={22} color={accent} /><span>{brand.thanks}</span>
+      {noteLines.length ? (
+        <div style={{ marginTop: 18 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#1A1A1A", marginBottom: 6 }}>Notes</div>
+          {noteLines.map(function (l, i) { return <div key={i} style={{ fontSize: 10, color: LABEL, lineHeight: 1.9, overflowWrap: "anywhere" }}>{l}</div>; })}
         </div>
-        {brand.phones.length || brand.email || brand.website ? (
-          <div style={{ display: "flex", justifyContent: "center", gap: 18, flexWrap: "wrap", marginTop: 10, fontSize: 12, color: ink }}>
-            {brand.phones.length ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><InvoiceIcon name="phone" size={14} color={accent} />{brand.phones.join(" · ")}</span> : null}
-            {brand.email ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><InvoiceIcon name="mail" size={14} color={accent} />{brand.email}</span> : null}
-            {brand.website ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><InvoiceIcon name="globe" size={14} color={accent} />{brand.website}</span> : null}
+      ) : null}
+      {isVoid ? <p style={{ margin: "14px 0 0", fontSize: 11, color: DESTRUCTIVE, fontWeight: 700 }}>Voided {dateLabel(invoice.voided_at)}: {invoice.void_reason}</p> : null}
+
+      {/* Footer: boxed thank-you in the logo's two colours */}
+      <div style={{ marginTop: 26, border: "1px solid " + FOOTER_RULE, borderTop: "3px solid " + FOOTER_RULE, borderRadius: 18, padding: "14px 22px", display: "flex", alignItems: "center", gap: 18 }}>
+        <div style={{ flex: "none" }}><InvoiceIcon name="paw" size={40} color={primary} color2={secondary} /></div>
+        <div style={{ flex: "1 1 0", minWidth: 0 }}>
+          <div style={{ textAlign: "center", fontSize: 24, lineHeight: 1.25, fontFamily: "'Dancing Script', 'Brush Script MT', cursive", fontWeight: 600, overflowWrap: "anywhere" }}>
+            {thanksParts(brand.thanks, brand.name).map(function (p, i) { return <span key={i} style={{ color: tone[p.tone] }}>{p.text}</span>; })}
           </div>
-        ) : null}
+          {footEmail || footWeb ? (
+            <div style={{ marginTop: 8, display: "grid", gap: 6, justifyContent: "center" }}>
+              {footEmail ? <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 15, color: ink }}><InvoiceIcon name="mail" size={20} color={primary} /><span style={{ overflowWrap: "anywhere", minWidth: 0 }}>{footEmail}</span></div> : null}
+              {footWeb ? <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 15, color: ink }}><InvoiceIcon name="globe" size={20} color={secondary} /><span style={{ overflowWrap: "anywhere", minWidth: 0 }}>{footWeb}</span></div> : null}
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );

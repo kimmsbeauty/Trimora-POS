@@ -1,8 +1,8 @@
 // src/pages/pet/invoicePdf.js
 //
 // Turns the invoice on screen (the .invoice-print element) into an A4 PDF, in the browser, and hands
-// it to the phone's share sheet so staff can pick Gmail / WhatsApp / etc. with the PDF attached.
-// Where the browser can't share files (most desktops) the PDF is downloaded instead.
+// it to the device's share sheet so staff can pick WhatsApp / Gmail / etc. with the PDF attached and
+// nothing to download. Only where the browser can't share files at all is the PDF downloaded instead.
 // The PDF libraries are loaded only when needed, so they don't weigh down the rest of the app.
 
 var A4_W = 210; // mm
@@ -46,14 +46,6 @@ export async function makeInvoicePdf(element, fileName) {
   return new File([blob], fileName, { type: "application/pdf" });
 }
 
-// True on phones and tablets (touch as the main input). The system share sheet is only dependable
-// there; on a computer it lists Windows/Mac apps, often not WhatsApp or Gmail, so computers use
-// "download the PDF and open the chat" instead.
-export function isPhoneLike() {
-  try { return !!(typeof window !== "undefined" && window.matchMedia && window.matchMedia("(pointer: coarse)").matches); }
-  catch (e) { return false; }
-}
-
 export function canSharePdf(file) {
   try {
     return !!(file && typeof navigator !== "undefined" && typeof navigator.share === "function" &&
@@ -61,11 +53,13 @@ export function canSharePdf(file) {
   } catch (e) { return false; }
 }
 
-// Opens the share sheet with the PDF attached. Returns "shared", "cancelled" (user closed the sheet)
-// or "failed".
-export async function sharePdf(file, title, text) {
+// Opens the share sheet with ONLY the PDF attached (no message text, no title): the customer gets the
+// invoice and nothing else. Returns "shared", "cancelled" (user closed the sheet) or "failed".
+export async function sharePdf(file, title) {
   try {
-    await navigator.share({ files: [file], title: title, text: text });
+    var data = { files: [file] };
+    if (title) data.title = title;
+    await navigator.share(data);
     return "shared";
   } catch (e) {
     return e && e.name === "AbortError" ? "cancelled" : "failed";

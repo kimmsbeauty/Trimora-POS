@@ -22,10 +22,18 @@ describe("invoicePdf helpers", function () {
   });
   it("reports shared, cancelled and failed", async function () {
     nav({ share: function () { return Promise.resolve(); } });
-    expect(await sharePdf(file, "t", "x")).toBe("shared");
+    expect(await sharePdf(file, "t")).toBe("shared");
     nav({ share: function () { var e = new Error("x"); e.name = "AbortError"; return Promise.reject(e); } });
-    expect(await sharePdf(file, "t", "x")).toBe("cancelled");
+    expect(await sharePdf(file, "t")).toBe("cancelled");
     nav({ share: function () { return Promise.reject(new Error("x")); } });
-    expect(await sharePdf(file, "t", "x")).toBe("failed");
+    expect(await sharePdf(file, "t")).toBe("failed");
+  });
+  it("shares only the PDF: no message text, and no title unless one is given", async function () {
+    var seen = [];
+    nav({ share: function (d) { seen.push(d); return Promise.resolve(); } });
+    await sharePdf(file);
+    await sharePdf(file, "Subject");
+    expect(seen[0]).toEqual({ files: [file] });
+    expect(seen[1]).toEqual({ files: [file], title: "Subject" });
   });
 });

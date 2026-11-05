@@ -4,13 +4,12 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 var mockDb = vi.fn();
 var mockRpc = vi.fn();
-var mockPdf = { phone: true, canShare: true, make: null, shared: [], downloaded: [] };
+var mockPdf = { canShare: true, make: null, shared: [], downloaded: [] };
 vi.mock("./invoicePdf", () => ({
   pdfFileName: function (inv) { return inv.invoice_number + ".pdf"; },
   makeInvoicePdf: function () { return mockPdf.make ? mockPdf.make() : Promise.resolve(new File(["x"], "INV.pdf", { type: "application/pdf" })); },
-  isPhoneLike: function () { return mockPdf.phone; },
   canSharePdf: function () { return mockPdf.canShare; },
-  sharePdf: function (file, title, text) { mockPdf.shared.push({ file: file, title: title, text: text }); return Promise.resolve("shared"); },
+  sharePdf: function (file, title) { mockPdf.shared.push({ file: file, title: title }); return Promise.resolve(mockPdf.shareResult || "shared"); },
   downloadPdf: function (file) { mockPdf.downloaded.push(file); },
 }));
 vi.mock("../../lib/db", () => ({
@@ -144,16 +143,16 @@ describe("InvoicesPage", function () {
       fireEvent.click(await screen.findByRole("button", { name: "View receipt RCT-0001-1" }));
       expect(await screen.findByText("RECEIPT")).toBeTruthy();
       expect(screen.getByAltText("Paws & Co logo")).toBeTruthy();
-      expect(screen.queryByText("No.")).toBeNull();
+      expect(screen.queryByText("INVOICE")).toBeNull();
       expect(screen.getByText("Balance remaining")).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Back to invoice" }));
-      expect(await screen.findByText("No.")).toBeTruthy();
+      expect(await screen.findByText("INVOICE")).toBeTruthy();
     });
 
     it("has no receipts section for an invoice with no payments", async function () {
       setup();
       fireEvent.click(await screen.findByLabelText("Open invoice INV-0001"));
-      await screen.findByText("No.");
+      await screen.findByText("INVOICE");
       expect(screen.queryByText("Receipts")).toBeNull();
     });
 
@@ -333,7 +332,7 @@ describe("InvoicesPage", function () {
       var refunded = { status: "paid", amount_refunded: 500, pet_refunds: [{ id: "f1", method: "cash", amount: 500, reason: "Goodwill", refunded_at: "2026-10-26T09:00:00Z" }] };
       setup({ invoices: [Object.assign({}, PAID, refunded)] });
       fireEvent.click(await screen.findByLabelText("Open invoice INV-0009"));
-      expect(await screen.findByText("REFUNDS")).toBeTruthy();
+      expect(await screen.findByText("Refunds")).toBeTruthy();
       expect(screen.getByText("Kept after refunds")).toBeTruthy();
     });
   });
@@ -342,79 +341,79 @@ describe("InvoicesPage", function () {
     var openSpy;
     function reply(ok, body) { global.fetch = vi.fn().mockResolvedValue({ ok: ok, json: function () { return Promise.resolve(body); } }); }
     beforeEach(function () { openSpy = vi.spyOn(window, "open").mockImplementation(function () { return null; }); });
-    afterEach(function () { openSpy.mockRestore(); invoiceSendConfig.serverSend = false; mockPdf.phone = true; mockPdf.canShare = true; mockPdf.make = null; mockPdf.shared = []; mockPdf.downloaded = []; });
+    afterEach(function () { openSpy.mockRestore(); invoiceSendConfig.serverSend = false; mockPdf.canShare = true; mockPdf.shareResult = null; mockPdf.make = null; mockPdf.shared = []; mockPdf.downloaded = []; });
 
-    it("attaches the invoice PDF through the phone's share sheet", async function () {
-      setup({ open: "i1" });
-      fireEvent.click(await screen.findByRole("button", { name: "Email" }));
-      fireEvent.click(await screen.findByRole("button", { name: "Share invoice PDF" }));
-      await waitFor(function () { expect(mockPdf.shared.length).toBe(1); });
-      expect(mockPdf.shared[0].file.type).toBe("application/pdf");
-      expect(mockPdf.shared[0].text).toMatch(/INV-0009|Simba|KES/);
-    });
-
-    it("on a computer uses download-and-open even if the browser could share files", async function () {
-      mockPdf.phone = false; mockPdf.canShare = true;
+    it("WhatsApp: attaches ONLY the invoice PDF through the share sheet, with no message text and no download", async function () {
       setup({ open: "i1" });
       fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
-      expect(await screen.findByRole("button", { name: "Download PDF & open WhatsApp" })).toBeTruthy();
+      fireEvent.click(await screen.findByRole("button", { name: "Send invoice PDF on WhatsApp" }));
+      await waitFor(function () { expect(mockPdf.shared.length).toBe(1); });
+      expect(mockPdf.shared[0].file.type).toBe("application/pdf");
+      expect(mockPdf.shared[0].title).toBeFalsy();
+      expect(mockPdf.shared[0].text).toBeUndefined();
+      expect(mockPdf.downloaded.length).toBe(0);
+      expect(openSpy).not.toHaveBeenCalled();
+    });
+
+    it("email uses the very same one-button flow, with just the subject", async function () {
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "Email" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Send invoice PDF by email" }));
+      await waitFor(function () { expect(mockPdf.shared.length).toBe(1); });
+      expect(mockPdf.shared[0].title).toMatch(/INV-0001/);
+      expect(mockPdf.shared[0].text).toBeUndefined();
+    });
+
+    it("has no text-only option: the old message is gone", async function () {
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      await screen.findByRole("button", { name: "Send invoice PDF on WhatsApp" });
+      expect(screen.queryByRole("button", { name: /no PDF/ })).toBeNull();
       expect(screen.queryByRole("button", { name: "Share invoice PDF" })).toBeNull();
     });
 
-    it("offers a PDF download where files can't be shared (desktop)", async function () {
+    it("downloads the PDF and opens the customer's chat (no text) only where the browser can't share files", async function () {
       mockPdf.canShare = false;
       setup({ open: "i1" });
       fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
-      fireEvent.click(await screen.findByRole("button", { name: "Download PDF & open WhatsApp" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Send invoice PDF on WhatsApp" }));
       expect(mockPdf.downloaded.length).toBe(1);
+      expect(mockPdf.shared.length).toBe(0);
       expect(openSpy).toHaveBeenCalledTimes(1); // the customer's chat opens in the same tap
-      expect(screen.queryByRole("button", { name: "Share invoice PDF" })).toBeNull();
+      expect(openSpy.mock.calls[0][0]).toBe("https://wa.me/254712345678");
     });
 
-    it("shows 'Preparing PDF' until it is ready, and still allows the text-only message if the PDF fails", async function () {
+    it("falls back to the download if the share sheet fails", async function () {
+      mockPdf.shareResult = "failed";
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Send invoice PDF on WhatsApp" }));
+      await waitFor(function () { expect(mockPdf.downloaded.length).toBe(1); });
+    });
+
+    it("does not close the dialog or download when the sender cancels the share sheet", async function () {
+      mockPdf.shareResult = "cancelled";
+      setup({ open: "i1" });
+      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Send invoice PDF on WhatsApp" }));
+      await waitFor(function () { expect(mockPdf.shared.length).toBe(1); });
+      expect(mockPdf.downloaded.length).toBe(0);
+    });
+
+    it("shows 'Preparing PDF' until it is ready, and offers no message-only fallback if the PDF fails", async function () {
       mockPdf.make = function () { return Promise.reject(new Error("nope")); };
       setup({ open: "i1" });
       fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
       expect(await screen.findByText(/PDF could not be made here/)).toBeTruthy();
-      expect(screen.queryByRole("button", { name: "Share invoice PDF" })).toBeNull();
-      fireEvent.click(screen.getByRole("button", { name: "Open in my WhatsApp (no PDF)" }));
-      expect(openSpy).toHaveBeenCalledTimes(1);
-    });
-
-    it("by default opens the customer's WhatsApp with the invoice, sending nothing from the server", async function () {
-      global.fetch = vi.fn();
-      setup({ open: "i1" });
-      fireEvent.click(await screen.findByRole("button", { name: "WhatsApp" }));
-      var input = await screen.findByLabelText("Send to this WhatsApp number");
-      expect(input.value).toBe("0712345678");
-      expect(screen.queryByRole("button", { name: "Send WhatsApp" })).toBeNull();
-      fireEvent.click(screen.getByRole("button", { name: "Open in my WhatsApp (no PDF)" }));
-      expect(openSpy).toHaveBeenCalledTimes(1);
-      expect(openSpy.mock.calls[0][0].indexOf("https://wa.me/254712345678?text=")).toBe(0);
-      expect(global.fetch).not.toHaveBeenCalled();
-    });
-
-    it("by default opens the staff member's own email app, addressed to the customer", async function () {
-      global.fetch = vi.fn();
-      var hrefSet = null;
-      var realLocation = window.location;
-      delete window.location;
-      window.location = { get href() { return "http://localhost/"; }, set href(v) { hrefSet = v; } };
-      try {
-        setup({ open: "i1" });
-        fireEvent.click(await screen.findByRole("button", { name: "Email" }));
-        expect((await screen.findByLabelText("Send to this email address")).value).toBe("wanjiru@example.com");
-        fireEvent.click(screen.getByRole("button", { name: "Open in my email app (no PDF)" }));
-        expect(hrefSet.indexOf("mailto:wanjiru@example.com?subject=")).toBe(0);
-        expect(global.fetch).not.toHaveBeenCalled();
-      } finally { window.location = realLocation; }
+      expect(screen.queryByRole("button", { name: "Send invoice PDF on WhatsApp" })).toBeNull();
+      expect(screen.queryByRole("button", { name: /no PDF/ })).toBeNull();
+      expect(openSpy).not.toHaveBeenCalled();
     });
 
     it("by default cannot open the email app with no address, and loads no send history", async function () {
       setup({ open: "i1", profiles: [] });
       fireEvent.click(await screen.findByRole("button", { name: "Email" }));
       expect(await screen.findByText(/no email on file/)).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Open in my email app (no PDF)" }).disabled).toBe(true);
       expect(mockDb.mock.calls.some(function (c) { return c[1] === "pet_invoice_messages"; })).toBe(false);
     });
 
@@ -498,7 +497,7 @@ describe("InvoicesPage", function () {
       expect(screen.getByRole("button", { name: "Send WhatsApp" }).disabled).toBe(true);
       fireEvent.click(screen.getByRole("button", { name: "Open in my WhatsApp" }));
       expect(openSpy).toHaveBeenCalledTimes(1);
-      expect(openSpy.mock.calls[0][0].indexOf("https://wa.me/254712345678?text=")).toBe(0);
+      expect(openSpy.mock.calls[0][0]).toBe("https://wa.me/254712345678");
     });
 
     it("warns when the invoice was already sent and relabels the button", async function () {
