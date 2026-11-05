@@ -57,6 +57,11 @@ export function resolveBrand(salon, defaults) {
     secondary: s.secondary_color || p.secondary || defaults.secondary,
     // The preset's colours belong to its logo, so they only apply with it.
     ink: p.ink || defaults.ink,
+    // What the printed invoice's accents (strapline bar, thank-you text, paw) are painted with. A brand with
+    // a shipped logo always uses that logo's colours, even if Settings holds a different colour (an old
+    // gold default), so the invoice matches the logo. A business's own logo keeps its Settings colours.
+    invoicePrimary: presetColours && !s.logo_url ? p.primary : (s.primary_color || p.primary || defaults.primary),
+    invoiceSecondary: presetColours && !s.logo_url ? p.secondary : (s.secondary_color || p.secondary || defaults.secondary),
     tagline: s.tagline || p.tagline || "",
     // The coloured strapline bar under the logo. The PawPals logo already has its bar built in, so
     // a preset logo gets none; a business's own logo gets its Settings tagline as the bar.

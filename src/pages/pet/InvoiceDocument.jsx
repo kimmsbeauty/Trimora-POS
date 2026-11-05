@@ -93,7 +93,7 @@ export function thanksParts(thanks, name) {
 export default function InvoiceDocument({ invoice, customer, pet, salon }) {
   var failState = useState(false); var logoFailed = failState[0]; var setLogoFailed = failState[1];
   var brand = resolveBrand(salon, { primary: PRIMARY, secondary: INFO, ink: FOREGROUND });
-  var primary = brand.primary; var secondary = brand.secondary; var ink = brand.ink;
+  var primary = brand.invoicePrimary; var secondary = brand.invoiceSecondary; var ink = brand.ink;
   var lines = invoice.pet_invoice_lines || [];
   var payments = (invoice.pet_payments || []).slice().sort(function (a, b) { return new Date(a.paid_at) - new Date(b.paid_at); });
   var isVoid = invoice.status === "void";
@@ -113,8 +113,8 @@ export default function InvoiceDocument({ invoice, customer, pet, salon }) {
 
   var small = { fontSize: 11, color: BODY, lineHeight: 1.35 };
   var metaRow = { display: "flex", justifyContent: "space-between", gap: 16, fontSize: 11, lineHeight: 1.9 };
-  var th = { padding: "10px 8px", fontWeight: 400, fontSize: 11, color: CARD, background: TABLE_HEAD };
-  var td = { padding: "12px 8px", fontSize: 11, color: BODY, verticalAlign: "top", borderBottom: "1px solid " + RULE };
+  var th = { padding: "10px 6px", fontWeight: 400, fontSize: 11, color: CARD, background: TABLE_HEAD };
+  var td = { padding: "12px 6px", fontSize: 11, color: BODY, verticalAlign: "top", borderBottom: "1px solid " + RULE };
   var totalRow = { display: "flex", justifyContent: "space-between", gap: 16, padding: "8px 10px", fontSize: 11, color: BODY };
 
   return (
@@ -122,7 +122,7 @@ export default function InvoiceDocument({ invoice, customer, pet, salon }) {
       <style>{PRINT_CSS}</style>
 
       {/* Top: logo with strapline bar (left) | INVOICE, number and balance due (right) */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
         <div style={{ flex: "0 1 240px", minWidth: 0 }}>
           {hasLogo ? (
             <img src={brand.logo} alt={brand.name + " logo"} onError={function () { setLogoFailed(true); }}
@@ -172,14 +172,14 @@ export default function InvoiceDocument({ invoice, customer, pet, salon }) {
 
       {/* Items */}
       <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", marginTop: 16 }}>
-        <colgroup><col style={{ width: "6%" }} /><col /><col style={{ width: "11%" }} /><col style={{ width: "16%" }} /><col style={{ width: "19%" }} /></colgroup>
+        <colgroup><col style={{ width: 30 }} /><col /><col style={{ width: 46 }} /><col style={{ width: 82 }} /><col style={{ width: 92 }} /></colgroup>
         <thead>
           <tr>
-            <th style={Object.assign({}, th, { textAlign: "left", paddingLeft: 12 })}>#</th>
+            <th style={Object.assign({}, th, { textAlign: "left", paddingLeft: 10 })}>#</th>
             <th style={Object.assign({}, th, { textAlign: "left" })}>Item &amp; Description</th>
             <th style={Object.assign({}, th, { textAlign: "right" })}>Qty</th>
             <th style={Object.assign({}, th, { textAlign: "right" })}>Rate</th>
-            <th style={Object.assign({}, th, { textAlign: "right", paddingRight: 12 })}>Vatable<br />Amount</th>
+            <th style={Object.assign({}, th, { textAlign: "right", paddingRight: 10, whiteSpace: "nowrap" })}>Vatable<br />Amount</th>
           </tr>
         </thead>
         <tbody>
@@ -187,14 +187,14 @@ export default function InvoiceDocument({ invoice, customer, pet, salon }) {
             var parts = String(l.description || "").split(/\n+/);
             return (
               <tr key={l.id}>
-                <td style={Object.assign({}, td, { paddingLeft: 12 })}>{i + 1}</td>
+                <td style={Object.assign({}, td, { paddingLeft: 10 })}>{i + 1}</td>
                 <td style={Object.assign({}, td, { overflowWrap: "anywhere" })}>
                   <div>{parts[0]}</div>
                   {parts.slice(1).map(function (x, j) { return <div key={j} style={{ color: MUTED_FG, marginTop: 2 }}>{x}</div>; })}
                 </td>
-                <td style={Object.assign({}, td, { textAlign: "right" })}>{money(l.quantity)}</td>
-                <td style={Object.assign({}, td, { textAlign: "right" })}>{money(l.unit_price)}</td>
-                <td style={Object.assign({}, td, { textAlign: "right", paddingRight: 12 })}>{money(l.line_total)}</td>
+                <td style={Object.assign({}, td, { textAlign: "right", whiteSpace: "nowrap" })}>{money(l.quantity)}</td>
+                <td style={Object.assign({}, td, { textAlign: "right", whiteSpace: "nowrap" })}>{money(l.unit_price)}</td>
+                <td style={Object.assign({}, td, { textAlign: "right", paddingRight: 10, whiteSpace: "nowrap" })}>{money(l.line_total)}</td>
               </tr>
             );
           })}
@@ -202,17 +202,17 @@ export default function InvoiceDocument({ invoice, customer, pet, salon }) {
       </table>
 
       {/* Totals */}
-      <div style={{ marginLeft: "auto", width: "55%", minWidth: 250, marginTop: 4 }}>
-        <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ fontWeight: 700, flex: 1, textAlign: "right" }}>Sub Total</span><span style={{ width: "34%", textAlign: "right" }}>{money(invoice.subtotal)}</span></div>
-        {invoice.discount_amount > 0 ? <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ flex: 1, textAlign: "right" }}>Discount</span><span style={{ width: "34%", textAlign: "right" }}>- {money(invoice.discount_amount)}</span></div> : null}
-        {invoice.tax_enabled ? <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ flex: 1, textAlign: "right" }}>VAT ({invoice.tax_rate}%) included</span><span style={{ width: "34%", textAlign: "right" }}>{money(invoice.tax_amount)}</span></div> : null}
-        <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE, fontWeight: 700 })}><span style={{ flex: 1, textAlign: "right" }}>Total</span><span style={{ width: "34%", textAlign: "right" }}>{kes(invoice.total)}</span></div>
-        {!isVoid && invoice.amount_paid > 0 ? <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ flex: 1, textAlign: "right" }}>Payment Made</span><span style={{ width: "34%", textAlign: "right" }}>(-) {money(invoice.amount_paid)}</span></div> : null}
-        {!isVoid && invoice.amount_refunded > 0 ? <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ flex: 1, textAlign: "right" }}>Refunded</span><span style={{ width: "34%", textAlign: "right" }}>{money(invoice.amount_refunded)}</span></div> : null}
-        {!isVoid && invoice.amount_refunded > 0 ? <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ flex: 1, textAlign: "right" }}>Kept after refunds</span><span style={{ width: "34%", textAlign: "right" }}>{kes(netPaid(invoice))}</span></div> : null}
+      <div style={{ marginLeft: "auto", width: "55%", minWidth: 230, maxWidth: "100%", marginTop: 4 }}>
+        <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ fontWeight: 700, flex: 1, textAlign: "right" }}>Sub Total</span><span style={{ width: "34%", textAlign: "right", whiteSpace: "nowrap" }}>{money(invoice.subtotal)}</span></div>
+        {invoice.discount_amount > 0 ? <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ flex: 1, textAlign: "right" }}>Discount</span><span style={{ width: "34%", textAlign: "right", whiteSpace: "nowrap" }}>- {money(invoice.discount_amount)}</span></div> : null}
+        {invoice.tax_enabled ? <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ flex: 1, textAlign: "right" }}>VAT ({invoice.tax_rate}%) included</span><span style={{ width: "34%", textAlign: "right", whiteSpace: "nowrap" }}>{money(invoice.tax_amount)}</span></div> : null}
+        <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE, fontWeight: 700 })}><span style={{ flex: 1, textAlign: "right" }}>Total</span><span style={{ width: "34%", textAlign: "right", whiteSpace: "nowrap" }}>{kes(invoice.total)}</span></div>
+        {!isVoid && invoice.amount_paid > 0 ? <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ flex: 1, textAlign: "right" }}>Payment Made</span><span style={{ width: "34%", textAlign: "right", whiteSpace: "nowrap" }}>(-) {money(invoice.amount_paid)}</span></div> : null}
+        {!isVoid && invoice.amount_refunded > 0 ? <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ flex: 1, textAlign: "right" }}>Refunded</span><span style={{ width: "34%", textAlign: "right", whiteSpace: "nowrap" }}>{money(invoice.amount_refunded)}</span></div> : null}
+        {!isVoid && invoice.amount_refunded > 0 ? <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ flex: 1, textAlign: "right" }}>Kept after refunds</span><span style={{ width: "34%", textAlign: "right", whiteSpace: "nowrap" }}>{kes(netPaid(invoice))}</span></div> : null}
         {!isVoid ? (
           <div style={Object.assign({}, totalRow, { background: BALANCE_BG, fontWeight: 700 })}>
-            <span style={{ flex: 1, textAlign: "right" }}>Balance Due</span><span style={{ width: "34%", textAlign: "right" }}>{kes(owed)}</span>
+            <span style={{ flex: 1, textAlign: "right" }}>Balance Due</span><span style={{ width: "34%", textAlign: "right", whiteSpace: "nowrap" }}>{kes(owed)}</span>
           </div>
         ) : null}
       </div>
