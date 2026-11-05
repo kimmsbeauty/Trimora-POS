@@ -156,6 +156,15 @@ describe("InvoiceDocument", function () {
     expect(document.body.textContent).toContain("Thank you for trusting PawPals Kenya with your pet.");
     expect(screen.getAllByText("Balance Due")[1].nextSibling.textContent).toBe("KES0.00");
   });
+  it("uses the PawPals logo colours for the footer even when an old gold colour is saved in Settings", function () {
+    var view = render(<InvoiceDocument invoice={invoice} customer={customer} pet={pet} salon={{ name: "Pawpalske", slug: "pawpalske", primary_color: "#E1AC41", secondary_color: "#000000" }} />);
+    expect(screen.getByText(/Thank you for trusting/).style.color).toBe("rgb(153, 27, 150)");
+    expect(view.container.innerHTML).not.toMatch(/E1AC41/i);
+  });
+  it("keeps a business's own colours when it uses its own logo", function () {
+    render(<InvoiceDocument invoice={invoice} customer={customer} pet={pet} salon={{ name: "Paws & Co", logo_url: "https://example.com/l.png", primary_color: "#123456", receipt_footer_message: "Bye" }} />);
+    expect(screen.getByText("Bye").style.color).toBe("rgb(18, 52, 86)");
+  });
   it("lets a saved logo override the PawPals preset", function () {
     render(<InvoiceDocument invoice={invoice} customer={customer} pet={pet} salon={{ name: "PawPals Kenya", logo_url: "https://example.com/own.png" }} />);
     expect(screen.getByAltText("PawPals Kenya logo").getAttribute("src")).toBe("https://example.com/own.png");

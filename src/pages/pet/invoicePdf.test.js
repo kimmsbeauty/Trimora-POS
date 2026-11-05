@@ -1,4 +1,4 @@
-import { pdfFileName, canSharePdf, sharePdf } from "./invoicePdf";
+import { pdfFileName, canSharePdf, sharePdf, pageLayout } from "./invoicePdf";
 
 describe("invoicePdf helpers", function () {
   var realNav;
@@ -35,5 +35,24 @@ describe("invoicePdf helpers", function () {
     await sharePdf(file, "Subject");
     expect(seen[0]).toEqual({ files: [file] });
     expect(seen[1]).toEqual({ files: [file], title: "Subject" });
+  });
+});
+
+describe("pageLayout", function () {
+  it("puts an ordinary invoice on ONE page at full width, never sliced", function () {
+    var L = pageLayout(1588, 1900); // 794px-wide capture at 2x, about 950px tall
+    expect(L.mode).toBe("single");
+    expect(L.w).toBeCloseTo(194, 5);
+    expect(L.h).toBeLessThanOrEqual(281);
+  });
+  it("shrinks a tall invoice to fit one page instead of breaking it", function () {
+    var L = pageLayout(1588, 2600);
+    expect(L.mode).toBe("single");
+    expect(L.h).toBeCloseTo(281, 5);
+    expect(L.w).toBeLessThan(194);
+    expect(L.x).toBeGreaterThan(8); // centred
+  });
+  it("only paginates an extremely long invoice, where shrinking would make the text too small", function () {
+    expect(pageLayout(1588, 6000).mode).toBe("pages");
   });
 });
