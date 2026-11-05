@@ -46,6 +46,14 @@ export async function makeInvoicePdf(element, fileName) {
   return new File([blob], fileName, { type: "application/pdf" });
 }
 
+// True on phones and tablets (touch as the main input). The system share sheet reliably lists WhatsApp
+// and Gmail there; on a computer it lists Windows/Mac apps and often has no WhatsApp at all, so computers
+// open the customer's chat directly instead (the share menu stays available as a second button).
+export function isPhoneLike() {
+  try { return !!(typeof window !== "undefined" && window.matchMedia && window.matchMedia("(pointer: coarse)").matches); }
+  catch (e) { return false; }
+}
+
 export function canSharePdf(file) {
   try {
     return !!(file && typeof navigator !== "undefined" && typeof navigator.share === "function" &&

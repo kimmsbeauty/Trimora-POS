@@ -2,10 +2,10 @@
 //
 // Share one invoice by email or WhatsApp. What the customer gets is the invoice PDF and nothing else
 // (no text summary). By default (invoiceSendConfig.serverSend = false) ONE button does it the same
-// way for WhatsApp and email: the PDF is made as soon as the dialog opens, and the button hands it to
-// the device's share sheet with the PDF already attached, so the sender downloads nothing. Only where
-// the browser cannot share files at all does the same button download the PDF and open the customer's
-// chat / email so it can be attached. It goes from the sender's own account; Trimora sends nothing.
+// way for WhatsApp and email: the PDF is made as soon as the dialog opens. On a phone or tablet the
+// button hands it to the share sheet with the PDF already attached, so nothing is downloaded. On a
+// computer (whose share menu often has no WhatsApp) the same button downloads the PDF and opens the
+// customer's chat / email so it can be attached, and a second button offers the share menu anyway. It goes from the sender's own account; Trimora sends nothing.
 // The recipient is pre-filled from the customer and can be corrected first.
 // If server sending is switched on (pet-send-invoice edge function), Trimora sends it instead, and
 // earlier sends of this invoice are shown so it isn't sent twice by accident.
@@ -15,7 +15,7 @@ import { fmt } from "../../lib/utils";
 import { MUTED_FG, FOREGROUND } from "./theme";
 import { outstanding } from "./invoiceData";
 import { sendInvoice, invoiceSendConfig } from "./invoiceSend";
-import { makeInvoicePdf, canSharePdf, sharePdf, downloadPdf, pdfFileName } from "./invoicePdf";
+import { makeInvoicePdf, canSharePdf, isPhoneLike, sharePdf, downloadPdf, pdfFileName } from "./invoicePdf";
 import { invoiceSubject, whatsappUrl, mailtoUrl } from "./invoiceShare";
 import { Button, Field, ErrorLine, Modal, Badge, inputStyle } from "./ui";
 
@@ -67,20 +67,24 @@ export default function SendInvoiceModal({ invoice, customer, pet, salon, email,
   }
 
   var pdfReady = pdf && pdf !== "failed";
-  var canShare = pdfReady && canSharePdf(pdf);
-  // Computers whose browser can't share files: download the PDF and open the chat in the same tap, then
-  // the sender attaches it with the paperclip.
+  var shareable = pdfReady && canSharePdf(pdf);
+  var canShare = shareable && isPhoneLike();
+  // Computers: download the PDF and open the chat in the same tap, then the sender attaches it with
+  // the paperclip (or drags it in).
   function downloadAndOpen() {
     downloadPdf(pdf);
     if (to.trim()) openInMyApp();
+  }
+  async function shareMenu() {
+    var r = await sharePdf(pdf, isEmail ? invoiceSubject(invoice, salon) : "");
+    if (r === "failed" && alive.current) { setErr("Could not open the share menu, so the PDF was downloaded instead."); downloadAndOpen(); }
   }
   // The single "send" action, identical for WhatsApp and email. It must run straight from the tap
   // (browsers only open the share sheet right after one), which is why the PDF is built up front.
   async function sendPdf() {
     if (!pdfReady) return;
     if (!canShare) { downloadAndOpen(); return; }
-    var r = await sharePdf(pdf, isEmail ? invoiceSubject(invoice, salon) : "");
-    if (r === "failed" && alive.current) { setErr("Could not open the share menu, so the PDF was downloaded instead."); downloadAndOpen(); }
+    await shareMenu();
   }
   var sendLabel = "Send invoice PDF" + (isEmail ? " by email" : " on WhatsApp");
   var ownAppLabel = isEmail ? "Open in my email app" : "Open in my WhatsApp";
@@ -89,6 +93,7 @@ export default function SendInvoiceModal({ invoice, customer, pet, salon, email,
     <>
       <Button variant="ghost" onClick={onClose}>Cancel</Button>
       {pdf === null ? <Button disabled>Preparing PDF…</Button> : null}
+      {shareable && !canShare ? <Button variant="outline" onClick={shareMenu}>Use share menu</Button> : null}
       {pdfReady ? <Button onClick={sendPdf}>{sendLabel}</Button> : null}
     </>
   ) : done ? <Button onClick={onClose}>Done</Button> : (
@@ -118,7 +123,7 @@ export default function SendInvoiceModal({ invoice, customer, pet, salon, email,
           {serverSend && sentBefore ? <Badge tone="warning">Already sent by {sentBefore.channel === "email" ? "email" : "WhatsApp"} to {sentBefore.recipient} on {when(sentBefore.created_at)}</Badge> : null}
           {!serverSend ? <div style={{ fontSize: 13, color: MUTED_FG }}>
             {canShare ? "Tap the button, then choose " + (isEmail ? "your email app" : "WhatsApp") + (to.trim() ? " and " + to.trim() : " and the customer") + ". The invoice PDF is attached for you; nothing is downloaded and no message text is added."
-              : pdfReady ? "This browser can't attach a file by itself. Tap the button: the PDF downloads and your " + (isEmail ? "email" : "WhatsApp") + " opens. Then click the paperclip and attach the invoice PDF before you send."
+              : pdfReady ? "A computer can't attach a file to " + (isEmail ? "an email" : "a WhatsApp chat") + " by itself. Click the button: the PDF downloads and your " + (isEmail ? "email" : "WhatsApp") + " opens. Then click the paperclip and attach the invoice PDF before you send."
               : pdf === "failed" ? "The PDF could not be made here. Use Print on the invoice and choose Save as PDF instead."
               : "Getting the PDF ready…"}
           </div> : null}
