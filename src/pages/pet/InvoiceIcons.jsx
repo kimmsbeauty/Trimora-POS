@@ -8,23 +8,24 @@ var PATHS = {
   globe: <g><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" /></g>,
   calendar: <g><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></g>,
   user: <g><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 3.5-6 8-6s8 2 8 6" /></g>,
-  paw: (
+  paw: (color2, color) => (
     <g>
-      <circle cx="5" cy="11" r="2" /><circle cx="9" cy="6" r="2" />
-      <circle cx="15" cy="6" r="2" /><circle cx="19" cy="11" r="2" />
+      <g fill={color2 || color}><circle cx="5" cy="11" r="2" /><circle cx="9" cy="6" r="2" />
+      <circle cx="15" cy="6" r="2" /><circle cx="19" cy="11" r="2" /></g>
       <path d="M12 12c-3 0-6 3-6 6 0 2 2 3 4 2 1-.5 1.5-.5 2-.5s1 0 2 .5c2 1 4 0 4-2 0-3-3-6-6-6z" />
     </g>
   ),
 };
 var FILLED = { user: true, paw: true };
 
-export default function InvoiceIcon({ name, size, color }) {
+// color2 (optional) paints the four toes of the paw in a second colour, like the PawPals logo.
+export default function InvoiceIcon({ name, size, color, color2 }) {
   var filled = !!FILLED[name];
   return (
     <svg width={size || 16} height={size || 16} viewBox="0 0 24 24" aria-hidden="true" focusable="false"
       fill={filled ? color : "none"} stroke={color} strokeWidth={filled ? 1 : 1.8} strokeLinecap="round" strokeLinejoin="round"
       style={{ flex: "none" }}>
-      {PATHS[name]}
+      {typeof PATHS[name] === "function" ? PATHS[name](color2, color) : PATHS[name]}
     </svg>
   );
 }
