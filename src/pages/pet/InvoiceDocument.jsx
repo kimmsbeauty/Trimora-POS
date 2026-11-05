@@ -7,7 +7,7 @@
 // in brands.js (PawPals Kenya). The footer thank-you and paw use the logo's two colours.
 // Totals, payments and the VAT line come from the saved invoice, never recomputed here (prices are
 // VAT inclusive, so VAT is shown as "included", not added).
-import React, { useState } from "react";
+import React, { useState, useRef, useLayoutEffect } from "react";
 import InvoiceIcon from "./InvoiceIcons";
 import { resolveBrand } from "./brands";
 import {
@@ -90,8 +90,26 @@ export function thanksParts(thanks, name) {
   return parts;
 }
 
-export default function InvoiceDocument({ invoice, customer, pet, salon }) {
+// layout "full" always draws the A4-width design (used for the PDF, which must not depend on the screen);
+// otherwise a narrow container (a phone) gets the same design with tighter spacing so nothing is squashed.
+var COMPACT_BELOW = 560; // px
+export default function InvoiceDocument({ invoice, customer, pet, salon, layout }) {
   var failState = useState(false); var logoFailed = failState[0]; var setLogoFailed = failState[1];
+  var narrowState = useState(false); var narrow = narrowState[0]; var setNarrow = narrowState[1];
+  var rootRef = useRef(null);
+  var forPdf = layout === "full";
+  useLayoutEffect(function () {
+    if (forPdf) return undefined;
+    var el = rootRef.current;
+    if (!el) return undefined;
+    function measure() { var w = el.offsetWidth; setNarrow(w > 0 && w < COMPACT_BELOW); }
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    var ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return function () { ro.disconnect(); };
+  }, [forPdf]);
+  var compact = narrow && !forPdf;
   var brand = resolveBrand(salon, { primary: PRIMARY, secondary: INFO, ink: FOREGROUND });
   var primary = brand.invoicePrimary; var secondary = brand.invoiceSecondary; var ink = brand.ink;
   var lines = invoice.pet_invoice_lines || [];
@@ -111,19 +129,19 @@ export default function InvoiceDocument({ invoice, customer, pet, salon }) {
   var footEmail = brand.footerEmail; var footWeb = brand.footerWebsite;
   var tone = { primary: primary, secondary: secondary };
 
-  var small = { fontSize: 11, color: BODY, lineHeight: 1.35 };
+  var small = { fontSize: 11, color: BODY, lineHeight: 1.35, minWidth: 0 };
   var metaRow = { display: "flex", justifyContent: "space-between", gap: 16, fontSize: 11, lineHeight: 1.9 };
-  var th = { padding: "10px 6px", fontWeight: 400, fontSize: 11, color: CARD, background: TABLE_HEAD };
-  var td = { padding: "12px 6px", fontSize: 11, color: BODY, verticalAlign: "top", borderBottom: "1px solid " + RULE };
-  var totalRow = { display: "flex", justifyContent: "space-between", gap: 16, padding: "8px 10px", fontSize: 11, color: BODY };
+  var th = { padding: compact ? "8px 4px" : "10px 6px", fontWeight: 400, fontSize: 11, color: CARD, background: TABLE_HEAD };
+  var td = { padding: compact ? "10px 4px" : "12px 6px", fontSize: 11, color: BODY, verticalAlign: "top", borderBottom: "1px solid " + RULE };
+  var totalRow = { display: "flex", justifyContent: "space-between", gap: 16, padding: compact ? "8px 6px" : "8px 10px", fontSize: 11, color: BODY };
 
   return (
-    <div className="invoice-print" style={{ background: CARD, color: ink, border: "1px solid " + BORDER, borderRadius: 4, padding: "28px 32px", position: "relative", fontFamily: FONT_BODY }}>
-      <style>{PRINT_CSS}</style>
+    <div ref={rootRef} className={forPdf ? "invoice-pdf-source" : "invoice-print"} style={{ background: CARD, color: ink, border: "1px solid " + BORDER, borderRadius: 4, padding: compact ? "18px 14px" : "28px 32px", position: "relative", fontFamily: FONT_BODY, boxSizing: "border-box" }}>
+      {forPdf ? null : <style>{PRINT_CSS}</style>}
 
       {/* Top: logo with strapline bar (left) | INVOICE, number and balance due (right) */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
-        <div style={{ flex: "0 1 240px", minWidth: 0 }}>
+        <div style={{ flex: compact ? "0 1 150px" : "0 1 240px", minWidth: 0 }}>
           {hasLogo ? (
             <img src={brand.logo} alt={brand.name + " logo"} onError={function () { setLogoFailed(true); }}
               style={{ width: "100%", maxWidth: 230, maxHeight: 190, objectFit: "contain", display: "block" }} />
@@ -135,7 +153,7 @@ export default function InvoiceDocument({ invoice, customer, pet, salon }) {
           ) : null}
         </div>
         <div style={{ textAlign: "right", minWidth: 0 }}>
-          <div style={{ fontSize: 28, fontWeight: 500, color: "#1A1A1A", letterSpacing: "0.01em", lineHeight: 1.1 }}>INVOICE</div>
+          <div style={{ fontSize: compact ? 22 : 28, fontWeight: 500, color: "#1A1A1A", letterSpacing: "0.01em", lineHeight: 1.1 }}>INVOICE</div>
           <div style={{ fontSize: 11, fontWeight: 700, color: "#1A1A1A", marginTop: 8, overflowWrap: "anywhere" }}># {invoice.invoice_number}</div>
           {!isVoid ? (
             <div style={{ marginTop: 22 }}>
@@ -172,7 +190,8 @@ export default function InvoiceDocument({ invoice, customer, pet, salon }) {
 
       {/* Items */}
       <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", marginTop: 16 }}>
-        <colgroup><col style={{ width: 30 }} /><col /><col style={{ width: 46 }} /><col style={{ width: 82 }} /><col style={{ width: 92 }} /></colgroup>
+        {compact ? <colgroup><col style={{ width: 20 }} /><col /><col style={{ width: 34 }} /><col style={{ width: 62 }} /><col style={{ width: 70 }} /></colgroup>
+          : <colgroup><col style={{ width: 30 }} /><col /><col style={{ width: 46 }} /><col style={{ width: 82 }} /><col style={{ width: 92 }} /></colgroup>}
         <thead>
           <tr>
             <th style={Object.assign({}, th, { textAlign: "left", paddingLeft: 10 })}>#</th>
@@ -202,7 +221,7 @@ export default function InvoiceDocument({ invoice, customer, pet, salon }) {
       </table>
 
       {/* Totals */}
-      <div style={{ marginLeft: "auto", width: "55%", minWidth: 230, maxWidth: "100%", marginTop: 4 }}>
+      <div style={{ marginLeft: "auto", width: compact ? "100%" : "55%", minWidth: compact ? 0 : 230, maxWidth: "100%", marginTop: 4 }}>
         <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ fontWeight: 700, flex: 1, textAlign: "right" }}>Sub Total</span><span style={{ width: "34%", textAlign: "right", whiteSpace: "nowrap" }}>{money(invoice.subtotal)}</span></div>
         {invoice.discount_amount > 0 ? <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ flex: 1, textAlign: "right" }}>Discount</span><span style={{ width: "34%", textAlign: "right", whiteSpace: "nowrap" }}>- {money(invoice.discount_amount)}</span></div> : null}
         {invoice.tax_enabled ? <div style={Object.assign({}, totalRow, { borderBottom: "1px solid " + RULE })}><span style={{ flex: 1, textAlign: "right" }}>VAT ({invoice.tax_rate}%) included</span><span style={{ width: "34%", textAlign: "right", whiteSpace: "nowrap" }}>{money(invoice.tax_amount)}</span></div> : null}
@@ -254,16 +273,16 @@ export default function InvoiceDocument({ invoice, customer, pet, salon }) {
       {isVoid ? <p style={{ margin: "14px 0 0", fontSize: 11, color: DESTRUCTIVE, fontWeight: 700 }}>Voided {dateLabel(invoice.voided_at)}: {invoice.void_reason}</p> : null}
 
       {/* Footer: boxed thank-you in the logo's two colours */}
-      <div style={{ marginTop: 26, border: "1px solid " + FOOTER_RULE, borderTop: "3px solid " + FOOTER_RULE, borderRadius: 18, padding: "14px 22px", display: "flex", alignItems: "center", gap: 18 }}>
-        <div style={{ flex: "none" }}><InvoiceIcon name="paw" size={40} color={primary} color2={secondary} /></div>
-        <div style={{ flex: "1 1 0", minWidth: 0 }}>
-          <div style={{ textAlign: "center", fontSize: 24, lineHeight: 1.25, fontFamily: "'Dancing Script', 'Brush Script MT', cursive", fontWeight: 600, overflowWrap: "anywhere" }}>
+      <div style={{ marginTop: 26, border: "1px solid " + FOOTER_RULE, borderTop: "3px solid " + FOOTER_RULE, borderRadius: 18, padding: compact ? "12px 12px" : "14px 22px", display: "flex", flexDirection: compact ? "column" : "row", alignItems: "center", gap: compact ? 8 : 18 }}>
+        <div style={{ flex: "none" }}><InvoiceIcon name="paw" size={compact ? 32 : 40} color={primary} color2={secondary} /></div>
+        <div style={{ flex: "1 1 0", minWidth: 0, width: compact ? "100%" : undefined }}>
+          <div style={{ textAlign: "center", fontSize: compact ? 20 : 24, lineHeight: 1.25, fontFamily: "'Dancing Script', 'Brush Script MT', cursive", fontWeight: 600, overflowWrap: "anywhere" }}>
             {thanksParts(brand.thanks, brand.name).map(function (p, i) { return <span key={i} style={{ color: tone[p.tone] }}>{p.text}</span>; })}
           </div>
           {footEmail || footWeb ? (
-            <div style={{ marginTop: 8, display: "grid", gap: 6, justifyContent: "center" }}>
-              {footEmail ? <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 15, color: ink }}><InvoiceIcon name="mail" size={20} color={primary} /><span style={{ overflowWrap: "anywhere", minWidth: 0 }}>{footEmail}</span></div> : null}
-              {footWeb ? <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 15, color: ink }}><InvoiceIcon name="globe" size={20} color={secondary} /><span style={{ overflowWrap: "anywhere", minWidth: 0 }}>{footWeb}</span></div> : null}
+            <div style={{ marginTop: 8, display: "grid", gap: 6, justifyContent: "center", maxWidth: "100%" }}>
+              {footEmail ? <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: compact ? 12 : 15, color: ink }}><InvoiceIcon name="mail" size={compact ? 16 : 20} color={primary} /><span style={{ overflowWrap: "anywhere", minWidth: 0 }}>{footEmail}</span></div> : null}
+              {footWeb ? <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: compact ? 12 : 15, color: ink }}><InvoiceIcon name="globe" size={compact ? 16 : 20} color={secondary} /><span style={{ overflowWrap: "anywhere", minWidth: 0 }}>{footWeb}</span></div> : null}
             </div>
           ) : null}
         </div>

@@ -205,6 +205,43 @@ describe("InvoiceDocument", function () {
   });
 });
 
+describe("invoice on a narrow screen", function () {
+  var realRO; var realOW;
+  beforeEach(function () {
+    realRO = globalThis.ResizeObserver; realOW = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetWidth");
+    globalThis.ResizeObserver = function () { this.observe = function () {}; this.disconnect = function () {}; };
+  });
+  afterEach(function () {
+    globalThis.ResizeObserver = realRO;
+    if (realOW) Object.defineProperty(HTMLElement.prototype, "offsetWidth", realOW); else delete HTMLElement.prototype.offsetWidth;
+  });
+  function width(w) { Object.defineProperty(HTMLElement.prototype, "offsetWidth", { configurable: true, get: function () { return w; } }); }
+  var long = Object.assign({}, invoice, { pet_invoice_lines: [{ id: "l1", description: "Pet Boarding with de-shedding treatment", quantity: 2, unit_price: 3500, line_total: 7000 }] });
+
+  it("on a phone-width card gives the item name real room (no one-letter-per-line column)", function () {
+    width(300);
+    var view = render(<InvoiceDocument invoice={long} customer={customer} pet={pet} salon={{ name: "Paws & Co" }} />);
+    var cols = Array.from(view.container.querySelectorAll("col")).map(function (c) { return c.style.width; });
+    var fixed = cols.reduce(function (n, w) { return n + (parseInt(w, 10) || 0); }, 0);
+    expect(fixed).toBeLessThanOrEqual(190); // 300px card minus its padding still leaves 80px+ for the name
+    expect(view.container.querySelector(".invoice-print")).toBeTruthy();
+  });
+  it("on a wide card uses the full design", function () {
+    width(700);
+    var view = render(<InvoiceDocument invoice={long} customer={customer} pet={pet} salon={{ name: "Paws & Co" }} />);
+    var cols = Array.from(view.container.querySelectorAll("col")).map(function (c) { return c.style.width; });
+    expect(cols).toEqual(["30px", "", "46px", "82px", "92px"]);
+  });
+  it("layout=full always uses the full A4 design, even in a narrow container, and is not the printable element", function () {
+    width(300);
+    var view = render(<InvoiceDocument layout="full" invoice={long} customer={customer} pet={pet} salon={{ name: "Paws & Co" }} />);
+    var cols = Array.from(view.container.querySelectorAll("col")).map(function (c) { return c.style.width; });
+    expect(cols).toEqual(["30px", "", "46px", "82px", "92px"]);
+    expect(view.container.querySelector(".invoice-pdf-source")).toBeTruthy();
+    expect(view.container.querySelector(".invoice-print")).toBeNull();
+  });
+});
+
 describe("invoice formatting helpers", function () {
   it("always shows two decimals with thousands separators", function () {
     expect(money(2000)).toBe("2,000.00");

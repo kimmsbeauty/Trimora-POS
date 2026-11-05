@@ -18,6 +18,7 @@ import { sendInvoice, invoiceSendConfig } from "./invoiceSend";
 import { makeInvoicePdf, canSharePdf, isPhoneLike, sharePdf, downloadPdf, pdfFileName } from "./invoicePdf";
 import { invoiceSubject, whatsappUrl, mailtoUrl } from "./invoiceShare";
 import { Button, Field, ErrorLine, Modal, Badge, inputStyle } from "./ui";
+import InvoiceDocument from "./InvoiceDocument";
 
 function when(iso) { var d = new Date(iso); return isNaN(d.getTime()) ? "" : d.toLocaleString(); }
 
@@ -37,7 +38,7 @@ export default function SendInvoiceModal({ invoice, customer, pet, salon, email,
   // only allow the share sheet to open right after a tap). The invoice is already on screen behind.
   useEffect(function () {
     if (serverSend) return;
-    makeInvoicePdf(document.querySelector(".invoice-print"), pdfFileName(invoice))
+    makeInvoicePdf(document.querySelector(".invoice-pdf-source"), pdfFileName(invoice))
       .then(function (f) { if (alive.current) setPdf(f); })
       .catch(function () { if (alive.current) setPdf("failed"); });
   }, [invoice.id]);
@@ -107,6 +108,14 @@ export default function SendInvoiceModal({ invoice, customer, pet, salon, email,
   );
 
   return (
+    <>
+    {/* The PDF is always made from this hidden, full-width copy of the invoice, never from the (possibly
+        phone-sized) one on screen, so it is identical on every device. */}
+    {!serverSend ? (
+      <div aria-hidden="true" style={{ position: "fixed", left: -10000, top: 0, width: 794, pointerEvents: "none" }}>
+        <InvoiceDocument layout="full" invoice={invoice} customer={customer} pet={pet} salon={salon} />
+      </div>
+    ) : null}
     <Modal open onClose={phase === "sending" ? function () {} : onClose} title={"Send invoice " + invoice.invoice_number + " by " + label}
       description={(customer ? customer.name : "Customer") + " · " + fmt(invoice.total) + (outstanding(invoice) > 0 ? " · " + fmt(outstanding(invoice)) + " owed" : "")} footer={footer}>
       {serverSend && done ? (
@@ -132,5 +141,6 @@ export default function SendInvoiceModal({ invoice, customer, pet, salon, email,
         </div>
       )}
     </Modal>
+    </>
   );
 }
